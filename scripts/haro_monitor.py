@@ -21,7 +21,9 @@ from haro_responder import (
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME, NOTIFY_EMAIL
 
 STATE_FILE = Path(__file__).parent / "state" / "processed.jsonl"
+DRAFTS_DIR = Path(__file__).parent / "state" / "drafts"
 STATE_FILE.parent.mkdir(exist_ok=True)
+DRAFTS_DIR.mkdir(exist_ok=True)
 
 LOG_FILE = Path(__file__).parent / "logs" / "monitor.log"
 
@@ -37,6 +39,50 @@ def log(msg: str):
     LOG_FILE.parent.mkdir(exist_ok=True)
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")
+
+
+def is_approval_reply(body: str) -> tuple:
+    """Detect if email is a forwarded approval reply (YES/SKIP/EDIT).
+    Returns (action, email_id) if found, else (None, None)."""
+    body_lower = body.lower()
+    # Check if it's an approval reply by looking for action keywords
+    # The forwarded reply body typically starts with "SKIP", "YES", or "EDIT"
+    lines = body.strip().split('\n')
+    first_line = lines[0].strip().upper() if lines else ""
+    
+    action = None
+    if first_line in ("SKIP", "YES"):
+        action = first_line
+    elif body_lower.startswith("edit "):
+        action = "EDIT"
+    elif "\nskip\n" in body_lower or "\nskip\r" in body_lower:
+        action = "SKIP"
+    elif "\nyes\n" in body_lower or "\nyes\r" in body_lower:
+        action = "YES"
+    
+    if not action:
+        return None, None
+    
+    # Extract the referenced email ID from "Email ID: 66" in the body
+    import re
+    match = re.search(r'[Ee]mail\s+[Ii][Dd]:?\s*(\d+)', body)
+    if match:
+        return action, match.group(1)
+    return action, None
+
+
+def process_approval_reply(email_id: str, action: str, referenced_email_id: str = None) -> bool:
+    """Process an approval reply via haro_approve.py."""
+    target = referenced_email_id or email_id
+    import subprocess
+    result = subprocess.run(
+        ["python3", str(Path(__file__).parent / "haro_approve.py"), target],
+        capture_output=True, text=True, timeout=30,
+        cwd=str(Path(__file__).parent.parent)
+    )
+    success = result.returncode == 0 and "error" not in result.stdout.lower()
+    log(f"  [{email_id}] Approval reply ({action}) processed for email {target}: {'✅' if success else '❌ ' + result.stderr[:100]}")
+    return success
 
 
 # ============================================================================
@@ -59,14 +105,31 @@ def is_processed(email_id: str) -> bool:
 
 
 def mark_processed(email_id: str, status: str, drafted_response: str = ""):
-    """Mark an email as processed."""
+    """Mark an email as processed. Drafts are stored in separate files to avoid JSONL multiline issues."""
+    if drafted_response:
+        _save_draft(email_id, drafted_response)
     with open(STATE_FILE, "a") as f:
         f.write(json.dumps({
             "email_id": email_id,
             "status": status,
-            "drafted_response": drafted_response,
+            "drafted_response": drafted_response if drafted_response else "",
             "timestamp": datetime.now().isoformat()
         }) + "\n")
+
+
+def _save_draft(email_id: str, text: str):
+    """Save draft response to a file for reliable multiline storage."""
+    draft_file = DRAFTS_DIR / f"{email_id}.txt"
+    with open(draft_file, "w") as f:
+        f.write(text)
+
+
+def get_draft(email_id: str) -> str:
+    """Retrieve a saved draft from file."""
+    draft_file = DRAFTS_DIR / f"{email_id}.txt"
+    if draft_file.exists():
+        return draft_file.read_text()
+    return ""
 
 
 # ============================================================================
@@ -77,7 +140,7 @@ def send_email(to_email: str, subject: str, html_body: str) -> dict:
     """Send email via Brevo API."""
     payload = {
         "subject": subject,
-        "to": [{"email": to_email, "name": ""}],
+        "to": [{"email": to_email, "name": "Craig Pauls"}],
         "htmlContent": html_body,
         "sender": {"name": SENDER_NAME, "email": SENDER_EMAIL}
     }
@@ -267,6 +330,14 @@ def main():
         if not body:
             log(f"  [{email_id}] Could not read email")
             mark_processed(email_id, "ERROR_READ")
+            continue
+
+        # Check if this is a forwarded approval reply (YES/SKIP/EDIT)
+        action, ref_email_id = is_approval_reply(body)
+        if action:
+            log(f"  [{email_id}] Detected approval reply: {action} (ref email {ref_email_id or email_id})")
+            process_approval_reply(email_id, action, ref_email_id)
+            mark_processed(email_id, f"REPLY_{action}")
             continue
 
         # Parse HARO content

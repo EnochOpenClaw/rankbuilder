@@ -17,9 +17,12 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent / 'lib'))
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME
 
-CAREER_EMAIL = "agentdevelopmentops@gmail.com"
+CAREER_EMAIL = "craig@houseofsupreme.co.za"
 
 STATE_FILE = Path(__file__).parent / "state" / "processed.jsonl"
+DRAFTS_DIR = Path(__file__).parent / "state" / "drafts"
+STATE_FILE.parent.mkdir(exist_ok=True)
+DRAFTS_DIR.mkdir(exist_ok=True)
 LOG_FILE = Path(__file__).parent / "logs" / "approvals.log"
 
 
@@ -54,6 +57,14 @@ def get_pending_approvals() -> list:
             except:
                 pass
     return pending
+
+
+def get_draft(email_id: str) -> str:
+    """Retrieve a saved draft from file."""
+    draft_file = DRAFTS_DIR / f"{email_id}.txt"
+    if draft_file.exists():
+        return draft_file.read_text()
+    return ""
 
 
 def update_status(email_id: str, new_status: str):
@@ -185,7 +196,7 @@ def process_approval(approval_email_body: str, approval_email_id: str) -> dict:
     # In production, we'd match by email threading, but for MVP take latest
     latest = pending[-1]
     original_email_id = latest.get("email_id")
-    drafted_response = latest.get("drafted_response", "")
+    drafted_response = get_draft(original_email_id)
     
     if action == "SKIP":
         update_status(original_email_id, "SKIPPED")
@@ -258,7 +269,7 @@ def manual_approve(email_id: str, edited_response: str = None):
         log(f"Available pending: {[p.get('email_id') for p in pending]}")
         return
     
-    drafted = edited_response if edited_response else target.get("drafted_response", "")
+    drafted = edited_response if edited_response else get_draft(email_id)
     
     # Parse reply-to from original email
     from haro_responder import read_email, extract_forwarded_haro_content
@@ -301,14 +312,28 @@ def main():
             for p in pending:
                 print(f"\nEmail ID: {p.get('email_id')}")
                 print(f"Timestamp: {p.get('timestamp')}")
-                draft = p.get('drafted_response', '')[:200]
+                draft = get_draft(p.get('email_id', ''))[:200]
                 print(f"Draft preview: {draft}...")
         print()
         sys.exit(0)
-    
+
     email_id = sys.argv[1]
-    
-    if email_id == "--approve" and len(sys.argv) >= 3:
+
+    if email_id == "--list" or email_id == "--check":
+        # List pending approvals
+        pending = get_pending_approvals()
+        print(f"\n=== Pending HARO Approvals: {len(pending)} ===")
+        if not pending:
+            print("No pending approvals.")
+        else:
+            for p in pending:
+                print(f"\nEmail ID: {p.get('email_id')}")
+                print(f"Timestamp: {p.get('timestamp')}")
+                draft = get_draft(p.get('email_id', ''))[:200]
+                print(f"Draft preview: {draft}...")
+        print()
+        sys.exit(0)
+    elif email_id == "--approve" and len(sys.argv) >= 3:
         # manual_approve <email_id> [edited_response]
         target_id = sys.argv[2]
         edited = sys.argv[3] if len(sys.argv) > 3 else None
