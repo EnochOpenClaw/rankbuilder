@@ -5,6 +5,7 @@ Each template is a callable that takes query_data and returns a crafted response
 or a dict with structure for the AI to flesh out.
 """
 
+import re
 from typing import Optional
 
 # ============================================================================
@@ -196,10 +197,27 @@ ANGLE_RULES = [
 ]
 
 
+# ============================================================================
+# ANGLE GUIDANCE EXTRACTOR
+# ============================================================================
+
+def get_angle_guidance(angle_fn) -> str:
+    """
+    Extract the real guidance text from an angle function's docstring.
+    Returns the "Use when query involves: ..." section as a usable string.
+    """
+    doc = angle_fn.__doc__ or ""
+    # Extract "Use when query involves: ..." block
+    match = re.search(r'Use when query involves:\s*(.+?)(?:\n    \"\"\"|\n    #|\Z)', doc, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return doc.strip()
+
+
 def select_angle(query_text: str, summary: str = "") -> str:
     """
     Scan query text and return the name of the best-matching angle function.
-    Returns the function itself, not a string.
+    Returns the function name as a string.
     """
     text = (query_text + " " + summary).lower()
 
@@ -224,18 +242,30 @@ def get_angle_for_query(query_data: dict):
     return angle_general_home_improvement
 
 
+def get_angle_name_and_guidance(query_data: dict) -> tuple:
+    """
+    Return (angle_name, angle_guidance_text) for a given query.
+    Use this when building prompts — it gives the AI concrete guidance to work with.
+    """
+    angle_fn = get_angle_for_query(query_data)
+    angle_name = angle_fn.__name__
+    guidance = get_angle_guidance(angle_fn)
+    return angle_name, guidance
+
+
 # ============================================================================
 # RESPONSE BUILDER
 # ============================================================================
 
-def build_pitch_response(query_data: dict, drafted_text: str, api_key: str) -> str:
+def build_pitch_response(query_data: dict, drafted_text: str) -> str:
     """
     Given a raw drafted response and query metadata, refine and polish it
     using the selected pitch angle as context. This is the final polish step.
+    Adds word count discipline (150-250 words) and angle-specific emphasis.
     """
     angle_fn = get_angle_for_query(query_data)
     angle_name = angle_fn.__name__
-    angle_doc = angle_fn.__doc__ or ""
+    angle_guidance = get_angle_guidance(angle_fn)
 
     prompt = f"""You are refining a HARO/Connectively pitch response for a journalist query.
 
@@ -247,8 +277,9 @@ def build_pitch_response(query_data: dict, drafted_text: str, api_key: str) -> s
 - Outlet: {query_data.get('outlet', 'Unknown')}
 - Deadline: {query_data.get('deadline', 'Not specified')}
 
-## PITCH ANGLE (your focus for this response)
-{angle_doc}
+## PITCH ANGLE: {angle_name}
+## Angle guidance (use this to frame your response):
+{angle_guidance}
 
 ## RAW DRAFT (before refinement)
 {drafted_text}
@@ -259,14 +290,14 @@ def build_pitch_response(query_data: dict, drafted_text: str, api_key: str) -> s
 ## YOUR TASK
 1. Read the raw draft above
 2. Refine it so it strongly emphasises the "{angle_name}" angle
-3. Keep it 150-250 words
-4. Make it journalist-friendly, punchy, and valuable
+3. STRICTLY keep it to 150-250 words (count yours before finishing)
+4. Make it journalist-friendly, punchy, and valuable — not a sales pitch
 5. Include the expert signature at the end
 
 ## FORMAT
 Write ONLY the refined email response. No preamble. No explanation.
 
-Start with a brief professional greeting addressing the journalist.
+Start with a brief professional greeting addressing the journalist by name if known.
 
 {EXPERT_SIGNATURE}"""
 

@@ -29,12 +29,13 @@ from haro_responder import (
     TARGET_KEYWORDS, EXCLUDED_KEYWORDS,
     is_relevant_query, score_relevance
 )
-from pitch_templates import select_angle, get_angle_for_query, build_pitch_response
+from pitch_templates import select_angle, get_angle_for_query, get_angle_guidance, build_pitch_response
 from credentials import (
     BREVO_API_KEY, BREVO_ENDPOINT,
     SENDER_EMAIL, SENDER_NAME, NOTIFY_EMAIL,
     CONNECTIVELY_EMAIL, CONNECTIVELY_PASSWORD
 )
+from blocklist import is_blocked, block_email
 
 STATE_FILE = Path(__file__).parent / "state" / "processed_connectively.jsonl"
 STATE_FILE.parent.mkdir(exist_ok=True)
@@ -140,12 +141,15 @@ def draft_response(query_data: dict) -> str:
     deadline = query_data.get('deadline', 'Not specified')
     journalist_name = query_data.get('journalist_name', 'Unknown')
 
-    # Select the best pitch angle
-    angle_name = select_angle(query_text, summary)
+    # Select the best pitch angle and get its guidance
+    angle_fn = get_angle_for_query(query_data)
+    angle_name = angle_fn.__name__
+    angle_guidance = get_angle_guidance(angle_fn)
 
     # Build angle-specific context
-    angle_context = f"""## SELECTED PITCH ANGLE: {angle_name}
-Adjust your response to emphasise this angle strongly. See angle docstring for guidance."""
+    angle_context = f"""## PITCH ANGLE: {angle_name}
+## Angle guidance (use this to frame your response):
+{angle_guidance}"""
 
     prompt = f"""You are drafting a professional response to a HARO (Help A Reporter Out) query.
 
@@ -236,73 +240,78 @@ def run_playwright_script(script: str, timeout: int = 60) -> dict:
 
 
 def playwright_login_and_scrape_questions() -> dict:
-    """Log in to Connectively and scrape the questions table."""
-    script = f"""
-const {{ chromium }} = require('/tmp/node_modules/playwright');
-(async () => {{
-    const browser = await chromium.launch({{ headless: true, args: ['--no-sandbox'] }});
+    """Log in to Connectively via email/password and scrape the questions table."""
+    script = r"""
+const { chromium } = require('/tmp/node_modules/playwright');
+(async () => {
+    const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-
-    // Go to login
-    await page.goto('https://www.connectively.us/login', {{ waitUntil: 'domcontentloaded', timeout: 15000 }});
+    
+    await page.goto('https://www.connectively.us/login', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await page.waitForTimeout(2000);
+    
+    await page.locator('input[autocomplete="email"]').fill('__EMAIL__');
+    await page.locator('input[autocomplete="current-password"]').fill('__PASSWORD__');
+    
+    await Promise.all([
+        page.waitForFunction(
+            () => !window.location.href.includes('/login'),
+            { timeout: 30000 }
+        ),
+        page.locator('button[type="submit"]:has-text("Submit")').click()
+    ]);
+    
     await page.waitForTimeout(3000);
-
-    // Fill login form
-    await page.locator('input[autocomplete="email"]').fill('{CONNECTIVELY_EMAIL}');
-    await page.locator('input[autocomplete="current-password"]').fill('{CONNECTIVELY_PASSWORD}');
-    await page.locator('button[type="submit"]:has-text("Submit")').click();
+    console.log('Logged in. URL: ' + page.url());
+    
+    await page.goto('https://www.connectively.us/expert-questions', { waitUntil: 'domcontentloaded', timeout: 15000 });
     await page.waitForTimeout(5000);
-
-    const afterLoginUrl = page.url();
-    // Go to HARO questions
-    await page.goto('https://www.connectively.us/expert-questions', {{ waitUntil: 'domcontentloaded', timeout: 15000 }});
-    await page.waitForTimeout(5000);
-
-    // Save auth state
-    const cookies = await ctx.cookies();
-    const sessionToken = cookies.find(c => c.name.includes('session'));
-    const token = sessionToken ? sessionToken.value : '';
-
-    // Scrape table rows
-    const queries = await page.evaluate(() => {{
+    
+    console.log('Questions page: ' + page.url());
+    
+    const queries = await page.evaluate(() => {
         const results = [];
         const table = document.querySelector('table');
-        if (!table) return results;
+        if (!table) return { error: 'no table' };
         const tbody = table.querySelector('tbody');
-        if (!tbody) return results;
+        if (!tbody) return { error: 'no tbody' };
         const rows = tbody.querySelectorAll('tr');
-        rows.forEach(row => {{
+        rows.forEach(row => {
             const cells = row.querySelectorAll('td');
-            if (cells.length >= 4) {{
+            if (cells.length >= 4) {
                 const links = cells[cells.length - 1].querySelectorAll('a');
                 const answerLink = Array.from(links).find(a => a.textContent.trim() === 'Answer');
-                // Extract question from first cell (index 1 - cell 0 is empty in this table)
                 const qCell = cells[1];
-                // Publication from second cell
                 const pubCell = cells[2];
-                // Deadline from third cell
                 const dlCell = cells[3];
-
                 let qText = qCell ? qCell.textContent.trim() : '';
-                // Remove 'Questions' prefix if present
-                qText = qText.replace(/^Questions\s*/i, '').trim();
-
-                results.push({{
+                qText = qText.replace(/^Question\s*/i, '').replace(/^Questions\s*/i, '').trim();
+                results.push({
                     question: qText.substring(0, 500),
-                    publication: pubCell ? pubCell.textContent.trim().replace(/\\s+/g, ' ') : '',
-                    deadline: dlCell ? dlCell.textContent.trim().replace(/\\s+/g, ' ') : '',
+                    publication: pubCell ? pubCell.textContent.trim().replace(/\s+/g, ' ') : '',
+                    deadline: dlCell ? dlCell.textContent.trim().replace(/\s+/g, ' ') : '',
                     answerUrl: answerLink ? answerLink.href : ''
-                }});
-            }}
-        }});
-        return results;
-    }});
-
-    console.log(JSON.stringify({{ queries, token, url: page.url() }}));
+                });
+            }
+        });
+        return { results, rowCount: rows.length };
+    });
+    
+    const cookies = await ctx.cookies();
+    const sessionToken = cookies.find(c => c.name.includes('session') || c.name.includes('auth'));
+    
+    console.log(JSON.stringify({
+        queries: queries.results || [],
+        token: sessionToken ? sessionToken.value : '',
+        url: page.url(),
+        cookieNames: cookies.map(c => c.name),
+        error: queries.error
+    }));
     await browser.close();
-}})().catch(e => {{ console.error('ERROR:' + e.message); process.exit(1); }});
+})().catch(e => { console.error('ERROR:' + e.message); process.exit(1); });
 """
+    script = script.replace('__EMAIL__', CONNECTIVELY_EMAIL).replace('__PASSWORD__', CONNECTIVELY_PASSWORD)
     return run_playwright_script(script)
 
 
@@ -311,7 +320,7 @@ def playwright_get_query_text(question_url: str, token: str) -> dict:
     # Extract slug from URL
     slug = question_url.rstrip('/').split('/')[-1]
 
-    script = f"""
+    script = fr"""
 const {{ chromium }} = require('/tmp/node_modules/playwright');
 (async () => {{
     const browser = await chromium.launch({{ headless: true, args: ['--no-sandbox'] }});
@@ -379,7 +388,7 @@ const {{ chromium }} = require('/tmp/node_modules/playwright');
 
 def playwright_submit_answer(question_url: str, answer_text: str, token: str) -> dict:
     """Submit an answer to a Connectively question."""
-    script = f"""
+    script = fr"""
 const {{ chromium }} = require('/tmp/node_modules/playwright');
 (async () => {{
     const browser = await chromium.launch({{ headless: true, args: ['--no-sandbox'] }});
@@ -497,8 +506,16 @@ def main():
             "deadline": deadline,
             "summary": full_text[:200],
             "journalist_name": "Unknown",
-            "reply_to": ""
+            "reply_to": detail.get("reply_to", "")
         }
+
+        # Check blocklist — skip blocked outlets (e.g. guest-post sellers)
+        outlet_lower = outlet.lower()
+        if is_blocked(outlet):
+            log(f"  [{query_id}] Outlet '{outlet}' is blocklisted — skipping")
+            mark_processed(query_id, "SKIPPED_BLOCKLISTED")
+            processed_count += 1
+            continue
 
         # Check relevance
         relevant = is_relevant_query(query_data)
@@ -525,8 +542,11 @@ def main():
 
         # Send approval email to Craig
         summary_preview = full_text[:80].replace('\n', ' ')
-        angle_name = select_angle(full_text, "")
-        subject = f"📋 [CONNECTIVELY APPROVAL] {outlet} [{angle_name.replace('angle_', '').upper()}] - {summary_preview}"
+        angle_fn = get_angle_for_query(query_data)
+        angle_name = angle_fn.__name__
+        angle_tag = angle_name.replace('angle_', '').upper()
+        word_count = len(drafted.split())
+        subject = f"📋 [CONNECTIVELY APPROVAL] {angle_tag} | {outlet} — {summary_preview}"
 
         query_display = full_text[:800].replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
         drafted_display = drafted.replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
@@ -548,7 +568,7 @@ def main():
 </div>
 
 <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-<h3 style="margin-top: 0;">✍️ Drafted Response</h3>
+<h3 style="margin-top: 0;">✍️ Drafted Response <span style="font-size:12px; color:#666; font-weight:normal;">({word_count} words)</span></h3>
 <pre style="white-space: pre-wrap; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6;">{drafted_display}</pre>
 </div>
 

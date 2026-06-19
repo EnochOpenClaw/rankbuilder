@@ -15,19 +15,8 @@ from typing import Optional
 # CONFIG
 # ============================================================================
 
-BRAND_BIO = (
-    "Craig Pauls is the founder of House of Supreme, specializing in custom "
-    "aluminum and wood shutters, flyscreen and aluminum window and door solutions "
-    "across South Africa."
-)
-
-BRAND_VOICE = """
-- South African home improvement expert
-- Practical, no-nonsense advice
-- Years of hands-on experience in the industry
-- Focused on quality, durability, and value
-- Specializes in: aluminum shutters, flyscreen doors/windows, window treatments, home security
-"""
+# Brand context — imported from pitch_templates to avoid duplication
+from pitch_templates import BRAND_BIO, BRAND_VOICE
 
 TARGET_KEYWORDS = [
     # === CORE PRODUCTS ===

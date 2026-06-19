@@ -14,10 +14,9 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'lib'))
-from haro_responder import (
-    read_email, extract_forwarded_haro_content, is_relevant_query,
-    score_relevance, BRAND_BIO, BRAND_VOICE
-)
+from pitch_templates import select_angle, get_angle_name_and_guidance, build_pitch_response, BRAND_BIO, BRAND_VOICE
+from haro_responder import read_email, extract_forwarded_haro_content, is_relevant_query, score_relevance
+from blocklist import is_blocked, is_buyer, block_email, add_buyer
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME, NOTIFY_EMAIL
 
 STATE_FILE = Path(__file__).parent / "state" / "processed.jsonl"
@@ -168,7 +167,8 @@ def send_email(to_email: str, subject: str, html_body: str) -> dict:
 # ============================================================================
 
 def draft_response(query_data: dict) -> str:
-    """Draft HARO response using Ollama (kimi-k2.6:cloud)."""
+    """Draft HARO response using Ollama (kimi-k2.6:cloud) with angle guidance."""
+    angle_name, angle_guidance = get_angle_name_and_guidance(query_data)
     prompt = f"""You are drafting a professional response to a HARO (Help A Reporter Out) query.
 
 ## JOURNALIST DETAILS
@@ -185,14 +185,19 @@ def draft_response(query_data: dict) -> str:
 ## BRAND VOICE
 {BRAND_VOICE}
 
+## PITCH ANGLE: {angle_name}
+## Angle guidance (use this to frame your response):
+{angle_guidance}
+
 ## TASK
 Write a compelling, journalist-friendly HARO response that:
 1. Addresses the query directly with valuable expert insights
-2. Positions Craig Pauls as a knowledgeable South African home improvement expert
-3. Is 150-250 words
-4. Includes a 2-sentence author bio at the end
-5. Offers additional value (more details, photos, statistics, etc.)
-6. Professional but approachable tone
+2. Strongly emphasises the \"{angle_name}\" angle in your answer
+3. Positions Craig Pauls as a knowledgeable South African home improvement expert
+4. Is STRICTLY 150-250 words (count your words before finishing)
+5. Includes a 2-sentence author bio at the end
+6. Offers additional value (more details, photos, statistics, etc.)
+7. Professional but approachable tone
 
 Start with a brief greeting addressing the journalist by name if known.
 
@@ -358,8 +363,19 @@ def main():
             mark_processed(email_id, "SKIPPED_NOT_RELEVANT")
             continue
 
-        # Draft response
-        log(f"  [{email_id}] Drafting response with kimi-k2.6:cloud...")
+        # Check blocklist — skip blocked addresses
+        reply_to = query_data.get('reply_to', '')
+        if reply_to and is_blocked(reply_to):
+            log(f"  [{email_id}] Reply-to {reply_to} is blocked — skipping")
+            mark_processed(email_id, "SKIPPED_BLOCKLISTED")
+            continue
+
+        # Check if this is a confirmed buyer lead
+        if reply_to and is_buyer(reply_to):
+            log(f"  [{email_id}] Reply-to {reply_to} is a buyer lead — flagging for follow-up")
+
+        # Draft response with angle guidance
+        log(f"  [{email_id}] Drafting response with kimi-k2.6:cloud [angle: {select_angle(query_data.get('query_text',''), query_data.get('summary','')).replace('angle_','')}]...")
         drafted = draft_response(query_data)
 
         if drafted.startswith("Error"):
@@ -367,12 +383,20 @@ def main():
             mark_processed(email_id, "ERROR_DRAFT")
             continue
 
+        # Polish with angle + word count discipline
+        log(f"  [{email_id}] Polishing with pitch angle refinement...")
+        drafted = build_pitch_response(query_data, drafted)
+        word_count = len(drafted.split())
+        log(f"  [{email_id}] Draft complete: {word_count} words")
+
         # Save drafted response for YES approval
         mark_processed(email_id, "AWAITING_APPROVAL", drafted)
 
         # Send draft to Craig for approval
+        angle_name, _ = get_angle_name_and_guidance(query_data)
+        angle_tag = angle_name.replace('angle_', '').upper()
         summary_preview = (query_data.get('summary') or query_data.get('query_text', '') or 'Query')[:60]
-        subject = f"📋 [HARO APPROVAL] {query_data.get('outlet', 'Query')} — \"{summary_preview}\""
+        subject = f"📋 [HARO APPROVAL] {query_data.get('outlet', 'Query')} | {angle_tag} — \"{summary_preview}\""
 
         query_text_display = (query_data.get('query_text') or 'N/A')[:500].replace('<', '&lt;').replace('>', '&gt;')
         drafted_display = drafted.replace('<', '&lt;').replace('>', '&gt;')
