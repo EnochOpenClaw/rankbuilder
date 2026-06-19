@@ -9,6 +9,7 @@ import sys
 import json
 import re
 import subprocess
+import logging
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -18,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'lib'))
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME
 
 CAREER_EMAIL = "craig@houseofsupreme.co.za"
+BLIND_CC = "craig@houseofsupreme.co.za"
 
 STATE_FILE = Path(__file__).parent / "state" / "processed.jsonl"
 DRAFTS_DIR = Path(__file__).parent / "state" / "drafts"
@@ -121,7 +123,24 @@ def send_to_journalist(reply_to: str, subject: str, body: str) -> dict:
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             result = json.loads(resp.read().decode('utf-8'))
-            return {"success": True, "message_id": result.get("messageId")}
+
+        # Log to tracker
+        try:
+            sys.path.insert(0, str(Path(__file__).parent))
+            from outreach_tracker import make_entry, log_event
+            tracker_entry = make_entry(
+                event='pitch_sent',
+                prospect_email=reply_to_clean,
+                subject=subject,
+                pitch_topic=(body or '')[:80],
+                source='haro',
+                notes='HARO submission via Brevo BCC'
+            )
+            log_event(tracker_entry, quiet=True)
+        except Exception as ex:
+            logging.warning(f"Tracker logging failed: {ex}")
+
+        return {"success": True, "message_id": result.get("messageId")}
     except urllib.error.HTTPError as e:
         return {"success": False, "error": f"HTTP {e.code}: {e.read().decode()}"}
     except Exception as e:
