@@ -8,15 +8,14 @@ or a dict with structure for the AI to flesh out.
 import re
 from typing import Optional
 
-# ============================================================================
-# HOUSE OF SUPREME — BRAND CONTEXT
+# FORTRESS BLINDS — BRAND CONTEXT
 # ============================================================================
 
 BRAND_BIO = (
-    "Craig Pauls is the founder of House of Supreme, a South African company "
-    "specialising in custom aluminium and wood shutters, flyscreen doors and windows, "
-    "security shutters, outdoor blinds, and a full range of window and door solutions "
-    "across South Africa. With years of hands-on industry experience, Craig brings "
+    "Craig Pauls is the founder of Fortress Blinds, a South African company "
+    "specialising in custom aluminium shutters, security shutters, outdoor blinds, "
+    "flyscreen doors and windows, and a full range of window and door solutions "
+    "across South Africa. With 25+ years of hands-on industry experience, Craig brings "
     "practical, no-nonsense expertise to homeowners, architects, and developers."
 )
 
@@ -28,8 +27,8 @@ BRAND_VOICE = (
 
 EXPERT_SIGNATURE = """
 ---
-Author: Craig Pauls, House of Supreme (South Africa)
-Website: https://houseofsupreme.co.za | Contact: craig@houseofsupreme.co.za
+Author: Craig Pauls, Fortress Blinds (South Africa)
+Website: https://fortressblinds.co.za | Contact: craig@fortressblinds.co.za
 """
 
 # ============================================================================
@@ -335,7 +334,7 @@ GENERIC_SCREEN_SHUTTER_PITCH = """Hi {journalist_name},
 
 Thank you for the query — I'd love to contribute.
 
-When it comes to {topic}, homeowners are increasingly looking for solutions that tick multiple boxes: security, comfort, aesthetics, and long-term durability. That's exactly what we specialise in at House of Supreme.
+When it comes to {topic}, homeowners are increasingly looking for solutions that tick multiple boxes: security, comfort, aesthetics, and long-term durability. That's exactly what we specialise in at Fortress Blinds.
 
 {angle_specific_content}
 

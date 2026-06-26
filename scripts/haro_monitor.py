@@ -203,9 +203,9 @@ Start with a brief greeting addressing the journalist by name if known.
 
 End with:
 ---
-Author: Craig Pauls, House of Supreme (South Africa)
-Website: https://houseofsupreme.co.za
-Contact: craig@houseofsupreme.co.za
+Author: Craig Pauls, Fortress Blinds (South Africa)
+Website: https://fortressblinds.co.za
+Contact: craig@fortressblinds.co.za
 
 Write ONLY the email response. No preamble. No explanation."""
 

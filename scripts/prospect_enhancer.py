@@ -256,14 +256,25 @@ def enhance_prospect(url: str, data: dict, use_api: bool = False) -> dict:
     quality_score = min(100, base_score + da_bonus)
     enhanced['quality_score'] = quality_score
 
-    # 6. Pitch recommendation
+    # 6. Pitch recommendation (only use valid emails)
+    email_ok = False
+    if enhanced.get('email'):
+        email_tld = (enhanced['email'].split('@')[1].split('.')[-1].lower()
+                     if '@' in enhanced['email'] and '.' in enhanced['email'].split('@')[1]
+                     else '')
+        # Reject image/file-extension TLDs and domains with no letters
+        domain_part = enhanced['email'].split('@')[1] if '@' in enhanced['email'] else ''
+        if (email_tld.lower() not in {'png','jpg','jpeg','gif','svg','webp','ico','bmp'}
+                and any(c.isalpha() for c in domain_part)):
+            email_ok = True
+
     if blocked:
         enhanced['pitch'] = 'BLOCKED'
-    elif quality_score < MIN_SCORE and not data.get('email'):
+    elif quality_score < MIN_SCORE and not email_ok:
         enhanced['pitch'] = 'LOW_PRIORITY'
     elif da and da < MIN_DA:
         enhanced['pitch'] = 'BELOW_DA_THRESHOLD'
-    elif enhanced.get('email'):
+    elif email_ok:
         enhanced['pitch'] = 'READY'
     else:
         enhanced['pitch'] = 'NEEDS_EMAIL'

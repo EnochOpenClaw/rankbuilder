@@ -108,7 +108,7 @@ def get_draft(query_id: str) -> str:
 def send_email(to_email: str, subject: str, html_body: str) -> dict:
     payload = {
         "subject": subject,
-        "to": [{"email": to_email, "name": ""}],
+        "to": [{"email": to_email, "name": SENDER_NAME}],
         "htmlContent": html_body,
         "sender": {"name": SENDER_NAME, "email": SENDER_EMAIL}
     }
@@ -183,9 +183,9 @@ Start with a brief greeting addressing the journalist by name if known.
 
 End with:
 ---
-Author: Craig Pauls, House of Supreme (South Africa)
-Website: https://houseofsupreme.co.za
-Contact: craig@houseofsupreme.co.za
+Author: Craig Pauls, Fortress Blinds (South Africa)
+Website: https://fortressblinds.co.za
+Contact: craig@fortressblinds.co.za
 
 Write ONLY the email response. No preamble. No explanation."""
 

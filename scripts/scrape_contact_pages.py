@@ -65,6 +65,9 @@ def log(msg: str):
 def extract_emails(text: str) -> list:
     """Extract valid-looking emails from text, filtered by blacklist."""
     raw = EMAIL_RE.findall(text)
+    # TLDs that are never valid email domains (image/video/file extensions)
+    SKIP_TLDS = {'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp', 'tif', 'tiff',
+                 'mp4', 'avi', 'mov', 'mp3', 'wav', 'pdf', 'doc', 'docx', 'xls', 'xlsx'}
     cleaned = []
     for e in raw:
         e_lower = e.lower()
@@ -74,11 +77,21 @@ def extract_emails(text: str) -> list:
         # Skip known useless addresses
         if any(b in e_lower for b in BLACKLIST_EMAILS):
             continue
-        # Skip common disposable/placeholder domains
+        # Parse domain
         domain = e_lower.split('@')[1] if '@' in e_lower else ''
+        if not domain:
+            continue
+        # Skip common disposable/placeholder domains
         if any(b in domain for b in BLACKLIST_DOMAINS):
             continue
         if len(domain) < 4 or domain.startswith('example'):
+            continue
+        # Skip image/video/file-extension TLDs (e.g. user@150x150.png)
+        tld = domain.split('.')[-1] if '.' in domain else ''
+        if tld.lower() in SKIP_TLDS:
+            continue
+        # Skip domains with no letters (e.g. 150x150 or 2x3y4z.webp)
+        if not any(c.isalpha() for c in domain):
             continue
         cleaned.append(e)
     return list(dict.fromkeys(cleaned))  # dedupe preserve order

@@ -23,7 +23,7 @@ from haro_responder import (
 
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME
 
-BLIND_CC = "craig@houseofsupreme.co.za"  # Craig sees what went out
+BLIND_CC = "craig@fortressblinds.co.za"  # Craig sees what went out
 CAREER_EMAIL = "support@ct-designs.co.za"  # Enoch's inbox
 
 LOG_FILE = Path(__file__).parent / "logs" / "responses.jsonl"
@@ -147,9 +147,9 @@ Start directly with the response body - no preamble needed.
 
 End with:
 ---
-Author: Craig Pauls, House of Supreme (South Africa)
-Website: https://houseofsupreme.co.za
-Contact: craig@houseofsupreme.co.za
+Author: Craig Pauls, Fortress Blinds (South Africa)
+Website: https://fortressblinds.co.za
+Contact: craig@fortressblinds.co.za
 
 Write ONLY the response. No explanation. No notes."""
 

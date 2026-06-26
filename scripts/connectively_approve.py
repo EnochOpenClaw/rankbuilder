@@ -226,10 +226,10 @@ const {{ chromium }} = require('/tmp/node_modules/playwright');
 # EMAIL SENDING (Brevo)
 # ============================================================================
 
-def send_email(to_email: str, subject: str, html_body: str) -> dict:
+def send_email(to_email: str, subject: str, html_body: str, to_name: str = "Guest Post Editor") -> dict:
     payload = {
         "subject": subject,
-        "to": [{"email": to_email, "name": ""}],
+        "to": [{"email": to_email, "name": to_name}],
         "htmlContent": html_body,
         "sender": {"name": SENDER_NAME, "email": SENDER_EMAIL}
     }

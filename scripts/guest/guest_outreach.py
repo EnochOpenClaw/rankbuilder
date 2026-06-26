@@ -13,6 +13,7 @@ import json
 import sys
 import subprocess
 import re
+import concurrent.futures
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -22,8 +23,8 @@ from credentials import BREVO_API_KEY, SENDER_EMAIL, SENDER_NAME, NOTIFY_EMAIL
 
 def _run_webwright_discovery(skipped_pitches: list):
     """
-    Fallback: trigger Webwright contact discovery for pitches missing contact emails.
-    Uses hard subprocess timeout to prevent runaway processes.
+    Fire-and-forget: trigger Webwright contact discovery for pitches missing contact emails.
+    Does NOT block the main workflow — discovery runs as an independent background process.
     """
     urls = [p.get("prospect_url", "") for p in skipped_pitches if p.get("prospect_url")]
     if not urls:
@@ -31,29 +32,24 @@ def _run_webwright_discovery(skipped_pitches: list):
 
     script = Path(__file__).parent / "webwright_engine" / "prospect_discovery.py"
     if not script.exists():
-        print(f"  ⚠️ Webwright discovery script not found at {script}")
+        print(f"  ⚠️  Webwright discovery script not found at {script}")
         return
 
-    # Build URL list file for batch processing
     urls_file = Path("/tmp/webwright_discovery_urls.txt")
     urls_file.write_text("\n".join(urls))
 
-    print(f"  🔍 Triggering Webwright contact discovery for {len(urls)} prospects...")
+    print(f"  🔍 [background] Triggering Webwright contact discovery for {len(urls)} prospects...")
     try:
-        result = subprocess.run(
-            ["timeout", "90", "python3", str(script), "--batch-urls-file", str(urls_file)],
-            capture_output=True,
-            text=True,
-            timeout=95
+        # nohup + start_new_session = fully detached, immune to HUP/signal issues
+        subprocess.Popen(
+            ["nohup", "python3", str(script), "--batch-urls-file", str(urls_file),
+             "&>", "/tmp/webwright_discovery.log"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True
         )
-        if result.returncode == 0:
-            print(f"  ✅ Webwright discovery complete")
-        else:
-            print(f"  ⚠️ Webwright discovery returned code {result.returncode}")
-    except subprocess.TimeoutExpired:
-        print(f"  ⚠️ Webwright discovery timed out after 90s")
+        print(f"  ✅ Discovery spawned in background (logs at /tmp/webwright_discovery.log)")
     except Exception as e:
-        print(f"  ⚠️ Webwright discovery error: {e}")
+        print(f"  ⚠️  Could not spawn discovery: {e}")
     finally:
         urls_file.unlink(missing_ok=True)
 
@@ -63,11 +59,16 @@ def _run_webwright_discovery(skipped_pitches: list):
 
 PROSPECTS_DIR = Path(__file__).parent.parent.parent / "prospects"
 PITCHES_DIR = PROSPECTS_DIR / "pitches"
+ARCHIVE_DIR = PROSPECTS_DIR / "pitches_archive"
 OUTREACH_LOG = PROSPECTS_DIR / "outreach_log.jsonl"
 
 BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
 MAX_DAILY_SENDS = 10
 COOLDOWN_DAYS = 14  # Don't re-pitch same domain within 14 days
+
+# Optimized timeouts
+HIMALAYA_TIMEOUT = 10   # seconds per himalaya call
+EMAIL_SEND_TIMEOUT = 30 # seconds for Brevo API call
 
 # ============================================================================
 # EMAIL SENDING (Brevo API)
@@ -77,7 +78,7 @@ def send_email(to_email: str, subject: str, html_body: str, bcc: str = None) -> 
     """Send email via Brevo API. Returns success/error dict."""
     import urllib.request
     import urllib.error
-    
+
     payload = {
         "sender": {"email": SENDER_EMAIL, "name": SENDER_NAME},
         "to": [{"email": to_email, "name": to_email.split("@")[0]}],
@@ -86,7 +87,7 @@ def send_email(to_email: str, subject: str, html_body: str, bcc: str = None) -> 
     }
     if bcc:
         payload["bcc"] = [{"email": bcc}]
-    
+
     data = json.dumps(payload).encode('utf-8')
     req = urllib.request.Request(
         BREVO_ENDPOINT,
@@ -97,9 +98,9 @@ def send_email(to_email: str, subject: str, html_body: str, bcc: str = None) -> 
         },
         method="POST"
     )
-    
+
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=EMAIL_SEND_TIMEOUT) as resp:
             result = json.loads(resp.read().decode('utf-8'))
             return {"success": True, "message_id": result.get("messageId", "")}
     except urllib.error.HTTPError as e:
@@ -122,40 +123,40 @@ def email_craig_for_approval(pitch: dict) -> dict:
     contact_email = pitch.get("contact_email", "unknown")
     score = pitch.get("prospect_score", "?")
     da = pitch.get("prospect_da", "?")
-    
+
     html = f"""
     <div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto;">
       <h2 style="color: #1a1a2e;">📋 Guest Post Pitch — Approval Needed</h2>
-      
+
       <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
         <p><strong>📌 Article:</strong> {article}</p>
         <p><strong>🎯 Target:</strong> <a href="{prospect_url}">{prospect_url}</a></p>
         <p><strong>📧 To:</strong> {contact_email}</p>
         <p><strong>⭐ Score:</strong> {score} | <strong>🌐 DA:</strong> {da}</p>
       </div>
-      
+
       <h3>Subject:</h3>
       <p style="background: #e8f4fd; padding: 10px; border-radius: 5px;">{subject}</p>
-      
+
       <h3>Email Body:</h3>
       <div style="background: #fff; border: 1px solid #ddd; padding: 20px; border-radius: 5px; white-space: pre-wrap;">{body}</div>
-      
+
       <h3>Author Bio:</h3>
       <p style="color: #555;">{author_bio}</p>
-      
+
       <hr style="margin: 30px 0;">
-      
+
       <h3>🚀 To Send:</h3>
       <p><strong>Reply YES</strong> → Send this pitch now<br>
       <strong>Reply SKIP</strong> → Discard this pitch<br>
       <strong>Reply EDIT [new text]</strong> → Send with your edits</p>
-      
+
       <p style="color: #888; font-size: 12px; margin-top: 20px;">
         Generated by RankBuilder AI on {datetime.now().strftime('%Y-%m-%d %H:%M')}
       </p>
     </div>
     """
-    
+
     return send_email(
         to_email=NOTIFY_EMAIL,
         subject=f"📋 [GUEST POST APPROVAL] {subject}",
@@ -168,11 +169,11 @@ def email_craig_for_approval(pitch: dict) -> dict:
 
 def send_approved_pitch(pitch: dict) -> dict:
     """Send the pitch to the target contact email.
-    
+
     Returns error dict if no contact email is available.
     """
     to_email = pitch.get("contact_email")
-    
+
     if not to_email:
         return {
             "success": False,
@@ -183,8 +184,7 @@ def send_approved_pitch(pitch: dict) -> dict:
     body = pitch.get("body", "")
     author_bio = pitch.get("author_bio", "")
     signoff = pitch.get("signoff", "Kind regards")
-    
-    # Build full email HTML
+
     html_body = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px;">
       <p>{pitch.get('greeting', 'Hi')},</p>
@@ -193,10 +193,10 @@ def send_approved_pitch(pitch: dict) -> dict:
       <p style="white-space: pre-wrap;">{author_bio}</p>
       <br>
       <p>{signoff},<br>{SENDER_NAME}<br>
-      <a href="https://houseofsupreme.co.za">houseofsupreme.co.za</a></p>
+      <a href="https://fortressblinds.co.za">fortressblinds.co.za</a></p>
     </div>
     """
-    
+
     # Idempotency: skip if already logged as sent today
     today = datetime.now().strftime('%Y-%m-%d')
     if OUTREACH_LOG.exists():
@@ -207,10 +207,9 @@ def send_approved_pitch(pitch: dict) -> dict:
                     entry.get('status') == 'sent' and
                     entry.get('prospect_url') == pitch.get('prospect_url')):
                     return {"success": True, "skipped": True, "note": "Already logged as sent today"}
-    
+
     result = send_email(to_email, subject, html_body, bcc=NOTIFY_EMAIL)
-    
-    # Log the send
+
     log_entry = {
         "timestamp": datetime.now().isoformat(),
         "prospect_url": pitch.get("prospect_url"),
@@ -222,7 +221,7 @@ def send_approved_pitch(pitch: dict) -> dict:
     }
     with open(OUTREACH_LOG, "a") as f:
         f.write(json.dumps(log_entry) + "\n")
-    
+
     return result
 
 # ============================================================================
@@ -230,20 +229,27 @@ def send_approved_pitch(pitch: dict) -> dict:
 # ============================================================================
 
 def get_recent_craig_replies(lookback_hours: int = 48) -> list:
-    """Get recent emails from Craig (sent to our approval address)."""
-    import subprocess
+    """
+    Get recent emails from Craig (sent to our approval address).
+
+    Uses concurrent fetches to minimize wall-clock time:
+    - 1 envelope list call (~1-2s)
+    - N body reads in parallel (~1s total for 9 emails vs ~9s sequential)
+    """
     from datetime import datetime, timedelta
-    
+
+    # Single list call
     result = subprocess.run(
         ["himalaya", "envelope", "list", "-o", "plain"],
-        capture_output=True, text=True, cwd=Path.home()
+        capture_output=True, text=True, cwd=Path.home(),
+        timeout=HIMALAYA_TIMEOUT + 5
     )
     if result.returncode != 0:
         return []
-    
-    replies = []
+
     cutoff = datetime.now() - timedelta(hours=lookback_hours)
-    
+    candidates = []
+
     for line in result.stdout.strip().split('\n'):
         if not line or line.startswith('ID'):
             continue
@@ -252,63 +258,79 @@ def get_recent_craig_replies(lookback_hours: int = 48) -> list:
             env_id = parts[0]
             subject = parts[1]
             date_str = parts[3]
-            
-            # Only look at approval-related emails (strict check)
-            if '[GUEST POST APPROVAL]' in subject:
-                # Parse date
-                try:
-                    # Handle various date formats: YYYY-MM-DD HH:MM, YYYY-MM-DD HH:MM+00:00, etc.
-                    date_clean = re.sub(r'[+-]\d{2}:\d{2}$', '', date_str).strip()
-                    email_date = datetime.strptime(date_clean, "%Y-%m-%d %H:%M")
-                    if email_date >= cutoff:
-                        replies.append({
-                            "id": env_id,
-                            "subject": subject,
-                            "date": date_str,
-                            "body": subprocess.run(
-                                ["himalaya", "message", "read", env_id],
-                                capture_output=True, text=True, cwd=Path.home()
-                            ).stdout
-                        })
-                except:
-                    pass
-    
-    return replies
+
+            if '[GUEST POST APPROVAL]' not in subject:
+                continue
+
+            try:
+                date_clean = re.sub(r'[+-]\d{2}:\d{2}$', '', date_str).strip()
+                email_date = datetime.strptime(date_clean, "%Y-%m-%d %H:%M")
+                if email_date >= cutoff:
+                    candidates.append({"id": env_id, "subject": subject, "date": date_str})
+            except Exception:
+                pass
+
+    if not candidates:
+        return []
+
+    # Fetch all bodies CONCURRENTLY — big speedup
+    def fetch_body(env_id: str) -> tuple:
+        try:
+            body = subprocess.run(
+                ["himalaya", "message", "read", env_id],
+                capture_output=True, text=True, cwd=Path.home(),
+                timeout=HIMALAYA_TIMEOUT
+            ).stdout
+            return (env_id, body)
+        except Exception:
+            return (env_id, "")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {executor.submit(fetch_body, c["id"]): c for c in candidates}
+        try:
+            for future in concurrent.futures.as_completed(futures, timeout=HIMALAYA_TIMEOUT + 5):
+                env_id, body = future.result()
+                for c in candidates:
+                    if c["id"] == env_id:
+                        c["body"] = body
+                        break
+        except concurrent.futures.TimeoutError:
+            pass  # Partial results are fine
+
+    return candidates
 
 def parse_approval_reply(body: str) -> dict:
     """Parse Craig's reply to extract action (YES/SKIP/EDIT).
-    
+
     Handles both plain replies and forwarded emails where the approval
     request is quoted below Craig's response. Only checks Craig's actual
     reply text (before the ___ separator), not the quoted original.
     """
-    import re as _re
     # Strip ANSI terminal codes (himalaya uses colored output)
-    body = _re.sub(r'\x1b\[[0-9;]*[mKHF]', '', body)
-    
+    body = re.sub(r'\x1b\[[0-9;]*[mKHF]', '', body)
+
     # Split on the ___ separator that marks start of quoted original email
     # This leaves only Craig's actual reply text
     body_craig = body.split('________________________________')[0].strip()
-    
-    # Now check only the first ~600 chars of Craig's reply (enough for YES/SKIP/EDIT)
+
+    # Check only the first ~600 chars of Craig's reply (enough for YES/SKIP/EDIT)
     first = body_craig[:600].upper()
-    
+
     # SKIP is a full word
-    if _re.search(r'\bSKIP\b', first):
+    if re.search(r'\bSKIP\b', first):
         return {"action": "skip"}
-    
-    # EDIT — check if EDIT appears in Craig's reply (not in the quoted original)
-    if _re.search(r'\bEDIT\b', first):
-        # Extract the text following EDIT (Craig's edited pitch content)
-        edit_match = _re.search(r'\bEDIT\s+([\s\S]{10,})', body_craig[:2000], _re.IGNORECASE)
+
+    # EDIT — check if EDIT appears in Craig's reply
+    if re.search(r'\bEDIT\b', first):
+        edit_match = re.search(r'\bEDIT\s+([\s\S]{10,})', body_craig[:2000], re.IGNORECASE)
         if edit_match:
             return {"action": "edit", "new_text": edit_match.group(1).strip()}
         return {"action": "yes"}
-    
+
     # YES is a full word
-    if _re.search(r'\bYES\b', first):
+    if re.search(r'\bYES\b', first):
         return {"action": "yes"}
-    
+
     return {"action": "unknown"}
 
 # ============================================================================
@@ -318,22 +340,21 @@ def parse_approval_reply(body: str) -> dict:
 def check_and_process_approvals():
     """Check for Craig's approval replies and process them."""
     print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M')}] Checking for approval replies...")
-    
+
     replies = get_recent_craig_replies(lookback_hours=48)
-    
+
     if not replies:
         print("  No new approval replies found.")
         return
-    
+
     processed = 0
     for reply in replies:
         body = reply.get("body", "")
         parsed = parse_approval_reply(body)
         action = parsed.get("action")
-        
-        # Find the pitch this refers to
+
         subject = reply.get("subject", "")
-        
+
         if action == "yes":
             print(f"  ✅ APPROVED: {subject[:60]}")
             pitch = find_pitch_by_subject(subject)
@@ -352,9 +373,9 @@ def check_and_process_approvals():
             else:
                 pitch["status"] = "sent" if result["success"] else "send_failed"
                 pitch["sent_at"] = datetime.now().isoformat()
-                save_pitch(pitch)
+                save_pitch(pitch, archive=True)  # archive after successful send
                 print(f"     → {'Sent! ✓' if result['success'] else 'Failed: ' + str(result.get('error',''))}")
-        
+
 
         elif action == "edit":
             print(f"  ✏️  EDITED: {subject[:60]}")
@@ -373,7 +394,7 @@ def check_and_process_approvals():
             else:
                 pitch["sent_at"] = datetime.now().isoformat()
                 pitch["status"] = "sent" if result["success"] else "send_failed"
-                save_pitch(pitch)
+                save_pitch(pitch, archive=True)  # archive after successful send
                 print(f"     → {'Sent with edits! ✓' if result['success'] else 'Failed: ' + str(result.get('error',''))}")
         elif action == "skip":
             print(f"  ⏭️  SKIPPED: {subject[:60]}")
@@ -384,68 +405,111 @@ def check_and_process_approvals():
                 save_pitch(pitch)
         else:
             print(f"  ❓ UNKNOWN action in: {subject[:60]}")
-        
+
         processed += 1
-    
+
     print(f"\n  Processed {processed} replies.")
 
 def find_pitch_by_subject(subject: str) -> dict:
     """Find the pitch file matching this approval email subject.
-    
-    Strips email prefixes (Re:, Fw:, Fwd:) to extract the actual pitch subject.
-    Uses multiple strategies: exact subject match → URL domain match → article title match.
+
+    Handles both direct emails and forwarded emails (Re:, Fw:, Fwd:).
+    Uses multiple strategies in order:
+      1. Domain extracted from forwarded subject → match prospect_url domain
+      2. Exact pitch subject match
+      3. Article title keywords in forwarded subject
+      4. Fuzzy containment
     """
-    # Strip common email prefixes
+    # Strip common email prefixes to get clean subject
     clean = re.sub(r'^(?:Re?:?\s*|Fwd?:?\s*)+', '', subject, flags=re.IGNORECASE).strip()
-    
+
     # Extract the pitch subject from [GUEST POST APPROVAL] wrapper
     match = re.search(r'\[GUEST POST APPROVAL\]\s*(.+)', clean)
     if not match:
         return None
     pitch_subject = match.group(1).strip()
-    
-    # Strategy 1: exact subject match
-    for f in PITCHES_DIR.glob("pitch_*.json"):
+
+    # Strategy 1: Extract domain from forwarded subject (e.g. "Afrohouseplans — Security"
+    # becomes "afrohouseplans.com") and match against prospect_url domains.
+    # This is the most reliable signal after forwarding.
+    # Collect ALL matching pitches, then return the most recent by created_at
+    matches = []
+
+    # Strategy 1: Extract domain from forwarded subject → match prospect_url domains
+    domain_match = re.search(
+        r'(?:https?://)?(?:www\.)?([a-zA-Z0-9][a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:/|$))',
+        pitch_subject
+    )
+    if domain_match:
+        domain_lower = domain_match.group(1).lower().rstrip('/')
+        for f in list(PITCHES_DIR.glob("pitch_*.json")) + list(ARCHIVE_DIR.glob("pitch_*.json")):
+            pitch = json.loads(f.read_text())
+            prospect_url = pitch.get("prospect_url", "").lower()
+            if domain_lower in prospect_url:
+                matches.append((pitch, f))
+    else:
+        # No TLD found — try base domain match
+        base_domain_match = re.search(r'([a-zA-Z0-9][a-zA-Z0-9-]+)\s*—', pitch_subject)
+        if base_domain_match:
+            base = base_domain_match.group(1).lower()
+            for f in list(PITCHES_DIR.glob("pitch_*.json")) + list(ARCHIVE_DIR.glob("pitch_*.json")):
+                pitch = json.loads(f.read_text())
+                prospect_domain = pitch.get("prospect_url", "").lower()
+                base_in_url = re.search(r'://(?:www\.)?([a-zA-Z0-9][a-zA-Z0-9-]+)\.', prospect_domain)
+                if base_in_url and base_in_url.group(1).lower() == base:
+                    matches.append((pitch, f))
+
+    if matches:
+        # Return most recent pitch by created_at
+        return sorted(matches, key=lambda x: x[0].get("created_at", ""), reverse=True)[0][0]
+
+    # Strategy 2: exact subject match
+    for f in list(PITCHES_DIR.glob("pitch_*.json")) + list(ARCHIVE_DIR.glob("pitch_*.json")):
         pitch = json.loads(f.read_text())
         if pitch.get("subject") == pitch_subject:
-            return pitch
-    
-    # Strategy 2: URL/domain match — extract domain like "www.linksmanagement.com"
-    url_match = re.search(r'(?:https?://)?(?:www\.)?([a-zA-Z0-9][a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:/[\w.-]*)?)', pitch_subject)
-    if url_match:
-        domain = url_match.group(1).lower()
-        for f in PITCHES_DIR.glob("pitch_*.json"):
-            pitch = json.loads(f.read_text())
-            pitch_url = pitch.get("prospect_url", "").lower()
-            if domain in pitch_url or pitch_url.startswith(f"https?://{domain}"):
-                return pitch
-    
-    # Strategy 3: article title keyword match (for "coastal shutter expertise" type subjects)
-    # Extract key phrase (remove common filler words)
+            matches.append((pitch, f))
+    if matches:
+        return sorted(matches, key=lambda x: x[0].get("created_at", ""), reverse=True)[0][0]
+
+    # Strategy 3: article title keyword match
     key_phrase = re.sub(r'\b(guest post|idea|for us|write for us|article)\b', '', pitch_subject, flags=re.IGNORECASE).strip()
     key_phrase = re.sub(r'\s+', ' ', key_phrase).strip()
     if len(key_phrase) >= 10:
-        for f in PITCHES_DIR.glob("pitch_*.json"):
+        for f in list(PITCHES_DIR.glob("pitch_*.json")) + list(ARCHIVE_DIR.glob("pitch_*.json")):
             pitch = json.loads(f.read_text())
             article = pitch.get("article_proposal", "")
             if key_phrase.lower() in article.lower() or article.lower() in key_phrase.lower():
-                return pitch
-    
-    # Strategy 4: fuzzy contains (pitch subject in email clean, or vice versa)
-    for f in PITCHES_DIR.glob("pitch_*.json"):
+                matches.append((pitch, f))
+        if matches:
+            return sorted(matches, key=lambda x: x[0].get("created_at", ""), reverse=True)[0][0]
+
+    # Strategy 4: fuzzy contains
+    for f in list(PITCHES_DIR.glob("pitch_*.json")) + list(ARCHIVE_DIR.glob("pitch_*.json")):
         pitch = json.loads(f.read_text())
         p_subj = pitch.get("subject", "")
         if p_subj and (p_subj in clean or clean in p_subj):
-            return pitch
-    
+            matches.append((pitch, f))
+    if matches:
+        return sorted(matches, key=lambda x: x[0].get("created_at", ""), reverse=True)[0][0]
+
     return None
 
-def save_pitch(pitch: dict):
-    """Find and update the pitch file."""
+def save_pitch(pitch: dict, archive: bool = False):
+    """Find and update the pitch file. If archive=True, move to archive after updating."""
     for f in PITCHES_DIR.glob("pitch_*.json"):
         existing = json.loads(f.read_text())
-        if existing.get("prospect_url") == pitch.get("prospect_url") and \
-           existing.get("created_at") == pitch.get("created_at"):
+        if existing.get("prospect_url") == pitch.get("prospect_url"):
+            f.write_text(json.dumps(pitch, indent=2))
+            if archive:
+                ARCHIVE_DIR.mkdir(exist_ok=True)
+                import shutil
+                shutil.move(str(f), str(ARCHIVE_DIR / f.name))
+            return
+
+    # Also check archive dir for updates
+    for f in ARCHIVE_DIR.glob("pitch_*.json"):
+        existing = json.loads(f.read_text())
+        if existing.get("prospect_url") == pitch.get("prospect_url"):
             f.write_text(json.dumps(pitch, indent=2))
             return
 
@@ -462,19 +526,19 @@ def submit_pending_pitches(max_pitches: int = 3):
         [json.loads(f.read_text()) for f in PITCHES_DIR.glob("pitch_*.json")],
         key=lambda x: x.get("prospect_score", 0), reverse=True
     )
-    
+
     pending = [p for p in pitches if p.get("status") == "draft" and p.get("contact_email")][:max_pitches]
     skipped_no_email = [p for p in pitches if p.get("status") == "draft" and not p.get("contact_email")]
-    
+
     if skipped_no_email:
         print(f"  Skipping {len(skipped_no_email)} pitches with no contact email (will submit when enriched)")
-        # Trigger Webwright fallback to discover contact emails
+        # Fire-and-forget: runs in background, doesn't block
         _run_webwright_discovery(skipped_no_email)
 
     if not pending:
         print("  No pending pitches to submit.")
         return
-    
+
     print(f"  Submitting {len(pending)} pitches for approval...")
     for pitch in pending:
         result = email_craig_for_approval(pitch)
@@ -495,7 +559,7 @@ def get_today_send_count() -> int:
     """Count how many pitches we've sent today."""
     if not OUTREACH_LOG.exists():
         return 0
-    
+
     today = datetime.now().strftime('%Y-%m-%d')
     count = 0
     for line in OUTREACH_LOG.read_text().splitlines():
@@ -511,50 +575,53 @@ def get_today_send_count() -> int:
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Guest Outreach Manager")
     parser.add_argument("--submit", action="store_true",
                         help="Submit pending pitches to Craig for approval")
     parser.add_argument("--check", action="store_true",
                         help="Check for Craig's approval replies")
     parser.add_argument("--status", action="store_true",
-                        help="Show outreach status")
+                        help="Show outreach status (lightweight, safe in any context)")
     parser.add_argument("--dry", action="store_true",
                         help="Dry run — show what would be sent without sending")
-    
+
     args = parser.parse_args()
-    
+
+    # Lightweight status — no API calls, no file scanning beyond what we need
     if args.status:
-        # Show current outreach status
         pitches = sorted(
             [json.loads(f.read_text()) for f in PITCHES_DIR.glob("pitch_*.json")],
             key=lambda x: x.get("created_at", ""), reverse=True
         )
         print(f"\n=== Guest Outreach Status ===")
         print(f"Total pitches: {len(pitches)}")
-        
+
         by_status = {}
         for p in pitches:
             s = p.get("status", "unknown")
             by_status[s] = by_status.get(s, 0) + 1
-        
+
         for status, count in sorted(by_status.items()):
             print(f"  {status}: {count}")
-        
+
         print(f"\nToday's sends: {get_today_send_count()} / {MAX_DAILY_SENDS}")
-        
+
         if pitches:
             print(f"\nRecent pitches:")
             for p in pitches[:5]:
                 print(f"  [{p.get('status','?')}] {p.get('article_proposal','no topic')}")
-                print(f"           → {p.get('prospect_url','')[:50]}")
-    else:
+                print(f"           → {p.get('prospect_url','')[:60]}")
+        sys.exit(0)
+
+    # Normal workflow: check replies first, then optionally submit
+    if args.check:
         check_and_process_approvals()
-        
-        if args.submit:
-            if get_today_send_count() >= MAX_DAILY_SENDS:
-                print(f"\n⚠️  Daily send limit ({MAX_DAILY_SENDS}) reached. Try again tomorrow.")
-            else:
-                remaining = MAX_DAILY_SENDS - get_today_send_count()
-                print(f"\n📤 Submitting pitches for approval (max {remaining} today)...")
-                submit_pending_pitches(max_pitches=remaining)
+
+    if args.submit:
+        if get_today_send_count() >= MAX_DAILY_SENDS:
+            print(f"\n⚠️  Daily send limit ({MAX_DAILY_SENDS}) reached. Try again tomorrow.")
+        else:
+            remaining = MAX_DAILY_SENDS - get_today_send_count()
+            print(f"\n📤 Submitting pitches for approval (max {remaining} today)...")
+            submit_pending_pitches(max_pitches=remaining)

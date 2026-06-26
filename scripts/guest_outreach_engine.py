@@ -10,7 +10,7 @@ Usage:
     python guest_outreach_engine.py status      # Print outreach pipeline status
     python guest_outreach_engine.py write-article <domain>  # Draft article for accepted prospect
 
-House of Supreme: custom aluminium & wood shutters, security shutters,
+Fortress Blinds: custom aluminium shutters, security shutters,
 flyscreen doors/windows, outdoor blinds. 25+ years in SA.
 Author: Craig Pauls — manager, hands-on expertise.
 """
@@ -89,7 +89,7 @@ def _brevo_send(to_email: str, subject: str, html_body: str,
     except Exception:
         BREVO_API_KEY   = os.environ.get("BREVO_API_KEY", "")
         BREVO_ENDPOINT  = "https://api.brevo.com/v3/smtp/email"
-        SENDER_EMAIL    = "craig@houseofsupreme.co.za"
+        SENDER_EMAIL    = os.environ.get("SENDER_EMAIL", "support@ctdesignz.co.za")
         SENDER_NAME     = "Craig Pauls"
 
     payload = {
@@ -176,8 +176,8 @@ PITCH_TEMPLATE = textwrap.dedent("""\
     and particularly enjoyed your recent piece on [{recent_topic}].
     {personal_tie_in}
 
-    I'm Craig Pauls, manager at House of Supreme — a South African manufacturer
-    and installer of custom aluminium and wood shutters, security shutters,
+    I'm Craig Pauls, manager at Fortress Blinds — a South African manufacturer
+    and installer of custom aluminium shutters, security shutters,
     flyscreen doors and windows, and outdoor blinds. We've been in the industry
     for over 25 years, working across coastal and inland climates throughout SA.
 
@@ -192,7 +192,7 @@ PITCH_TEMPLATE = textwrap.dedent("""\
     windows in coastal homes, security without sacrificing aesthetics, and
     child-safety with window screens.
 
-    A bit about me: I manage House of Supreme's day-to-day operations and
+    A bit about me: I manage Fortress Blinds' day-to-day operations and
     bring hands-on expertise from decades of site measurements, client
     consultations, and product development. I write from real-world
     experience, not just theory.
@@ -203,8 +203,8 @@ PITCH_TEMPLATE = textwrap.dedent("""\
 
     Kind regards,
     Craig Pauls
-    Manager, House of Supreme
-    www.houseofsupreme.co.za
+    Manager, Fortress Blinds
+    www.fortressblinds.co.za
     {phone_line}
     """)  # phone_line intentionally left blank; we use email as primary
 
@@ -215,7 +215,7 @@ FOLLOWUP_TEMPLATE_1 = textwrap.dedent("""\
     for [{angle_title}] a few days ago. I understand you're likely busy, so
     no pressure at all if it's not the right fit.
 
-    In short: I run House of Supreme, a South African company with 25+ years
+    In short: I run Fortress Blinds, a South African company with 25+ years
     designing and installing shutters, flyscreen doors, and outdoor blinds.
     I'd love to contribute a practical, reader-focused piece to {domain}.
 
@@ -233,7 +233,7 @@ FOLLOWUP_TEMPLATE_2 = textwrap.dedent("""\
 
     Following up on my earlier pitch. I realise inboxes get full quickly!
 
-    To recap quickly: I'm Craig Pauls from House of Supreme (25 years in SA's
+    To recap quickly: I'm Craig Pauls from Fortress Blinds (25 years in SA's
     window and shutter industry). I'd like to contribute a guest article to
     {domain} — something genuinely useful for your readers, not promotional fluff.
 
@@ -247,7 +247,7 @@ FOLLOWUP_TEMPLATE_2 = textwrap.dedent("""\
     Either way, wishing you a great week.
 
     Craig Pauls
-    House of Supreme | www.houseofsupreme.co.za
+    Fortress Blinds | www.fortressblinds.co.za
     """)
 
 FOLLOWUP_TEMPLATE_3 = textwrap.dedent("""\
@@ -255,7 +255,7 @@ FOLLOWUP_TEMPLATE_3 = textwrap.dedent("""\
 
     This will be my final follow-up on the guest post pitch I sent a while back.
 
-    To summarise: House of Supreme has 25+ years of expertise in aluminium
+    To summarise: Fortress Blinds has 25+ years of expertise in aluminium
     shutters, security shutters, flyscreen doors, and outdoor blinds across
     South Africa. I'd like to offer a single well-researched article for
     {domain}'s readers — no backlinks required (happy to go link-free or
@@ -270,18 +270,18 @@ FOLLOWUP_TEMPLATE_3 = textwrap.dedent("""\
 
     Kind regards,
     Craig Pauls
-    House of Supreme | www.houseofsupreme.co.za
+    Fortress Blinds | www.fortressblinds.co.za
     """)
 
 AUTHOR_BIO = textwrap.dedent("""\
     ---
     **About the Author**
-    Craig Pauls is the manager at House of Supreme, a South African manufacturer
-    and installer of custom aluminium and wood shutters, security shutters,
+    Craig Pauls is the manager at Fortress Blinds, a South African manufacturer
+    and installer of custom aluminium shutters, security shutters,
     flyscreen doors and windows, and outdoor blinds. With over 25 years of
     hands-on experience across coastal and inland SA climates, Craig brings
     practical, field-tested insights to every topic he covers.
-    www.houseofsupreme.co.za
+    www.fortressblinds.co.za
     """)
 
 
@@ -290,14 +290,31 @@ AUTHOR_BIO = textwrap.dedent("""\
 # ---------------------------------------------------------------------------
 
 def load_prospects() -> dict:
-    """Load prospect_db.json and normalise to standard schema."""
+    """Load prospect_db.json and normalise to standard schema.
+    Handles both flat dict (direct domain→data) and wrapped dict ({"prospects": {...}}).
+    Always returns wrapped dict: {"prospects": {...}, "meta": {...}}.
+    """
     if not PROSPECTS_DB.exists():
         return {"prospects": {}, "meta": {"version": "v1", "updated": ""}}
 
     raw = json.loads(PROSPECTS_DB.read_text())
-    prospects = {}
 
-    for url, entry in raw.get("prospects", raw).items():
+    # Detect format: if raw has a "prospects" key with dict values, it's wrapped;
+    # otherwise the raw dict itself is the prospects dict (flat format).
+    if "prospects" in raw and isinstance(raw.get("prospects"), dict):
+        entries = raw["prospects"]
+        meta = raw.get("meta", {})
+    else:
+        # Flat format — raw IS the prospects dict
+        entries = raw
+        meta = {}
+
+    prospects = {}
+    for url, entry in entries.items():
+        if not isinstance(entry, dict):
+            continue  # skip non-dict entries (metadata strings etc.)
+        if not entry.get("domain"):
+            continue  # skip metadata-like dicts (e.g. {"updated": ..., "domain": "meta"})
         domain = urlparse(url).netloc or urlparse(entry.get("url", url)).netloc
         prospects[url] = {
             "url":              entry.get("url", url),
@@ -314,12 +331,22 @@ def load_prospects() -> dict:
             "page_title":      entry.get("page_title", ""),
             "scraped_at":      entry.get("scraped_at", ""),
             "score":           entry.get("score", 50),
+            # Enhancer-added fields (preserve these)
+            "blocked":          entry.get("blocked", False),
+            "block_reason":    entry.get("block_reason", ""),
+            "pitch":           entry.get("pitch") or ("READY" if entry.get("email") and entry.get("email") not in ("", "None", "null") else "NEEDS_EMAIL"),
+            "quality_score":   entry.get("quality_score", 50),
+            "quality_tld":    entry.get("quality_tld", False),
+            "tld":             entry.get("tld", ""),
         }
-    return {"prospects": prospects, "meta": raw.get("meta", {})}
+    return {"prospects": prospects, "meta": meta}
 
 
 def save_prospects(db: dict):
     """Save normalised prospect db to JSON, preserving original extra fields."""
+    # Ensure wrapped structure
+    if "prospects" not in db:
+        db = {"prospects": db, "meta": {"version": "v1", "updated": datetime.now().isoformat()}}
     db["meta"]["updated"] = datetime.now().isoformat()
     PROSPECTS_DB.write_text(json.dumps(db, indent=2, default=str))
     log.info("Saved %d prospects to %s", len(db["prospects"]), PROSPECTS_DB)
@@ -667,8 +694,8 @@ def build_outreach_candidates(db: dict, contacted_this_week: dict[str, datetime]
     return candidates
 
 
-def send_daily_batch():
-    """Send up to DAILY_LIMIT personalised pitches to new/waiting prospects."""
+def send_daily_batch(limit=10):
+    """Send up to `limit` personalised pitches to new/waiting prospects."""
     db = load_prospects()
     contacted_this_week = get_contacted_this_week()
     candidates = build_outreach_candidates(db, contacted_this_week)
@@ -681,7 +708,7 @@ def send_daily_batch():
     sent = 0
 
     for url, prospect in candidates:
-        if sent >= DAILY_LIMIT:
+        if sent >= limit:
             break
 
         # Skip if no email known — try to find it or note it
@@ -752,7 +779,7 @@ def send_daily_batch():
         time.sleep(2)  # Brevo rate-limit respect
 
     save_prospects(db)
-    log.info("Daily batch complete: %d/%d pitches sent.", sent, min(len(candidates), DAILY_LIMIT))
+    log.info("Daily batch complete: %d/%d pitches sent.", sent, min(len(candidates), limit))
 
 
 # ---------------------------------------------------------------------------
@@ -1023,11 +1050,10 @@ def write_guest_article(domain: str) -> Optional[Path]:
 
     # Build the prompt
     system_prompt = textwrap.dedent("""\
-        You are Craig Pauls, manager at House of Supreme, a South African
-        manufacturer and installer of custom aluminium and wood shutters,
-        security shutters, flyscreen doors and windows, and outdoor blinds.
-        You have over 25 years of hands-on industry experience across
-        coastal and inland South African climates.
+        You are Craig Pauls, manager at Fortress Blinds, a South African
+        manufacturer and installer of custom aluminium shutters, security shutters,
+        flyscreen doors and windows, and outdoor blinds. You have over 25 years of
+        hands-on industry experience across coastal and inland South African climates.
 
         WRITING RULES:
         - Write in a friendly, authoritative, practical tone — not salesy.
@@ -1052,13 +1078,12 @@ def write_guest_article(domain: str) -> Optional[Path]:
 
         ---
         **About the Author**
-        Craig Pauls is the manager at House of Supreme, a South African
-        manufacturer and installer of custom aluminium and wood shutters,
-        security shutters, flyscreen doors and windows, and outdoor blinds.
-        With over 25 years of hands-on experience across coastal and inland
-        SA climates, Craig brings practical, field-tested insights to every
-        topic he covers.
-        www.houseofsupreme.co.za
+        Craig Pauls is the manager at Fortress Blinds, a South African
+        manufacturer and installer of custom aluminium shutters, security shutters,
+        flyscreen doors and windows, and outdoor blinds. With over 25 years of
+        hands-on experience across coastal and inland SA climates, Craig brings
+        practical, field-tested insights to every topic he covers.
+        www.fortressblinds.co.za
         ---
 
         Format the output as clean Markdown. Start directly with the article
@@ -1151,7 +1176,8 @@ def cmd_discover(args):
 
 def cmd_send(args):
     log.info("=== DAILY OUTREACH BATCH ===")
-    send_daily_batch()
+    limit = getattr(args, 'limit', 10)
+    send_daily_batch(limit=limit)
 
 
 def cmd_followup(args):
@@ -1207,7 +1233,8 @@ def main():
     p.add_argument("queries", nargs="*", help="Optional custom search queries")
 
     # send
-    subparsers.add_parser("send", help="Send daily batch of personalised pitches")
+    p = subparsers.add_parser("send", help="Send daily batch of personalised pitches")
+    p.add_argument("--limit", type=int, default=10, help="Max pitches to send per run (default: 10)")
 
     # followup
     subparsers.add_parser("followup", help="Run follow-up sequence for due prospects")

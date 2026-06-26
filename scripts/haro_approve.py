@@ -18,8 +18,8 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent / 'lib'))
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME
 
-CAREER_EMAIL = "craig@houseofsupreme.co.za"
-BLIND_CC = "craig@houseofsupreme.co.za"
+CAREER_EMAIL = "craig@fortressblinds.co.za"
+BLIND_CC = "craig@fortressblinds.co.za"
 
 STATE_FILE = Path(__file__).parent / "state" / "processed.jsonl"
 DRAFTS_DIR = Path(__file__).parent / "state" / "drafts"

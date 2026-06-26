@@ -11,6 +11,10 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+# Humanizer — deterministic post-processing to reduce AI detection
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from humanizer import humanize, detect_ai, humanize_with_score
+
 # ============================================================================
 # CONFIG
 # ============================================================================
@@ -194,7 +198,7 @@ def extract_forwarded_haro_content(email_body: str) -> Optional[dict]:
 # ============================================================================
 
 def is_relevant_query(query_data: dict) -> bool:
-    """Check if query is relevant to House of Supreme / home improvement."""
+    """Check if query is relevant to Fortress Blinds / home improvement."""
     text = ' '.join([
         query_data.get('summary', ''),
         query_data.get('query_text', ''),
@@ -277,9 +281,9 @@ Body:
 [Your response here - direct answers to the query, expert insights, then author bio]
 
 ---
-Author: Craig Pauls, House of Supreme (South Africa)
-Website: https://houseofsupreme.co.za
-Contact: craig@houseofsupreme.co.za
+Author: Craig Pauls, Fortress Blinds (South Africa)
+Website: https://fortressblinds.co.za
+Contact: craig@fortressblinds.co.za
 
 Write ONLY the response. No preamble. No explanation."""
 
@@ -314,6 +318,107 @@ Write ONLY the response. No preamble. No explanation."""
         return f"Error calling Claude API: {e.read()}"
     except Exception as e:
         return f"Error: {str(e)}"
+
+
+# ============================================================================
+# HUMANIZER INTEGRATION
+# ============================================================================
+
+def humanize_draft(draft_text: str, level: str = 'aggressive', style: str = 'casual') -> dict:
+    """
+    Apply deterministic humanization to a drafted HARO response.
+    
+    Args:
+        draft_text: The LLM-drafted response text.
+        level: 'light', 'medium', 'aggressive', or 'ninja'.
+        style: 'academic', 'casual', 'professional', 'creative', 'technical'.
+    
+    Returns:
+        dict with:
+            - original_score: AI detection score before humanization (0-100, higher=more human)
+            - humanized_score: AI detection score after humanization
+            - original_verdict: verdict before humanization
+            - humanized_verdict: verdict after humanization
+            - humanized_text: the humanized response
+            - changes_summary: brief summary of what was changed
+    """
+    # Run detector on original
+    original_result = detect_ai(draft_text)
+    
+    # Humanize
+    humanized, humanized_result = humanize_with_score(draft_text, level=level, style=style)
+    
+    # Build changes summary
+    original_words = set(draft_text.lower().split())
+    humanized_words = set(humanized.lower().split())
+    added = humanized_words - original_words
+    removed = original_words - humanized_words
+    
+    score_diff = humanized_result['score'] - original_result['score']
+    direction = '↑' if score_diff > 0 else ('↓' if score_diff < 0 else '→')
+    
+    changes_summary = (
+        f"Human score: {original_result['score']}→{humanized_result['score']} {direction}{abs(score_diff)}pts | "
+        f"Verdict: {original_result['overall_verdict']}→{humanized_result['overall_verdict']} | "
+        f"Words changed: {len(removed)} removed, {len(added)} added"
+    )
+    
+    return {
+        'original_score': original_result['score'],
+        'humanized_score': humanized_result['score'],
+        'original_verdict': original_result['overall_verdict'],
+        'humanized_verdict': humanized_result['overall_verdict'],
+        'humanized_text': humanized,
+        'changes_summary': changes_summary,
+        'original_analysis': original_result['analysis'],
+        'humanized_analysis': humanized_result['analysis'],
+    }
+
+
+def format_approval_email(query_data: dict, draft: str, humanization: dict) -> str:
+    """
+    Format the approval email sent to Craig, including humanization score.
+    
+    Args:
+        query_data: Parsed HARO query data.
+        draft: The LLM-drafted response.
+        humanization: Output from humanize_draft().
+    
+    Returns:
+        Formatted email body string.
+    """
+    original_score = humanization['original_score']
+    humanized_score = humanization['humanized_score']
+    original_verdict = humanization['original_verdict'].upper()
+    humanized_verdict = humanization['humanized_verdict'].upper()
+    
+    # Emoji indicators
+    verdict_emoji = {'HUMAN': '✅', 'MIXED': '⚠️', 'AI': '🤖'}
+    orig_icon = verdict_emoji.get(original_verdict, '❓')
+    human_icon = verdict_emoji.get(humanized_verdict, '❓')
+    
+    email = f"""📧 HARO Response Draft — Approval Needed
+
+📰 JOURNALIST: {query_data.get('journalist_name', 'Unknown')}
+🏢 OUTLET: {query_data.get('outlet', 'Unknown')}
+📂 CATEGORY: {query_data.get('category', 'Unknown')}
+⏰ DEADLINE: {query_data.get('deadline', 'Unknown')}
+
+--- ORIGINAL QUERY ---
+{query_data.get('query_text', 'No query text')[:500]}
+
+--- HUMANIZATION REPORT ---
+{orig_icon} Original AI score: {original_score}/100 ({original_verdict})
+{human_icon} Humanized score: {humanized_score}/100 ({humanized_verdict})
+📊 {humanization['changes_summary']}
+
+--- DRAFTED RESPONSE (Humanized) ---
+{humanization['humanized_text']}
+
+---
+Reply YES to approve and submit, or NO to skip.
+"""
+    return email
 
 
 # ============================================================================
