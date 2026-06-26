@@ -1,0 +1,10 @@
+# Netscape HTTP Cookie File
+.doubleclick.net	TRUE	/	TRUE	1781194028	test_cookie	CheckForPermission
+.connectively.us	TRUE	/	FALSE	1815753128	_ga	GA1.1.237066047.1781193128
+.connectively.us	TRUE	/	FALSE	1788969128	_gcl_au	1.1.263832978.1781193128
+.connectively.us	TRUE	/	FALSE	1804523128	intercom-id-vnev4z63	0014e858-1030-45fe-860e-4cff56f680b0
+.connectively.us	TRUE	/	FALSE	1781797928	intercom-session-vnev4z63	
+.connectively.us	TRUE	/	FALSE	1804523128	intercom-device-id-vnev4z63	8176e8b8-618c-478a-bf5b-f75e1e9d504c
+www.connectively.us	TRUE	/	TRUE	1781797931	__Secure-better-auth.session_token	hju9f2Xhto7ddsn8TjLVAoXMLU5mIOXp.D5%2FM0RngOXy52e81WeB8MtIQdrI2BmhQeAO4gODC%2ByQ%3D
+.connectively.us	TRUE	/	FALSE	1815753134	_ga_FQ7M0GZPD3	GS2.1.s1781193128$o1$g0$t1781193134$j54$l0$h0
+.connectively.us	TRUE	/	FALSE	1815753134	_ga_P4V1MMBTMS	GS2.1.s1781193128$o1$g0$t1781193134$j54$l0$h0

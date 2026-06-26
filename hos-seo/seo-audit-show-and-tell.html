@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>House of Supreme — SEO Audit Report</title>
+<style>
+  @page { size: A4; margin: 15mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 10pt;
+    line-height: 1.45;
+    color: #1a1a2e;
+    background: #fff;
+    margin: 0;
+    padding: 0;
+  }
+  .page {
+    width: 100%;
+    max-width: 210mm;
+    margin: 0 auto 30px;
+    padding: 20mm;
+    page-break-after: always;
+    border-bottom: 1px dashed #ccc;
+  }
+  .page:last-child { page-break-after: auto; border-bottom: none; }
+  h1 {
+    font-size: 20pt; color: #16213e; margin: 0 0 8px;
+    border-bottom: 3px solid #e94560; padding-bottom: 8px;
+  }
+  h2 {
+    font-size: 13pt; color: #16213e; margin: 18px 0 8px;
+    background: #f0f0f3; padding: 6px 10px; border-left: 4px solid #e94560;
+  }
+  h3 { font-size: 11pt; color: #16213e; margin: 14px 0 6px; }
+  .meta {
+    font-size: 9pt; color: #666; margin-bottom: 16px;
+    display: flex; gap: 20px; flex-wrap: wrap;
+  }
+  .meta span { display: inline-flex; align-items: center; gap: 4px; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 3px;
+    font-size: 8pt; font-weight: 700; text-transform: uppercase;
+  }
+  .badge-danger { background: #fee2e2; color: #991b1b; }
+  .badge-warning { background: #fef3c7; color: #92400e; }
+  .badge-success { background: #d1fae5; color: #065f46; }
+  .badge-info { background: #dbeafe; color: #1e40af; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 10px 0;
+    font-size: 9pt;
+  }
+  th, td {
+    padding: 5px 8px; text-align: left; border: 1px solid #e5e7eb;
+    vertical-align: top;
+  }
+  th { background: #f3f4f6; font-weight: 600; color: #374151; }
+  tr:nth-child(even) td { background: #fafafa; }
+  .col-id { width: 45px; text-align: center; }
+  .col-words { width: 55px; text-align: center; }
+  .col-date { width: 80px; }
+  .col-priority { width: 55px; text-align: center; }
+  .col-url { max-width: 180px; word-break: break-all; font-size: 8pt; }
+  .col-site { width: 140px; }
+  .col-notes { font-size: 8pt; }
+  .priority-high { color: #dc2626; font-weight: 700; }
+  .priority-med { color: #d97706; }
+  .priority-low { color: #6b7280; }
+  .section-summary {
+    background: #f8fafc; border: 1px solid #e2e8f0;
+    border-radius: 6px; padding: 12px; margin: 12px 0;
+  }
+  .section-summary p { margin: 4px 0; }
+  .callout {
+    border-left: 4px solid #e94560; background: #fef2f2;
+    padding: 10px 14px; margin: 14px 0; border-radius: 0 4px 4px 0;
+  }
+  .callout-info {
+    border-left-color: #3b82f6; background: #eff6ff;
+  }
+  .callout-success {
+    border-left-color: #10b981; background: #ecfdf5;
+  }
+  .stats-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0;
+  }
+  .stat-box {
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+    padding: 10px; text-align: center;
+  }
+  .stat-num { font-size: 20pt; font-weight: 700; color: #e94560; }
+  .stat-label { font-size: 8pt; color: #64748b; margin-top: 2px; }
+  ul, ol { margin: 6px 0; padding-left: 20px; }
+  li { margin: 2px 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .footer {
+    margin-top: 20px; padding-top: 10px; border-top: 1px solid #e5e7eb;
+    font-size: 8pt; color: #94a3b8; text-align: center;
+  }
+  @media print {
+    body { font-size: 9.5pt; }
+    .page { padding: 12mm; }
+    h1 { font-size: 18pt; }
+    h2 { font-size: 12pt; }
+    .stats-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1: COVER + EXECUTIVE SUMMARY -->
+<div class="page">
+  <h1>🏠 House of Supreme — SEO Audit Report</h1>
+  <div class="meta">
+    <span>📅 June 26, 2026</span>
+    <span>👤 Prepared by: Enoch (RankBuilder AI)</span>
+    <span>🌐 houseofsupreme.co.za</span>
+    <span>📍 Johannesburg, South Africa</span>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-box">
+      <div class="stat-num">40</div>
+      <div class="stat-label">Blog Posts Scanned</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num">14</div>
+      <div class="stat-label">Ultra-Thin Posts<br>(to DELETE)</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num">32</div>
+      <div class="stat-label">Mid-Tier Posts<br>(to EXPAND)</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num">61</div>
+      <div class="stat-label">Citation Opportunities<br>(to CLAIM)</div>
+    </div>
+  </div>
+
+  <div class="section-summary">
+    <h3>📋 Executive Summary</h3>
+    <p><strong>Thin Content Problem:</strong> 14 blog posts (35% of all posts) are under 200 words — essentially placeholders that signal low quality to Google and may trigger sitewide ranking penalties.</p>
+    <p><strong>Content Gap:</strong> Only 6 posts (15%) exceed 1,450 words. The strongest post is "Interior vs Exterior Shutters" at 3,446 words — a genuine pillar page.</p>
+    <p><strong>Local SEO Gap:</strong> Google Business Profile is <strong>not set up</strong> — this is the #1 factor for local pack rankings. Zero of 61 citation opportunities have been claimed.</p>
+    <p><strong>Google Search Console:</strong> Unknown status — may be managed by the website management company, but needs verification.</p>
+  </div>
+
+  <h2>🔴 Priority 1 — Delete Thin Content Immediately</h2>
+  <p>These 14 posts are 67–200 words of generic, duplicated text with no ranking value. They hurt SEO by diluting site quality.</p>
+  <table>
+    <thead>
+      <tr><th class="col-id">ID</th><th>Post Title</th><th class="col-words">Words</th><th class="col-date">Date</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1997</td><td>Aluminium Security Shutters: Excellent Choice</td><td>67</td><td>2022-11</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>1993</td><td>Aluminium Security Shutters: Durability/Strength</td><td>74</td><td>2022-11</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2006</td><td>Wooden Shutters: Stylish Sustainable</td><td>98</td><td>2022-12</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2012</td><td>Privacy Shutters: Creating Intimate Atmosphere</td><td>134</td><td>2023-01</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2023</td><td>Flyscreens: Enjoy Fresh Air Bug-Free</td><td>135</td><td>2023-02</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2030</td><td>Flyscreens: Enhancing Indoor Air Quality</td><td>144</td><td>2023-01</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2033</td><td>Clear Armed Bars: Enhanced Safety</td><td>148</td><td>2023-03</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2051</td><td>Security Shutter Installation: Protecting Property</td><td>149</td><td>2023-05</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2017</td><td>Bypass Shutters: Keeping Home Cozy</td><td>150</td><td>2023-01</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2039</td><td>Clear Armed Bars: Enhance Security Clear View</td><td>161</td><td>2023-03</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2055</td><td>Security Shutter Installation: Secure Home</td><td>176</td><td>2023-05</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2003</td><td>Wooden Shutters: Adding Warmth Elegance</td><td>178</td><td>2022-12</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2043</td><td>Blinds: Perfect Balance Style Functionality</td><td>182</td><td>2023-04</td><td><span class="badge badge-danger">Delete</span></td></tr>
+      <tr><td>2047</td><td>Window Blinds: Enhancing Living Spaces</td><td>200</td><td>2023-04</td><td><span class="badge badge-danger">Delete</span></td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <strong>Deletion Method:</strong> Move to trash in WordPress → permanently delete after 30 days → set up 301 redirects to relevant category pages (shutter posts → /shutters/, etc.)
+  </div>
+</div>
+
+<!-- PAGE 2: STRONG POSTS + EXPANSION PRIORITIES -->
+<div class="page">
+  <h2>🟢 Strong Posts — Leave As-Is (1,450+ words)</h2>
+  <p>These 6 posts are genuinely valuable content. Minor tweaks only.</p>
+  <table>
+    <thead>
+      <tr><th>Post</th><th class="col-words">Words</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Interior vs Exterior Shutters</td><td>3,446</td><td>Excellent pillar. Add location keywords.</td></tr>
+      <tr><td>Best Security Shutters in SA</td><td>2,078</td><td>Strong buyer's guide. Add ZAR pricing.</td></tr>
+      <tr><td>Flyscreen Prices (2026 Guide)</td><td>2,036</td><td>Data-driven cost guide. Update annually.</td></tr>
+      <tr><td>White Shutters: Summer's Perfect</td><td>2,012</td><td>Seasonal. Add room-specific recs.</td></tr>
+      <tr><td>Bypass Shutters: Floating Window</td><td>1,542</td><td>Good product guide. Add install costs.</td></tr>
+      <tr><td>Insulate Home: Shut Out Cold</td><td>1,456</td><td>Solid insulation content. Expand rooms.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>🟡 Expansion Priorities — Mid-Tier Posts</h2>
+  <p>Expand these to 1,500+ words for maximum SEO impact.</p>
+  <table>
+    <thead>
+      <tr><th class="col-priority">Priority</th><th>Post</th><th class="col-words">Words</th><th>Why It Matters</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="priority-high">HIGH</td><td>Shutters Johannesburg & Cape Town</td><td>1,048</td><td>Location SEO gold — local pack rankings</td></tr>
+      <tr><td class="priority-high">HIGH</td><td>Security Shutters vs Clear Armed Bars</td><td>774</td><td>High commercial intent comparison</td></tr>
+      <tr><td class="priority-high">HIGH</td><td>Benefits of Motorised Blinds</td><td>740</td><td>Trending smart home topic</td></tr>
+      <tr><td class="priority-high">HIGH</td><td>Custom Shutters: Worth It?</td><td>750</td><td>Strong buyer intent, ROI angles</td></tr>
+      <tr><td class="priority-high">HIGH</td><td>Boost Property Value with Shutters</td><td>763</td><td>Real estate angle, high search volume</td></tr>
+      <tr><td class="priority-high">HIGH</td><td>Baboon/Monkey-Proof Mesh Screens</td><td>856</td><td>Unique SA content — no competition</td></tr>
+      <tr><td class="priority-med">MED</td><td>Choose Right Mosquito Mesh</td><td>521</td><td>Add mesh comparison, SA climate data</td></tr>
+      <tr><td class="priority-med">MED</td><td>Clear Armed Bars vs Steel Burglar Bars</td><td>720</td><td>Great comparison topic</td></tr>
+      <tr><td class="priority-med">MED</td><td>Outdoor Shutters: Security & Privacy</td><td>793</td><td>Strong topic, add SA climate zones</td></tr>
+      <tr><td class="priority-med">MED</td><td>Motorised Blinds vs Manual</td><td>859</td><td>Cost comparison, smart home integration</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- PAGE 3: GOOGLE SEARCH CONSOLE -->
+<div class="page">
+  <h2>🔍 Google Search Console Status</h2>
+  <div class="callout callout-info">
+    <strong>Status: UNKNOWN</strong><br>
+    Cannot verify if the management company already manages GSC without a Google account login.
+  </div>
+
+  <h3>How to Check</h3>
+  <ol>
+    <li>Go to <strong>search.google.com/search-console</strong></li>
+    <li>Sign in with a Google account (e.g., craigp@ctdesignz.co.za)</li>
+    <li>Click "Add property" → enter <code>houseofsupreme.co.za</code></li>
+    <li>If already claimed → message says "verified by another user"</li>
+    <li>If NOT claimed → verify immediately via DNS TXT record</li>
+  </ol>
+
+  <div class="callout callout-success">
+    <strong>If not claimed:</strong> Verify immediately → submit sitemap → set up email alerts for indexing issues.
+  </div>
+
+  <h3>What to Do Once Inside</h3>
+  <ul>
+    <li><strong>Submit sitemap</strong> — essential for indexing all pages</li>
+    <li><strong>Coverage report</strong> — see which pages are indexed vs excluded</li>
+    <li><strong>Performance tab</strong> — what queries bring traffic, which pages rank</li>
+    <li><strong>Core Web Vitals</strong> — page speed issues affecting rankings</li>
+    <li><strong>Mobile Usability</strong> — any mobile rendering problems</li>
+  </ul>
+
+  <div class="callout">
+    <strong>Even if the management company has access, YOU should too.</strong> GSC data is essential for SEO decisions — without it, you're flying blind.
+  </div>
+</div>
+
+<!-- PAGE 4: LOCAL CITATIONS -->
+<div class="page">
+  <h2>📍 Local Citations — 61 Opportunities</h2>
+  <div class="section-summary">
+    <p><strong>NAP (Name, Address, Phone) consistency is critical.</strong> Every listing must match exactly:</p>
+    <p><strong>House of Supreme</strong> | 430 Northumberland Ave, Northriding, Johannesburg, 2162 | +27 (0)11 462 7096 | houseofsupreme.co.za</p>
+  </div>
+
+  <h3>Tier 1 — Essential (Must-Have)</h3>
+  <table>
+    <thead><tr><th class="col-site">Site</th><th class="col-url">URL</th><th>Status</th><th class="col-notes">Notes</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Google Business Profile</strong></td><td>business.google.com</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes"><strong>#1 priority</strong> — local pack rankings depend on this</td></tr>
+      <tr><td>Yelp SA</td><td>yelp.co.za</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Reviews heavily weighted</td></tr>
+      <tr><td>Yellow Pages SA</td><td>yellowpages.co.za</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Legacy authority in SA</td></tr>
+      <tr><td>Brabys</td><td>brabys.com</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Major SA directory since 1975</td></tr>
+      <tr><td>Yello</td><td>yello.co.za</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Popular SA business directory</td></tr>
+      <tr><td>SA Yellow</td><td>sayellow.com</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">SA-focused listings</td></tr>
+      <tr><td>Hotfrog SA</td><td>hotfrog.co.za</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Free, good backlink value</td></tr>
+      <tr><td>Cylex SA</td><td>cylex.co.za</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">European directory with SA presence</td></tr>
+      <tr><td>Fyple</td><td>fyple.co.za</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">SA business listings</td></tr>
+      <tr><td>Tuugo</td><td>tuugo.co.za</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Free SA directory</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Tier 2 — Important</h3>
+  <table>
+    <thead><tr><th class="col-site">Site</th><th>Status</th><th class="col-notes">Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Facebook Business Page</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Create dedicated page (not personal profile)</td></tr>
+      <tr><td>LinkedIn Company Page</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Professional credibility + services</td></tr>
+      <tr><td>Instagram Business</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Visual platform — perfect for shutters</td></tr>
+      <tr><td>Pinterest Business</td><td><span class="badge badge-success">EXISTS</span></td><td class="col-notes">Already set up — needs NAP + verification</td></tr>
+      <tr><td>Bing Places</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Often overlooked — easy win</td></tr>
+      <tr><td>Apple Business Connect</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Powers Apple Maps results</td></tr>
+      <tr><td>Snupit</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">SA service marketplace</td></tr>
+      <tr><td>Kandua</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Vetted professionals platform</td></tr>
+      <tr><td>Homeimprovement4U</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Perfect fit for HOS industry</td></tr>
+      <tr><td>HelloPeter</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">SA's largest review platform</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- PAGE 5: MORE CITATIONS + ACTION PLAN -->
+<div class="page">
+  <h3>Tier 3 — Industry-Specific</h3>
+  <table>
+    <thead><tr><th class="col-site">Site</th><th>Status</th><th class="col-notes">Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Houzz SA</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Global home design — create pro profile with portfolio</td></tr>
+      <tr><td>SA Decor & Design</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">SA interior design directory</td></tr>
+      <tr><td>Home-Dzine</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">SA DIY and home improvement</td></tr>
+      <tr><td>Building & Decor</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">SA construction/trade directory</td></tr>
+      <tr><td>Security Assoc. of SA (SASA)</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Membership = high-authority backlink</td></tr>
+      <tr><td>Chamber of Commerce</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Strong local citation + networking</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Tier 4 — Review Platforms</h3>
+  <table>
+    <thead><tr><th class="col-site">Site</th><th>Status</th><th class="col-notes">Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Google Reviews</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Most important — aim for 50+ reviews, 4.5+ stars</td></tr>
+      <tr><td>HelloPeter</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Critical for SA businesses</td></tr>
+      <tr><td>Trustpilot</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Global credibility signal</td></tr>
+      <tr><td>Facebook Reviews</td><td><span class="badge badge-danger">NOT SET UP</span></td><td class="col-notes">Social proof in search results</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📅 Recommended Action Plan</h2>
+  <div class="two-col">
+    <div>
+      <h3>Week 1 — Foundation</h3>
+      <ol>
+        <li>Set up Google Business Profile</li>
+        <li>Set up Bing Places</li>
+        <li>Set up Apple Business Connect</li>
+        <li>Create Facebook Business Page</li>
+        <li>Create LinkedIn Company Page</li>
+      </ol>
+    </div>
+    <div>
+      <h3>Week 2 — SA Directories</h3>
+      <ol>
+        <li>Yellow Pages SA</li>
+        <li>Brabys</li>
+        <li>Yello</li>
+        <li>SA Yellow</li>
+        <li>Hotfrog SA</li>
+        <li>Cylex SA</li>
+        <li>ShowMe</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h3>Week 3 — Industry & Services</h3>
+      <ol>
+        <li>Houzz SA (pro profile)</li>
+        <li>Snupit</li>
+        <li>Kandua</li>
+        <li>Homeimprovement4U</li>
+        <li>HelloPeter (start reviews)</li>
+      </ol>
+    </div>
+    <div>
+      <h3>Week 4 — Social & Visual</h3>
+      <ol>
+        <li>Instagram Business</li>
+        <li>Pinterest (verify + NAP)</li>
+        <li>Yelp SA</li>
+      </ol>
+    </div>
+  </div>
+
+  <h3>Month 2 — Complete</h3>
+  <ul>
+    <li>All Tier 3–5 citations</li>
+    <li>Chamber of Commerce</li>
+    <li>Trade associations (SASA)</li>
+    <li>Review generation campaign (Google + HelloPeter)</li>
+  </ul>
+
+  <h2>📊 Expected Impact</h2>
+  <ul>
+    <li><strong>Timeline:</strong> 3–6 months to see ranking improvements</li>
+    <li><strong>Goal:</strong> Rank in local pack for "shutters Johannesburg", "security screens Randburg", "flyscreens Northriding"</li>
+    <li><strong>Reviews:</strong> Target 10+ new Google reviews per month</li>
+    <li><strong>Metric:</strong> Monitor GBP insights for search views, direction requests, website clicks</li>
+  </ul>
+
+  <div class="footer">
+    House of Supreme SEO Audit | Prepared by Enoch (RankBuilder AI) | June 26, 2026 | houseofsupreme.co.za
+  </div>
+</div>
+
+</body>
+</html>
