@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Syntax check Python files
+        run: |
+          python -m py_compile scripts/haro_monitor.py
+          python -m py_compile scripts/connectively_monitor.py
+          python -m py_compile scripts/guest_outreach_engine.py
+          python -m py_compile scripts/prospect_checker.py
+          python -m py_compile lib/haro_responder.py
+          python -m py_compile lib/pitch_templates.py
+          python -m py_compile lib/blocklist.py
+          echo "All Python files passed syntax check"
+
+      - name: Docker build test
+        run: |
+          docker build --tag rankbuilder:test .
+
+      - name: Health check test
+        run: |
+          docker run -d --name rankbuilder-test -e RUN_MODE=cron -p 8080:8080 rankbuilder:test
+          sleep 5
+          curl -f http://localhost:8080/health && echo "Health check passed"
+          docker stop rankbuilder-test
