@@ -412,7 +412,8 @@ const {{ chromium }} = require('/tmp/node_modules/playwright');
         return;
     }}
 
-    await textarea.fill(`{answer_text.replace('`', '\\`')}`);
+    safe_answer = answer_text.replace('`', '\\`')
+    await textarea.fill(`{safe_answer}`);
     console.log('Filled textarea');
 
     // Find and click Submit
