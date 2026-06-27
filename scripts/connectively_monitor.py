@@ -263,8 +263,8 @@ def playwright_login_and_scrape_questions() -> dict:
     def _run(p, ctx, page):
         page.goto('https://www.connectively.us/login', wait_until='domcontentloaded', timeout=20000)
         page.wait_for_timeout(3000)
-        page_title = page.title()
-        log(f"Login page: title='{page_title}', URL={page.url()}")
+        page_title = page.evaluate('() => document.title')
+        log(f"Login page: title='{page_title}', URL={page.evaluate('() => window.location.href')}")
         if 'vercel' in page_title.lower() or 'security' in page_title.lower():
             return {'error': 'Blocked by bot protection: ' + page_title}
         try:
@@ -284,7 +284,7 @@ def playwright_login_and_scrape_questions() -> dict:
         page.locator('button[type="submit"]').click()
         page.wait_for_function(lambda: '/login' not in page.url, timeout=30000)
         page.wait_for_timeout(3000)
-        log(f"After login URL: {page.url()}")
+        log(f"After login URL: {page.evaluate('() => window.location.href')}")
         page.goto('https://www.connectively.us/expert-questions', wait_until='domcontentloaded', timeout=15000)
         page.wait_for_timeout(5000)
         qscript = ("() => { var t = document.querySelector('table tbody'); " +
