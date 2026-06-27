@@ -214,65 +214,94 @@ Write ONLY the email response. No preamble. No explanation."""
 # PLAYWRIGHT (Python Playwright — no Node.js required)
 # ============================================================================
 
+def _make_stealth_browser(p):
+    from playwright_stealth import stealth
+    browser = p.chromium.launch(
+        headless=True,
+        args=[
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-webgl',
+            '--disable-dev-shm-usage',
+        ]
+    )
+    ctx = browser.new_context(
+        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        locale='en-US',
+        timezone_id='Africa/Johannesburg',
+        viewport={'width': 1920, 'height': 1080},
+        extra_http_headers={
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+    )
+    page = ctx.new_page()
+    s = stealth.Stealth(
+        navigator_webdriver=True, navigator_plugins=True,
+        navigator_user_agent=True, navigator_hardware_concurrency=True,
+        navigator_languages=True, navigator_platform=True,
+        webgl_vendor=True, chrome_load_times=True,
+        iframe_content_window=True,
+    )
+    s.apply_stealth_sync(page)
+    ctx._browser = browser
+    return browser, ctx, page
+
 def run_playwright(script_fn, timeout: int = 60) -> dict:
     from playwright.sync_api import sync_playwright
     try:
         with sync_playwright() as p:
-            return script_fn(p)
+            browser, ctx, page = _make_stealth_browser(p)
+            result = script_fn(p, ctx, page)
+            browser.close()
+            return result
     except Exception as e:
-        return {"error": str(e)}
-
+        return {'error': str(e)}
 
 def playwright_login_and_scrape_questions() -> dict:
-    def _run(p):
-        browser = p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
-        ctx = browser.new_context()
-        page = ctx.new_page()
-
-        page.goto('https://www.connectively.us/login', wait_until='domcontentloaded', timeout=15000)
-        page.wait_for_timeout(2000)
-        page.locator('input[autocomplete="email"]').fill(CONNECTIVELY_EMAIL)
-        page.locator('input[autocomplete="current-password"]').fill(CONNECTIVELY_PASSWORD)
-        page.locator('button[type="submit"]:has-text("Submit")').click()
+    def _run(p, ctx, page):
+        page.goto('https://www.connectively.us/login', wait_until='domcontentloaded', timeout=20000)
+        page.wait_for_timeout(3000)
+        page_title = page.title()
+        log(f"Login page: title='{page_title}', URL={page.url()}")
+        if 'vercel' in page_title.lower() or 'security' in page_title.lower():
+            return {'error': 'Blocked by bot protection: ' + page_title}
+        try:
+            page.wait_for_selector('input[type="email"], input[name="email"], input[id="email"]',
+                                   timeout=10000, state='attached')
+        except Exception as e:
+            return {'error': 'Form elements not found: ' + str(e)}
+        email_field = (page.locator('input[type="email"]').first
+                      .or_(page.locator('input[name="email"]').first)
+                      .or_(page.locator('input[id="email"]').first)
+                      .or_(page.locator('input[autocomplete="email"]').first))
+        password_field = (page.locator('input[type="password"]').first
+                         .or_(page.locator('input[name="password"]').first)
+                         .or_(page.locator('input[id="password"]').first))
+        email_field.fill(CONNECTIVELY_EMAIL)
+        password_field.fill(CONNECTIVELY_PASSWORD)
+        page.locator('button[type="submit"]').click()
         page.wait_for_function(lambda: '/login' not in page.url, timeout=30000)
         page.wait_for_timeout(3000)
-        log(f"Logged in. URL: {page.url()}")
-
+        log(f"After login URL: {page.url()}")
         page.goto('https://www.connectively.us/expert-questions', wait_until='domcontentloaded', timeout=15000)
         page.wait_for_timeout(5000)
-
-        queries = page.evaluate('''() => {
-            const results = [];
-            const table = document.querySelector('table');
-            if (!table) return { error: 'no table' };
-            const tbody = table.querySelector('tbody');
-            if (!tbody) return { error: 'no tbody' };
-            const rows = tbody.querySelectorAll('tr');
-            rows.forEach(row => {
-                const cells = row.querySelectorAll('td');
-                if (cells.length >= 4) {
-                    const links = cells[cells.length - 1].querySelectorAll('a');
-                    const answerLink = Array.from(links).find(a => a.textContent.trim() === 'Answer');
-                    const qCell = cells[1];
-                    const pubCell = cells[2];
-                    const dlCell = cells[3];
-                    let qText = qCell ? qCell.textContent.trim() : '';
-                    qText = qText.replace(/^Question\s*/i, '').replace(/^Questions\s*/i, '').trim();
-                    results.push({
-                        question: qText.substring(0, 500),
-                        publication: pubCell ? pubCell.textContent.trim().replace(/\s+/g, ' ') : '',
-                        deadline: dlCell ? dlCell.textContent.trim().replace(/\s+/g, ' ') : '',
-                        answerUrl: answerLink ? answerLink.href : ''
-                    });
-                }
-            });
-            return { results, rowCount: rows.length };
-        }''')
-
+        qscript = ("() => { var t = document.querySelector('table tbody'); " +
+                   "if (!t) return {error: 'no tbody'}; var rows = t.querySelectorAll('tr'); " +
+                   "var r = []; rows.forEach(function(row) { var c = row.querySelectorAll('td'); " +
+                   "if (c.length >= 4) { var links = c[c.length-1].querySelectorAll('a'); " +
+                   "var al = null; for (var i=0;i<links.length;i++) { " +
+                   "if (links[i].textContent.trim() === 'Answer') { al = links[i]; break; } } " +
+                   "var qt = c[1].textContent.trim().replace(/^Question\\s*/i,'').replace(/^Questions\\s*/i,'').trim(); " +
+                   "r.push({question: qt.substring(0,500), " +
+                   "publication: c[2].textContent.trim().replace(/\\s+/g,' '), " +
+                   "deadline: c[3].textContent.trim().replace(/\\s+/g,' '), " +
+                   "answerUrl: al ? al.href : ''}); } }); return {results: r}; }")
+        queries = page.evaluate(qscript)
         cookies = ctx.cookies()
         session_token = next((c['value'] for c in cookies if 'session' in c['name'] or 'auth' in c['name']), '')
         log(f"Scraped {len(queries.get('results', []))} queries")
-        browser.close()
         return {
             'queries': queries.get('results', []),
             'token': session_token,
@@ -281,56 +310,32 @@ def playwright_login_and_scrape_questions() -> dict:
         }
     return run_playwright(_run)
 
-
 def playwright_get_query_text(question_url: str, token: str) -> dict:
-    def _run(p):
-        browser = p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
-        ctx = browser.new_context()
+    def _run(p, ctx, page):
         ctx.add_cookies([{
             'name': '__Secure-better-auth.session_token',
             'value': token,
             'domain': '.connectively.us',
             'path': '/'
         }])
-        page = ctx.new_page()
         page.goto(question_url, wait_until='domcontentloaded', timeout=15000)
         page.wait_for_timeout(5000)
-
-        question_text = page.evaluate('''() => {
-            const selectors = [
-                '[class*="question"]', '[class*="Query"]', '[class*="query"]',
-                'h1', 'h2', '[role="heading"]',
-                'div[class*="Card"]', 'div[class*="Content"]'
-            ];
-            for (const sel of selectors) {
-                const el = document.querySelector(sel);
-                if (el && el.textContent.length > 50) {
-                    return el.textContent.trim().substring(0, 3000);
-                }
-            }
-            return document.body.innerText.substring(0, 3000);
-        }''')
-
-        publication = page.evaluate('''() => {
-            const els = document.querySelectorAll('[class*="pub" i], [class*="source" i], [class*="outlet" i]');
-            for (const el of els) {
-                const t = el.textContent.trim();
-                if (t.length > 1 && t.length < 100) return t;
-            }
-            return window.location.hostname;
-        }''')
-
-        deadline = page.evaluate('''() => {
-            const els = document.querySelectorAll('[class*="deadline" i], [class*="date" i], [class*="time" i]');
-            for (const el of els) {
-                const t = el.textContent.trim();
-                if (t.length > 1 && t.length < 50) return t;
-            }
-            return '';
-        }''')
-
+        question_text = page.evaluate(("() => { " +
+            "var selectors = ['[class*=question]', '[class*=Query]', 'h1', 'h2', " +
+            "'div[class*=Card]', 'div[class*=Content]']; " +
+            "for (var i=0; i<selectors.length; i++) { " +
+            "var el = document.querySelector(selectors[i]); " +
+            "if (el && el.textContent.length > 50) return el.textContent.trim().substring(0, 3000); } " +
+            "return document.body.innerText.substring(0, 3000); }"))
+        publication = page.evaluate(("() => { " +
+            "var els = document.querySelectorAll('[class*=pub i], [class*=source i], [class*=outlet i]'); " +
+            "for (var i=0; i<els.length; i++) { var t = els[i].textContent.trim(); " +
+            "if (t.length>1 && t.length<100) return t; } return window.location.hostname; }"))
+        deadline = page.evaluate(("() => { " +
+            "var els = document.querySelectorAll('[class*=deadline i], [class*=date i], [class*=time i]'); " +
+            "for (var i=0; i<els.length; i++) { var t = els[i].textContent.trim(); " +
+            "if (t.length>1 && t.length<50) return t; } return ''; }"))
         has_form = page.locator('textarea, [role="textbox"]').count() > 0
-        browser.close()
         return {
             'questionText': question_text,
             'publication': publication,
@@ -340,39 +345,30 @@ def playwright_get_query_text(question_url: str, token: str) -> dict:
         }
     return run_playwright(_run)
 
-
 def playwright_submit_answer(question_url: str, answer_text: str, token: str) -> dict:
-    def _run(p):
-        browser = p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
-        ctx = browser.new_context()
+    def _run(p, ctx, page):
         ctx.add_cookies([{
             'name': '__Secure-better-auth.session_token',
             'value': token,
             'domain': '.connectively.us',
             'path': '/'
         }])
-        page = ctx.new_page()
         page.goto(question_url, wait_until='domcontentloaded', timeout=15000)
         page.wait_for_timeout(5000)
-
         textarea = page.locator('textarea, [role="textbox"]').first
         if textarea.count() == 0:
-            browser.close()
             return {'success': False, 'error': 'No textarea found'}
-
         safe_answer = answer_text.replace('`', '\\`')
         textarea.fill(safe_answer)
         log('Filled textarea')
-
         page.locator('button[type="submit"], button:has-text("Submit")').last.click()
         log('Clicked submit')
         page.wait_for_timeout(5000)
-
         result_text = page.evaluate('() => document.body.innerText.substring(0, 500)')
         final_url = page.url
-        browser.close()
         return {'success': True, 'url': final_url, 'resultText': result_text}
     return run_playwright(_run)
+
 
 
 
