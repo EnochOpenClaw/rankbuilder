@@ -211,233 +211,171 @@ Write ONLY the email response. No preamble. No explanation."""
 
 
 # ============================================================================
-# PLAYWRIGHT SCRIPTS
+# PLAYWRIGHT (Python Playwright — no Node.js required)
 # ============================================================================
 
-def run_playwright_script(script: str, timeout: int = 60) -> dict:
-    """Run a Playwright Node.js script and return parsed JSON output."""
-    script_path = SCRIPT_FILE
-    script_path.write_text(script)
-
-    result = subprocess.run(
-        ["node", str(script_path)],
-        capture_output=True, text=True, timeout=timeout,
-        cwd="/tmp",
-        env={**os.environ, "NODE_PATH": "/tmp/node_modules"}
-    )
-
-    if result.stderr:
-        log(f"PW stderr: {result.stderr[:200]}")
-
+def run_playwright(script_fn, timeout: int = 60) -> dict:
+    from playwright.sync_api import sync_playwright
     try:
-        # Last line should be JSON
-        lines = [l for l in result.stdout.strip().split('\n') if l.strip()]
-        if lines:
-            return json.loads(lines[-1])
-    except:
-        pass
-    return {"error": result.stdout[:500]}
+        with sync_playwright() as p:
+            return script_fn(p)
+    except Exception as e:
+        return {"error": str(e)}
 
 
 def playwright_login_and_scrape_questions() -> dict:
-    """Log in to Connectively via email/password and scrape the questions table."""
-    script = r"""
-const { chromium } = require('/tmp/node_modules/playwright');
-(async () => {
-    const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
-    
-    await page.goto('https://www.connectively.us/login', { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await page.waitForTimeout(2000);
-    
-    await page.locator('input[autocomplete="email"]').fill('__EMAIL__');
-    await page.locator('input[autocomplete="current-password"]').fill('__PASSWORD__');
-    
-    await Promise.all([
-        page.waitForFunction(
-            () => !window.location.href.includes('/login'),
-            { timeout: 30000 }
-        ),
+    def _run(p):
+        browser = p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
+        ctx = browser.new_context()
+        page = ctx.new_page()
+
+        page.goto('https://www.connectively.us/login', wait_until='domcontentloaded', timeout=15000)
+        page.wait_for_timeout(2000)
+        page.locator('input[autocomplete="email"]').fill(CONNECTIVELY_EMAIL)
+        page.locator('input[autocomplete="current-password"]').fill(CONNECTIVELY_PASSWORD)
         page.locator('button[type="submit"]:has-text("Submit")').click()
-    ]);
-    
-    await page.waitForTimeout(3000);
-    console.log('Logged in. URL: ' + page.url());
-    
-    await page.goto('https://www.connectively.us/expert-questions', { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await page.waitForTimeout(5000);
-    
-    console.log('Questions page: ' + page.url());
-    
-    const queries = await page.evaluate(() => {
-        const results = [];
-        const table = document.querySelector('table');
-        if (!table) return { error: 'no table' };
-        const tbody = table.querySelector('tbody');
-        if (!tbody) return { error: 'no tbody' };
-        const rows = tbody.querySelectorAll('tr');
-        rows.forEach(row => {
-            const cells = row.querySelectorAll('td');
-            if (cells.length >= 4) {
-                const links = cells[cells.length - 1].querySelectorAll('a');
-                const answerLink = Array.from(links).find(a => a.textContent.trim() === 'Answer');
-                const qCell = cells[1];
-                const pubCell = cells[2];
-                const dlCell = cells[3];
-                let qText = qCell ? qCell.textContent.trim() : '';
-                qText = qText.replace(/^Question\s*/i, '').replace(/^Questions\s*/i, '').trim();
-                results.push({
-                    question: qText.substring(0, 500),
-                    publication: pubCell ? pubCell.textContent.trim().replace(/\s+/g, ' ') : '',
-                    deadline: dlCell ? dlCell.textContent.trim().replace(/\s+/g, ' ') : '',
-                    answerUrl: answerLink ? answerLink.href : ''
-                });
-            }
-        });
-        return { results, rowCount: rows.length };
-    });
-    
-    const cookies = await ctx.cookies();
-    const sessionToken = cookies.find(c => c.name.includes('session') || c.name.includes('auth'));
-    
-    console.log(JSON.stringify({
-        queries: queries.results || [],
-        token: sessionToken ? sessionToken.value : '',
-        url: page.url(),
-        cookieNames: cookies.map(c => c.name),
-        error: queries.error
-    }));
-    await browser.close();
-})().catch(e => { console.error('ERROR:' + e.message); process.exit(1); });
-"""
-    script = script.replace('__EMAIL__', CONNECTIVELY_EMAIL).replace('__PASSWORD__', CONNECTIVELY_PASSWORD)
-    return run_playwright_script(script)
+        page.wait_for_function(lambda: '/login' not in page.url, timeout=30000)
+        page.wait_for_timeout(3000)
+        log(f"Logged in. URL: {page.url()}")
+
+        page.goto('https://www.connectively.us/expert-questions', wait_until='domcontentloaded', timeout=15000)
+        page.wait_for_timeout(5000)
+
+        queries = page.evaluate('''() => {
+            const results = [];
+            const table = document.querySelector('table');
+            if (!table) return { error: 'no table' };
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return { error: 'no tbody' };
+            const rows = tbody.querySelectorAll('tr');
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 4) {
+                    const links = cells[cells.length - 1].querySelectorAll('a');
+                    const answerLink = Array.from(links).find(a => a.textContent.trim() === 'Answer');
+                    const qCell = cells[1];
+                    const pubCell = cells[2];
+                    const dlCell = cells[3];
+                    let qText = qCell ? qCell.textContent.trim() : '';
+                    qText = qText.replace(/^Question\s*/i, '').replace(/^Questions\s*/i, '').trim();
+                    results.push({
+                        question: qText.substring(0, 500),
+                        publication: pubCell ? pubCell.textContent.trim().replace(/\s+/g, ' ') : '',
+                        deadline: dlCell ? dlCell.textContent.trim().replace(/\s+/g, ' ') : '',
+                        answerUrl: answerLink ? answerLink.href : ''
+                    });
+                }
+            });
+            return { results, rowCount: rows.length };
+        }''')
+
+        cookies = ctx.cookies()
+        session_token = next((c['value'] for c in cookies if 'session' in c['name'] or 'auth' in c['name']), '')
+        log(f"Scraped {len(queries.get('results', []))} queries")
+        browser.close()
+        return {
+            'queries': queries.get('results', []),
+            'token': session_token,
+            'url': page.url,
+            'cookieNames': [c['name'] for c in cookies]
+        }
+    return run_playwright(_run)
 
 
 def playwright_get_query_text(question_url: str, token: str) -> dict:
-    """Get full query text from a question page (requires auth)."""
-    # Extract slug from URL
-    slug = question_url.rstrip('/').split('/')[-1]
+    def _run(p):
+        browser = p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
+        ctx = browser.new_context()
+        ctx.add_cookies([{
+            'name': '__Secure-better-auth.session_token',
+            'value': token,
+            'domain': '.connectively.us',
+            'path': '/'
+        }])
+        page = ctx.new_page()
+        page.goto(question_url, wait_until='domcontentloaded', timeout=15000)
+        page.wait_for_timeout(5000)
 
-    script = fr"""
-const {{ chromium }} = require('/tmp/node_modules/playwright');
-(async () => {{
-    const browser = await chromium.launch({{ headless: true, args: ['--no-sandbox'] }});
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
+        question_text = page.evaluate('''() => {
+            const selectors = [
+                '[class*="question"]', '[class*="Query"]', '[class*="query"]',
+                'h1', 'h2', '[role="heading"]',
+                'div[class*="Card"]', 'div[class*="Content"]'
+            ];
+            for (const sel of selectors) {
+                const el = document.querySelector(sel);
+                if (el && el.textContent.length > 50) {
+                    return el.textContent.trim().substring(0, 3000);
+                }
+            }
+            return document.body.innerText.substring(0, 3000);
+        }''')
 
-    // Set auth cookies
-    await ctx.addCookies([
-        {{ name: '__Secure-better-auth.session_token', value: '{token}', domain: '.connectively.us', path: '/' }}
-    ]);
+        publication = page.evaluate('''() => {
+            const els = document.querySelectorAll('[class*="pub" i], [class*="source" i], [class*="outlet" i]');
+            for (const el of els) {
+                const t = el.textContent.trim();
+                if (t.length > 1 && t.length < 100) return t;
+            }
+            return window.location.hostname;
+        }''')
 
-    await page.goto('{question_url}', {{ waitUntil: 'domcontentloaded', timeout: 15000 }});
-    await page.waitForTimeout(5000);
+        deadline = page.evaluate('''() => {
+            const els = document.querySelectorAll('[class*="deadline" i], [class*="date" i], [class*="time" i]');
+            for (const el of els) {
+                const t = el.textContent.trim();
+                if (t.length > 1 && t.length < 50) return t;
+            }
+            return '';
+        }''')
 
-    // Extract question text - it's usually in a prominent div
-    const questionText = await page.evaluate(() => {{
-        // Try common selectors for question content
-        const selectors = [
-            '[class*="question"]', '[class*="Query"]', '[class*="query"]',
-            'h1', 'h2', '[role="heading"]',
-            'div[class*="Card"]', 'div[class*="Content"]'
-        ];
-        for (const sel of selectors) {{
-            const el = document.querySelector(sel);
-            if (el && el.textContent.length > 50) {{
-                return el.textContent.trim().substring(0, 3000);
-            }}
-        }}
-        // Fallback: body text
-        return document.body.innerText.substring(0, 3000);
-    }});
-
-    // Extract publication name
-    const publication = await page.evaluate(() => {{
-        const els = document.querySelectorAll('[class*="pub" i], [class*="source" i], [class*="outlet" i]');
-        for (const el of els) {{
-            const t = el.textContent.trim();
-            if (t.length > 1 && t.length < 100) return t;
-        }}
-        return window.location.hostname;
-    }});
-
-    // Extract deadline
-    const deadline = await page.evaluate(() => {{
-        const els = document.querySelectorAll('[class*="deadline" i], [class*="date" i], [class*="time" i]');
-        for (const el of els) {{
-            const t = el.textContent.trim();
-            if (t.length > 1 && t.length < 50) return t;
-        }}
-        return '';
-    }});
-
-    // Check for textarea
-    const hasForm = await page.locator('textarea, [role="textbox"]').count() > 0;
-
-    console.log(JSON.stringify({{ questionText, publication, deadline, hasForm, url: page.url() }}));
-    await browser.close();
-}})().catch(e => {{ console.error('ERROR:' + e.message); process.exit(1); }});
-"""
-    result = run_playwright_script(script)
-    if "error" in result:
-        return result
-    return result
+        has_form = page.locator('textarea, [role="textbox"]').count() > 0
+        browser.close()
+        return {
+            'questionText': question_text,
+            'publication': publication,
+            'deadline': deadline,
+            'hasForm': has_form,
+            'url': page.url
+        }
+    return run_playwright(_run)
 
 
 def playwright_submit_answer(question_url: str, answer_text: str, token: str) -> dict:
-    """Submit an answer to a Connectively question."""
-    script = fr"""
-const {{ chromium }} = require('/tmp/node_modules/playwright');
-(async () => {{
-    const browser = await chromium.launch({{ headless: true, args: ['--no-sandbox'] }});
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
+    def _run(p):
+        browser = p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
+        ctx = browser.new_context()
+        ctx.add_cookies([{
+            'name': '__Secure-better-auth.session_token',
+            'value': token,
+            'domain': '.connectively.us',
+            'path': '/'
+        }])
+        page = ctx.new_page()
+        page.goto(question_url, wait_until='domcontentloaded', timeout=15000)
+        page.wait_for_timeout(5000)
 
-    // Set auth cookies
-    await ctx.addCookies([
-        {{ name: '__Secure-better-auth.session_token', value: '{token}', domain: '.connectively.us', path: '/' }}
-    ]);
+        textarea = page.locator('textarea, [role="textbox"]').first
+        if textarea.count() == 0:
+            browser.close()
+            return {'success': False, 'error': 'No textarea found'}
 
-    await page.goto('{question_url}', {{ waitUntil: 'domcontentloaded', timeout: 15000 }});
-    await page.waitForTimeout(5000);
+        safe_answer = answer_text.replace('`', '\\`')
+        textarea.fill(safe_answer)
+        log('Filled textarea')
 
-    // Fill the answer textarea
-    const textarea = page.locator('textarea, [role="textbox"]').first();
-    const count = await textarea.count();
-    if (count === 0) {{
-        console.log(JSON.stringify({{ success: false, error: 'No textarea found' }}));
-        await browser.close();
-        return;
-    }}
+        page.locator('button[type="submit"], button:has-text("Submit")').last.click()
+        log('Clicked submit')
+        page.wait_for_timeout(5000)
 
-    safe_answer = answer_text.replace('`', '\\`')
-    await textarea.fill(`{safe_answer}`);
-    console.log('Filled textarea');
-
-    // Find and click Submit
-    const submitBtn = page.locator('button[type="submit"], button:has-text("Submit")').last();
-    await submitBtn.click();
-    console.log('Clicked submit');
-    await page.waitForTimeout(5000);
-
-    // Check result
-    const resultText = await page.evaluate(() => document.body.innerText.substring(0, 500));
-    const url = page.url();
-
-    console.log(JSON.stringify({{ success: true, url, resultText }}));
-    await browser.close();
-}})().catch(e => {{ console.error('ERROR:' + e.message); process.exit(1); }});
-"""
-    result = run_playwright_script(script)
-    if "error" in result:
-        return result
-    return result
+        result_text = page.evaluate('() => document.body.innerText.substring(0, 500)')
+        final_url = page.url
+        browser.close()
+        return {'success': True, 'url': final_url, 'resultText': result_text}
+    return run_playwright(_run)
 
 
-# ============================================================================
-# MAIN SCRAPE + PROCESS
+
 # ============================================================================
 
 def main():
