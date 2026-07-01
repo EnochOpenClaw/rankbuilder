@@ -43,7 +43,8 @@ def _ollama_humanize(text: str, style: str = "formal") -> str:
         "system": system,
         "prompt": text,
         "stream": False,
-        "options": {"temperature": 0.6, "num_predict": 1200},
+        "think": False,
+        "options": {"temperature": 0.6, "num_predict": 1500},
     }
     data = _json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -55,7 +56,11 @@ def _ollama_humanize(text: str, style: str = "formal") -> str:
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             result = _json.loads(resp.read().decode())
-            return result.get("response", "").strip()
+            # kimi-k2.6:cloud uses thinking mode — actual response may be in 'thinking' field
+            response = result.get("response", "").strip()
+            if not response and result.get("thinking"):
+                response = result["thinking"].strip()
+            return response or text
     except Exception:
         return text  # degrade gracefully
 

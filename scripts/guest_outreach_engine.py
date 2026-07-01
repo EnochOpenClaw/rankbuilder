@@ -68,7 +68,53 @@ def _load_json(path: Path) -> dict:
 
 _creds = _load_json(CREDENTIALS_FILE)
 
-# Firecrawl — may be in credentials.json or env
+# Humanize text via Ollama (no external API needed)
+import sys as _sys_hg
+_sys_hg.path.insert(0, str(BASE_DIR / "lib"))
+try:
+    from lib.haro_responder import humanize_draft
+except Exception:
+    humanize_draft = None  # degrade gracefully if Ollama unavailable
+
+
+def _humanize_html(html_body: str, style: str = "formal") -> tuple[str, dict]:
+    """
+    Strip HTML tags from html_body, run plain text through humanize_draft(),
+    then re-wrap in the same basic HTML structure.
+
+    Returns (humanized_html, humanization_dict).
+    """
+    if humanize_draft is None:
+        return html_body, {}
+
+    # Strip HTML tags to get plain text
+    text = re.sub(r'<[^>]+>', ' ', html_body)
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    try:
+        result = humanize_draft(text, style=style)
+        humanized = result["humanized_text"]
+        changes = result
+    except Exception as ex:
+        logging.warning("Humanize failed: %s", ex)
+        return html_body, {}
+
+    # Re-wrap humanized text in the same basic HTML structure
+    lines = humanized.split('\n')
+    wrapped = ''.join(
+        f'<p style="margin: 0 0 14px;">{line}</p>' if line.strip() else '<p style="margin: 0 0 6px;">&nbsp;</p>'
+        for line in lines
+    )
+    humanized_html = (
+        '<!DOCTYPE html>\n<html>\n<head><meta charset="UTF-8"></head>\n'
+        '<body style="font-family: Arial, sans-serif; max-width: 680px; margin: 0 auto; padding: 24px; color: #222;">\n'
+        + wrapped +
+        '\n</body>\n</html>'
+    )
+
+    return humanized_html, changes
+
+
 FIRECRAWL_KEY = os.environ.get(
     "FIRECRAWL_API_KEY",
     _creds.get("firecrawl", {}).get("api_key", "")
@@ -724,6 +770,12 @@ def send_daily_batch(limit=10):
         angle = pick_angle(prospect.get("topics", []))
         subject, html_body = generate_pitch_text(prospect, angle, followup_n=0)
 
+        # Humanize the pitch body (strip HTML → humanize → re-wrap)
+        html_body, hum = _humanize_html(html_body, style="formal")
+        if hum:
+            log.info("  Humanized: AI score %.1f→%.1f (%s)",
+                     hum["original_score"], hum["humanized_score"], hum["changes_summary"])
+
         # Resolve editor name from email or domain
         name_part = email.split("@")[0]
         editor_name = name_part.replace(".", " ").replace("_", " ").title()
@@ -875,6 +927,12 @@ def run_followup_sequence():
 
         followup_n = next_n + 1
         subject, html_body = generate_pitch_text(prospect, angle, followup_n=followup_n)
+
+        # Humanize follow-up body (strip HTML → humanize → re-wrap)
+        html_body, hum = _humanize_html(html_body, style="formal")
+        if hum:
+            log.info("  Humanized: AI score %.1f→%.1f (%s)",
+                     hum["original_score"], hum["humanized_score"], hum["changes_summary"])
 
         editor_name = email.split("@")[0].replace(".", " ").title()
         if editor_name.lower() in ("info", "admin", "hello", "contact", "guests"):
