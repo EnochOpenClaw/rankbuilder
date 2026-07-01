@@ -15,7 +15,7 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'lib'))
 from pitch_templates import select_angle, get_angle_name_and_guidance, build_pitch_response, BRAND_BIO, BRAND_VOICE
-from haro_responder import read_email, extract_forwarded_haro_content, is_relevant_query, score_relevance
+from haro_responder import read_email, extract_forwarded_haro_content, is_relevant_query, score_relevance, humanize_draft
 from blocklist import is_blocked, is_buyer, block_email, add_buyer
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME, NOTIFY_EMAIL
 
@@ -388,6 +388,12 @@ def main():
         drafted = build_pitch_response(query_data, drafted)
         word_count = len(drafted.split())
         log(f"  [{email_id}] Draft complete: {word_count} words")
+
+        # Humanize the drafted response
+        log(f"  [{email_id}] Humanizing draft to remove AI patterns...")
+        humanization = humanize_draft(drafted, style="formal")
+        drafted = humanization["humanized_text"]
+        log(f"  [{email_id}] Humanization: {humanization['changes_summary']}")
 
         # Save drafted response for YES approval
         mark_processed(email_id, "AWAITING_APPROVAL", drafted)

@@ -11,16 +11,107 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-# Humanizer — deterministic post-processing to reduce AI detection
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from humanizer import humanize, detect_ai, humanize_with_score
+# Humanize via Ollama — no external API needed
+import urllib.request, urllib.error, json as _json
+from pathlib import Path
+
+# Resolve humanize_cli path: container (/app/...) or local (~/.openclaw/...)
+_candidates = [
+    Path("/app/skills/humanize-text/scripts"),
+    Path.home() / ".openclaw" / "workspace" / "skills" / "humanize-text" / "scripts",
+]
+_hc_path = next((p for p in _candidates if p.exists()), _candidates[0])
+import sys as _sys_hc
+_sys_hc.path.append(str(_hc_path))
+import humanize_cli as _hc
+
+
+def _ollama_humanize(text: str, style: str = "formal") -> str:
+    """Call local Ollama with the humanize-text skill system prompt."""
+    import urllib.request, urllib.error, json as _json
+
+    system = (
+        "You are a text humanization editor. Rewrite the following text so it sounds "
+        "like a real person wrote it — not an AI. Remove all signs of AI writing: "
+        "significance inflation, filler phrases, chatbot artifacts, hedging, generic "
+        "conclusions. Use natural sentence length variation (some short, some long). "
+        "Match this tone: " + style + ". Preserve all facts and core message. "
+        "Output only the humanized text, no preamble or notes."
+    )
+    payload = {
+        "model": "kimi-k2.6:cloud",
+        "system": system,
+        "prompt": text,
+        "stream": False,
+        "options": {"temperature": 0.6, "num_predict": 1200},
+    }
+    data = _json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        "http://localhost:11434/api/generate",
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result = _json.loads(resp.read().decode())
+            return result.get("response", "").strip()
+    except Exception:
+        return text  # degrade gracefully
+
+
+def humanize_draft(draft_text: str, level: str = "formal", style: str = "formal") -> dict:
+    """
+    Apply humanization to a drafted HARO response using Ollama.
+
+    Args:
+        draft_text: The LLM-drafted response text.
+        level: Ignored (kept for API compat) — always uses Ollama LLM rewrite.
+        style: 'formal' (HARO/pitch), 'casual' (LinkedIn), 'technical'.
+
+    Returns:
+        dict with original_score, humanized_score, humanized_text, changes_summary.
+    """
+    # Score original
+    orig_result = _hc.score_text(draft_text)
+
+    # Mechanical pre-fix (vocab/filler fixes — no LLM needed)
+    fixed_text, mechanical_changes = _hc.apply_mechanical_fixes(draft_text)
+
+    # LLM rewrite via Ollama
+    humanized = _ollama_humanize(fixed_text, style=style)
+
+    # Score result
+    hum_result = _hc.score_text(humanized)
+
+    # Build summary
+    score_diff = hum_result["score"] - orig_result["score"]
+    direction = "\u2191" if score_diff > 0 else ("\u2193" if score_diff < 0 else "\u2192")
+    summary = (
+        f"AI score: {orig_result['score']}\u2192{hum_result['score']} {direction}{abs(score_diff):.0f}pts | "
+        f"Mechanical fixes: {len(mechanical_changes)}"
+    )
+
+    return {
+        "original_score": orig_result["score"],
+        "humanized_score": hum_result["score"],
+        "original_verdict": "AI",
+        "humanized_verdict": "HUMAN" if hum_result["score"] < orig_result["score"] else "MIXED",
+        "humanized_text": humanized,
+        "changes_summary": summary,
+        "mechanical_changes": mechanical_changes,
+    }
 
 # ============================================================================
 # CONFIG
 # ============================================================================
 
+# Add rankbuilder root to path so 'lib.pitch_templates' resolves
+import sys as _sys_lib
+_sys_lib.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 # Brand context — imported from pitch_templates to avoid duplication
-from pitch_templates import BRAND_BIO, BRAND_VOICE
+from lib.pitch_templates import BRAND_BIO, BRAND_VOICE
 
 TARGET_KEYWORDS = [
     # === CORE PRODUCTS ===
@@ -324,55 +415,6 @@ Write ONLY the response. No preamble. No explanation."""
 # HUMANIZER INTEGRATION
 # ============================================================================
 
-def humanize_draft(draft_text: str, level: str = 'aggressive', style: str = 'casual') -> dict:
-    """
-    Apply deterministic humanization to a drafted HARO response.
-    
-    Args:
-        draft_text: The LLM-drafted response text.
-        level: 'light', 'medium', 'aggressive', or 'ninja'.
-        style: 'academic', 'casual', 'professional', 'creative', 'technical'.
-    
-    Returns:
-        dict with:
-            - original_score: AI detection score before humanization (0-100, higher=more human)
-            - humanized_score: AI detection score after humanization
-            - original_verdict: verdict before humanization
-            - humanized_verdict: verdict after humanization
-            - humanized_text: the humanized response
-            - changes_summary: brief summary of what was changed
-    """
-    # Run detector on original
-    original_result = detect_ai(draft_text)
-    
-    # Humanize
-    humanized, humanized_result = humanize_with_score(draft_text, level=level, style=style)
-    
-    # Build changes summary
-    original_words = set(draft_text.lower().split())
-    humanized_words = set(humanized.lower().split())
-    added = humanized_words - original_words
-    removed = original_words - humanized_words
-    
-    score_diff = humanized_result['score'] - original_result['score']
-    direction = '↑' if score_diff > 0 else ('↓' if score_diff < 0 else '→')
-    
-    changes_summary = (
-        f"Human score: {original_result['score']}→{humanized_result['score']} {direction}{abs(score_diff)}pts | "
-        f"Verdict: {original_result['overall_verdict']}→{humanized_result['overall_verdict']} | "
-        f"Words changed: {len(removed)} removed, {len(added)} added"
-    )
-    
-    return {
-        'original_score': original_result['score'],
-        'humanized_score': humanized_result['score'],
-        'original_verdict': original_result['overall_verdict'],
-        'humanized_verdict': humanized_result['overall_verdict'],
-        'humanized_text': humanized,
-        'changes_summary': changes_summary,
-        'original_analysis': original_result['analysis'],
-        'humanized_analysis': humanized_result['analysis'],
-    }
 
 
 def format_approval_email(query_data: dict, draft: str, humanization: dict) -> str:
