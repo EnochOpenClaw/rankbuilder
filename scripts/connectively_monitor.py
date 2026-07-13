@@ -282,7 +282,10 @@ def playwright_login_and_scrape_questions() -> dict:
         email_field.fill(CONNECTIVELY_EMAIL)
         password_field.fill(CONNECTIVELY_PASSWORD)
         page.locator('button[type="submit"]').click()
-        page.wait_for_function(lambda: '/login' not in page.url, timeout=30000)
+        try:
+            page.wait_for_url("**/expert-questions**", timeout=30000)
+        except Exception:
+            pass
         page.wait_for_timeout(3000)
         log(f"After login URL: {page.evaluate('() => window.location.href')}")
         page.goto('https://www.connectively.us/expert-questions', wait_until='domcontentloaded', timeout=15000)
