@@ -21,7 +21,7 @@ if ENV_FILE.exists():
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 
 BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "support@ctdesignz.co.za")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "ai@fortressblinds.co.za")
 SENDER_NAME = "Craig Pauls"
 NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL", "craigp@ct-designs.co.za")
 
