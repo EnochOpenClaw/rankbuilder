@@ -4,12 +4,17 @@ Lightweight prospect count checker + optional auto-discovery trigger.
 Runs every 3 days. If new_prospects < threshold, fires a discovery agent.
 """
 import json
-import sys
+import os
 import subprocess
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 
-WORKSPACE   = Path.home() / ".openclaw" / "workspace" / "rankbuilder"
+# Container path vs local path
+CONTAINER_PATH = Path("/app")
+LOCAL_PATH    = Path.home() / ".openclaw" / "workspace" / "rankbuilder"
+WORKSPACE      = Path("/app") if Path("/app").exists() else LOCAL_PATH
+
 PROSPECT_DB = WORKSPACE / "prospects" / "prospect_db.json"
 THRESHOLD   = 12
 DRY_RUN     = "--dry-run" in sys.argv
@@ -23,8 +28,6 @@ def count_new():
 
 def trigger_discovery():
     print(f"[{datetime.now().isoformat()}] 🔍 Prospect count low — triggering discovery")
-    # Spawn discovery via sessions_spawn inline script
-    import subprocess
     result = subprocess.run(
         ["python3", "scripts/web_search_discovery.py", "add-sa"],
         cwd=WORKSPACE,
@@ -38,7 +41,7 @@ def trigger_discovery():
 def main():
     count = count_new()
     print(f"[{datetime.now().isoformat()}] 📊 Prospect check: {count} new prospects (threshold={THRESHOLD})")
-    
+
     if DRY_RUN:
         print("[dry-run] Skipping actual send")
         return

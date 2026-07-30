@@ -32,6 +32,8 @@ COPY . .
 # Health check server
 COPY run_mode.sh /app/run_mode.sh
 RUN chmod +x /app/run_mode.sh
+# Symlink python3 -> python (crontabs reference 'python' not 'python3')
+RUN ln -sf /usr/local/bin/python3 /usr/local/bin/python
 
 # Volume mount point for persistent data
 VOLUME ["/app/state"]

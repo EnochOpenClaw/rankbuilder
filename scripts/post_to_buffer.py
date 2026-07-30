@@ -14,7 +14,7 @@ from pathlib import Path
 from datetime import datetime
 
 # Buffer API config
-BUFFER_API_KEY = ":TpMYRYR5hgFYl1fWAyuqkojMEuHyDLfwha98UTIText"
+BUFFER_API_KEY = "AXIGAfnblQ7bv-0dtXwtXzwNGoj9aRNctYaM6EXV1A0"
 BUFFER_API_BASE = "https://api.bufferapp.com/1/"
 
 def buffer_get(endpoint):
