@@ -13,6 +13,7 @@ from sqlalchemy import (
     Text,
     Integer,
     DateTime,
+    Boolean,
     ForeignKey,
     Enum as SAEnum,
     create_engine,
@@ -29,6 +30,10 @@ class LeadSource(str, enum.Enum):
     HARO = "HARO"
     CONNECTIVELY = "CONNECTIVELY"
     GUEST_OUTREACH = "GUEST_OUTREACH"
+    WEBSITE = "WEBSITE"
+    FACEBOOK = "FACEBOOK"
+    DIRECT_MAIL = "DIRECT_MAIL"
+    CALL_IN = "CALL_IN"
     WEB_SEARCH = "WEB_SEARCH"
     MANUAL = "MANUAL"
 
@@ -55,6 +60,12 @@ class CampaignStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"
 
 
+class UserRole(str, enum.Enum):
+    SYSTEM_ADMIN = "SYSTEM_ADMIN"
+    CLIENT_ADMIN = "CLIENT_ADMIN"
+    VIEWER = "VIEWER"
+
+
 class NotificationChannel(str, enum.Enum):
     EMAIL = "EMAIL"
     SMS = "SMS"
@@ -72,6 +83,7 @@ class Client(Base):
     __tablename__ = "clients"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    api_key = Column(String(64), unique=True, nullable=True, index=True)  # public token for lead capture
     company_name = Column(String(255), nullable=False)
     contact_email = Column(String(255), nullable=False)
     notification_channel = Column(
@@ -110,6 +122,15 @@ class Lead(Base):
     # Source tracking
     source = Column(SAEnum(LeadSource), nullable=False)
     source_query = Column(String(500), nullable=True)  # e.g. "aluminum shutters sa"
+    source_detail = Column(String(255), nullable=True)  # e.g. "Homepage Quote Form", "Facebook Lead Ad"
+
+    # Marketing attribution
+    utm_source = Column(String(100), nullable=True)
+    utm_medium = Column(String(100), nullable=True)
+    utm_campaign = Column(String(100), nullable=True)
+
+    # Location
+    location = Column(String(255), nullable=True)  # suburb / city / province
 
     # Classification
     status = Column(SAEnum(LeadStatus), default=LeadStatus.NEW)
@@ -159,6 +180,45 @@ class LeadHistory(Base):
     changed_by = Column(String(255), nullable=True)  # "system" or user email
 
     lead = relationship("Lead", back_populates="history")
+
+
+class NotificationSetting(Base):
+    """Per-client notification delivery settings (email/SMS/webhook)."""
+
+    __tablename__ = "notification_settings"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    client_id = Column(String(36), ForeignKey("clients.id"), nullable=False)
+    notification_type = Column(String(20), nullable=False)  # EMAIL | SMS | WEBHOOK
+    target = Column(String(255), nullable=True)              # email address, phone, or webhook URL
+    name = Column(String(100), nullable=True)                 # friendly recipient name
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    client = relationship("Client")
+
+
+class User(Base):
+    """CRM user — email + password auth, role-based access."""
+
+    __tablename__ = "users"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=False)
+    client_id = Column(String(36), ForeignKey("clients.id"), nullable=True)  # NULL for SYSTEM_ADMIN
+    role = Column(SAEnum(UserRole), nullable=False, default=UserRole.VIEWER)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = Column(Integer, default=1)  # SQLite bool (0/1)
+
+    client = relationship("Client", back_populates="users")
+
+
+Client.users = relationship(
+    "User", back_populates="client", cascade="all, delete-orphan"
+)
 
 
 # ── Database setup ─────────────────────────────────────────────────────────────

@@ -8,6 +8,8 @@ DELETE /api/leads/{id}     — Delete lead
 POST   /api/leads/{id}/history — Add a note/transition to history
 """
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional
 
@@ -20,8 +22,51 @@ from backend.schemas import (
     LeadUpdate,
     LeadResponse,
     LeadListResponse,
+    LeadHistoryItem,
+    LeadHistoryResponse,
 )
+from backend.notifications import notify_new_lead, notify_lead_sent
 
+# Thread pool for async notification dispatch
+_executor = ThreadPoolExecutor(max_workers=4)
+
+
+def _notify_async(trigger: str, lead_id: str, db: Session):
+    """Fire notification in background thread with its own DB session."""
+    try:
+        from backend.database import SessionLocal
+        session = SessionLocal()
+        try:
+            lead = session.query(Lead).filter(Lead.id == lead_id).first()
+            if not lead:
+                return
+            lead_dict = {
+                "id": lead.id,
+                "client_id": lead.client_id,
+                "source": lead.source.value if hasattr(lead.source, "value") else str(lead.source),
+                "source_query": lead.source_query,
+                "status": lead.status.value if hasattr(lead.status, "value") else str(lead.status),
+                "lead_type": lead.lead_type.value if hasattr(lead.lead_type, "value") else str(lead.lead_type) if lead.lead_type else None,
+                "quality_score": lead.quality_score,
+                "contact_name": lead.contact_name,
+                "contact_email": lead.contact_email,
+                "contact_phone": lead.contact_phone,
+                "company_name": lead.company_name,
+                "company_website": lead.company_website,
+                "message_excerpt": lead.message_excerpt,
+                "pitch_sent": lead.pitch_sent,
+                "sent_to_client_at": str(lead.sent_to_client_at) if lead.sent_to_client_at else None,
+                "notes": lead.notes,
+            }
+            if trigger == "new_lead":
+                notify_new_lead(lead_dict, db=session)
+            elif trigger == "lead_sent":
+                notify_lead_sent(lead_dict, db=session)
+        finally:
+            session.close()
+    except Exception:
+        import logging
+        logging.getLogger("crm.leads").exception(f"Notification dispatch failed for {lead_id}")
 router = APIRouter()
 
 
@@ -32,6 +77,11 @@ def _lead_to_response(lead: Lead) -> LeadResponse:
         campaign_id=lead.campaign_id,
         source=lead.source.value if isinstance(lead.source, LeadSource) else lead.source,
         source_query=lead.source_query,
+        source_detail=lead.source_detail,
+        utm_source=lead.utm_source,
+        utm_medium=lead.utm_medium,
+        utm_campaign=lead.utm_campaign,
+        location=lead.location,
         status=lead.status.value if isinstance(lead.status, LeadStatus) else lead.status,
         lead_type=lead.lead_type.value if isinstance(lead.lead_type, LeadType) else lead.lead_type,
         quality_score=lead.quality_score,
@@ -80,6 +130,11 @@ def create_lead(payload: LeadCreate, db: Session = Depends(get_db)):
         campaign_id=payload.campaign_id,
         source=source_val,
         source_query=payload.source_query,
+        source_detail=payload.source_detail,
+        utm_source=payload.utm_source,
+        utm_medium=payload.utm_medium,
+        utm_campaign=payload.utm_campaign,
+        location=payload.location,
         contact_name=payload.contact_name,
         contact_email=payload.contact_email,
         contact_phone=payload.contact_phone,
@@ -106,6 +161,9 @@ def create_lead(payload: LeadCreate, db: Session = Depends(get_db)):
     )
     db.add(history)
     db.commit()
+
+    # ── Email notification: new lead alert ──────────────────────────────────
+    _executor.submit(_notify_async, "new_lead", lead.id, db)
 
     return _lead_to_response(lead)
 
@@ -167,6 +225,34 @@ def get_lead(lead_id: str, db: Session = Depends(get_db)):
     return _lead_to_response(lead)
 
 
+@router.get("/{lead_id}/history", response_model=LeadHistoryResponse)
+def get_lead_history(lead_id: str, db: Session = Depends(get_db)):
+    """Get the full audit/history trail for a lead."""
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    rows = (
+        db.query(LeadHistory)
+        .filter(LeadHistory.lead_id == lead_id)
+        .order_by(LeadHistory.changed_at.asc())
+        .all()
+    )
+    return LeadHistoryResponse(
+        history=[
+            LeadHistoryItem(
+                id=r.id,
+                lead_id=r.lead_id,
+                field_changed=r.field_changed,
+                old_value=r.old_value,
+                new_value=r.new_value,
+                changed_by=r.changed_by,
+                changed_at=r.changed_at,
+            )
+            for r in rows
+        ]
+    )
+
+
 @router.patch("/{lead_id}", response_model=LeadResponse)
 def update_lead(lead_id: str, payload: LeadUpdate, db: Session = Depends(get_db)):
     """Update lead fields. Records all changes in lead history."""
@@ -186,6 +272,8 @@ def update_lead(lead_id: str, payload: LeadUpdate, db: Session = Depends(get_db)
         # Track sent_to_client timestamp
         if field == "status" and value == "SENT" and not lead.sent_to_client_at:
             lead.sent_to_client_at = datetime.utcnow()
+            # Fire notification in background — pitch was sent to journalist/editor
+            _executor.submit(_notify_async, "lead_sent", lead.id, db)
 
         # Track conversion
         if field == "conversion_status" and value == "CONVERTED":
