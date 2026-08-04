@@ -60,6 +60,30 @@ PRIMARY_ACCOUNT = "info"       # info@fortressblinds.co.za (subscriber inbox)
 SECONDARY_ACCOUNT = "agentdev" # agentdevelopmentops@gmail.com (forwards)
 DEFAULT_ACCOUNTS = ["info", "agentdev"]
 
+# IMAP credentials for direct Gmail access (fallback when himalaya is not
+# installed, e.g. on the VPS). Keyed by account name.
+# app passwords:
+#   info      — zpwzuioojiatdxsu
+#   agentdev  — uefvxqfsmpquasky
+IMAP_ACCOUNTS = {
+    "info": {
+        "host": "imap.gmail.com", "port": 993,
+        "login": "info@fortressblinds.co.za", "password": "zpwzuioojiatdxsu",
+    },
+    "agentdev": {
+        "host": "imap.gmail.com", "port": 993,
+        "login": "agentdevelopmentops@gmail.com", "password": "uefvxqfsmpquasky",
+    },
+    "enoch": {
+        "host": "imap.gmail.com", "port": 993,
+        "login": "enoch@fortressblinds.co.za", "password": "dmdl epoy afdf zjmo".replace(" ", ""),
+    },
+}
+
+# Prefer himalaya if available, else use IMAP fallback
+import shutil
+USE_HIMALAYA = shutil.which("himalaya") is not None
+
 STATE_FILE = Path(__file__).parent / "state" / "processed_inbound.jsonl"
 STATE_FILE.parent.mkdir(exist_ok=True)
 LOG_FILE = Path(__file__).parent / "logs" / "inbound_router.log"
@@ -130,24 +154,81 @@ def _mark_processed(msg_id: str, msg_type: str, route: str, detail: str = ""):
 
 
 def read_email_from_account(email_id: str, account: str) -> str:
-    """Read a full email body from a specific himalaya account."""
+    """Read a full email body from a specific account (himalaya or IMAP)."""
+    if USE_HIMALAYA:
+        try:
+            result = subprocess.run(
+                ["himalaya", "message", "read", "-a", account, email_id],
+                capture_output=True, text=True, timeout=30,
+            )
+            return result.stdout if result.returncode == 0 else ""
+        except Exception as e:
+            log(f"  ERROR reading email via himalaya {email_id}: {e}")
+            return ""
+    # IMAP fallback
     try:
-        result = subprocess.run(
-            ["himalaya", "message", "read", "-a", account, email_id],
-            capture_output=True, text=True, timeout=30,
-        )
-        return result.stdout if result.returncode == 0 else ""
+        import imaplib
+        import email as email_lib
+        from email.header import decode_header
+        cfg = IMAP_ACCOUNTS.get(account)
+        if not cfg:
+            return ""
+        mail = imaplib.IMAP4_SSL(cfg["host"], cfg["port"])
+        mail.login(cfg["login"], cfg["password"])
+        mail.select("INBOX")
+        # Gmail UID is the numeric part
+        uid = email_id
+        status, data = mail.fetch(uid, "(RFC822)")
+        mail.logout()
+        if status != "OK" or not data or not data[0]:
+            return ""
+        msg = email_lib.message_from_bytes(data[0][1])
+        # Build a plain-text representation
+        parts = []
+        if msg["From"]:
+            parts.append(f"From: {msg['From']}")
+        if msg["Subject"]:
+            try:
+                decoded = decode_header(msg["Subject"])
+                subject = "".join(
+                    part.decode(ch or "utf-8", errors="replace") if isinstance(part, bytes) else part
+                    for part, ch in decoded
+                )
+            except Exception:
+                subject = str(msg["Subject"])
+            parts.append(f"Subject: {subject}")
+        if msg.is_multipart():
+            for part in msg.walk():
+                if part.get_content_type() == "text/plain" and not part.get("Content-Disposition") == "attachment":
+                    try:
+                        payload = part.get_payload(decode=True)
+                        if payload:
+                            parts.append(payload.decode("utf-8", errors="replace"))
+                    except Exception:
+                        pass
+        else:
+            payload = msg.get_payload(decode=True)
+            if payload:
+                parts.append(payload.decode("utf-8", errors="replace"))
+        return "\n".join(parts)
     except Exception as e:
-        log(f"  ERROR reading email {email_id} from {account}: {e}")
+        log(f"  ERROR reading email via IMAP {email_id}: {e}")
         return ""
 
 
 # ============================================================================
-# INBOX READING (himalaya)
+# INBOX READING (himalaya or IMAP)
 # ============================================================================
 
 def get_inbox_envelopes(account: str, limit: int = 20) -> list:
-    """Get recent envelope metadata from a himalaya account."""
+    """Get recent envelope metadata from an account (himalaya or IMAP)."""
+    if USE_HIMALAYA:
+        return _get_envelopes_himalaya(account, limit)
+    return _get_envelopes_imap(account, limit)
+
+
+def _get_envelopes_himalaya(account: str, limit: int = 20) -> list:
+    """Get recent envelope metadata via himalaya CLI."""
     try:
         result = subprocess.run(
             ["himalaya", "envelope", "list", "-a", account, "-s", str(limit)],
@@ -177,9 +258,56 @@ def get_inbox_envelopes(account: str, limit: int = 20) -> list:
         return []
 
 
-# ============================================================================
-# CONTENT EXTRACTION
-# ============================================================================
+def _get_envelopes_imap(account: str, limit: int = 20) -> list:
+    """Get recent envelope metadata via IMAP (stdlib imaplib) — VPS fallback."""
+    try:
+        import imaplib
+        import email as email_lib
+        from email.header import decode_header
+        cfg = IMAP_ACCOUNTS.get(account)
+        if not cfg:
+            log(f"  No IMAP config for account {account}")
+            return []
+        mail = imaplib.IMAP4_SSL(cfg["host"], cfg["port"])
+        mail.login(cfg["login"], cfg["password"])
+        mail.select("INBOX")
+        status, data = mail.search(None, "ALL")
+        envelopes = []
+        if status == "OK":
+            ids = data[0].split()
+            # Take the most recent `limit`
+            recent = ids[-limit:]
+            for uid in recent:
+                uid_str = uid.decode()
+                fstatus, fdata = mail.fetch(uid, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+                if fstatus != "OK" or not fdata or not fdata[0]:
+                    continue
+                raw = fdata[0][1].decode("utf-8", errors="replace")
+                msg = email_lib.message_from_string(raw)
+                def _decode(val):
+                    if not val:
+                        return ""
+                    try:
+                        parts = decode_header(val)
+                        return "".join(
+                            p.decode(c or "utf-8", errors="replace") if isinstance(p, bytes) else p
+                            for p, c in parts
+                        )
+                    except Exception:
+                        return str(val)
+                envelopes.append({
+                    "id": uid_str,
+                    "flags": "",
+                    "subject": _decode(msg["Subject"]),
+                    "from": _decode(msg["From"]),
+                    "date": _decode(msg["Date"]),
+                })
+        mail.logout()
+        return envelopes
+    except Exception as e:
+        log(f"  ERROR reading {account} inbox via IMAP: {e}")
+        return []
+
 
 def extract_connectively_content(body: str) -> Optional[dict]:
     """
