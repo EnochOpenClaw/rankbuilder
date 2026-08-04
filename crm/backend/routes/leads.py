@@ -171,6 +171,7 @@ def create_lead(payload: LeadCreate, db: Session = Depends(get_db)):
 @router.get("", response_model=LeadListResponse)
 def list_leads(
     client_id: Optional[str] = Query(None, description="Filter by client"),
+    campaign_id: Optional[str] = Query(None, description="Filter by campaign"),
     status: Optional[str] = Query(None, description="Filter by status"),
     lead_type: Optional[str] = Query(None, description="Filter by lead type: VALID/INVALID/FOLLOW_UP"),
     source: Optional[str] = Query(None, description="Filter by source"),
@@ -184,6 +185,8 @@ def list_leads(
 
     if client_id:
         q = q.filter(Lead.client_id == client_id)
+    if campaign_id:
+        q = q.filter(Lead.campaign_id == campaign_id)
     if status:
         try:
             status_enum = LeadStatus(status)

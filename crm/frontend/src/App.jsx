@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Layout, Typography, Card, Row, Col, Statistic, Table, Tag, Button,
   Drawer, Descriptions, Timeline, Select, Input, Space, message, Tabs,
@@ -7,7 +7,7 @@ import {
 import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
-  SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined
+  SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { api, auth } from './api'
@@ -262,7 +262,7 @@ const STATUS_OPTIONS = ['NEW','REVIEWED','QUALIFIED','SENT','CONTACTED','CONVERT
 const SOURCE_OPTIONS  = ['HARO','CONNECTIVELY','GUEST_OUTREACH','WEBSITE','FACEBOOK','DIRECT_MAIL','CALL_IN','WEB_SEARCH','MANUAL']
 const TYPE_OPTIONS    = ['VALID','INVALID','FOLLOW_UP']
 
-export function LeadsTab({ clientId, refreshKey }) {
+export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign }) {
   const [leads, setLeads] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -277,6 +277,7 @@ export function LeadsTab({ clientId, refreshKey }) {
     setLoading(true)
     try {
       const params = { client_id: clientId, limit: pageSize, offset: (page - 1) * pageSize }
+      if (campaignFilter) params.campaign_id = campaignFilter
       if (filters.status) params.status = filters.status
       if (filters.source) params.source = filters.source
       if (filters.lead_type) params.lead_type = filters.lead_type
@@ -291,7 +292,15 @@ export function LeadsTab({ clientId, refreshKey }) {
     }
   }
 
-  useEffect(() => { loadLeads() }, [page, pageSize, filters, search, refreshKey, clientId])
+  useEffect(() => { loadLeads() }, [page, pageSize, filters, search, refreshKey, clientId, campaignFilter])
+
+  // Reset to page 1 when filters change (but not on page change itself)
+  const prevFilters = useRef()
+  useEffect(() => {
+    const sig = JSON.stringify({ filters, search, campaignFilter, clientId })
+    if (prevFilters.current && prevFilters.current !== sig && page !== 1) setPage(1)
+    prevFilters.current = sig
+  }, [filters, search, campaignFilter, clientId])
 
   const columns = [
     {
@@ -370,6 +379,11 @@ export function LeadsTab({ clientId, refreshKey }) {
   return (
     <div>
       <Space wrap style={{ marginBottom: 12 }}>
+        {campaignFilter && (
+          <Tag closable color="geekblue" onClose={onClearCampaign}>
+            <FlagOutlined /> {campaignName || 'Campaign'} filter
+          </Tag>
+        )}
         <Input.Search
           placeholder="Search company / email / name"
           style={{ width: 240 }}
@@ -731,6 +745,201 @@ function LeadDrawer({ lead, open, onClose, onUpdate }) {
   )
 }
 
+// ── Campaigns Tab ───────────────────────────────────────────────────────────
+
+const CAMPAIGN_STATUS_OPTIONS = ['ACTIVE','PAUSED','COMPLETED']
+
+function CampaignStatusTag({ status }) {
+  const map = { ACTIVE: 'success', PAUSED: 'warning', COMPLETED: 'default' }
+  return <Tag color={map[status] || 'default'}>{status || '—'}</Tag>
+}
+
+function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads }) {
+  const [campaigns, setCampaigns] = useState([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [statusFilter, setStatusFilter] = useState(null)
+  const [channelFilter, setChannelFilter] = useState(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState(null)   // campaign being edited, or null for create
+  const [saving, setSaving] = useState(false)
+  const [form] = Form.useForm()
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const params = { client_id: clientId }
+      if (statusFilter) params.status = statusFilter
+      if (channelFilter) params.channel = channelFilter
+      const res = await api.listCampaigns(params)
+      setCampaigns(res.campaigns)
+      setTotal(res.total)
+    } catch (e) {
+      message.error('Failed to load campaigns: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [clientId, statusFilter, channelFilter, refreshKey])
+
+  const openCreate = () => {
+    setEditing(null)
+    form.resetFields()
+    form.setFieldsValue({ status: 'ACTIVE' })
+    setModalOpen(true)
+  }
+
+  const openEdit = (camp) => {
+    setEditing(camp)
+    form.setFieldsValue({
+      name: camp.name,
+      channel: camp.channel,
+      status: camp.status,
+    })
+    setModalOpen(true)
+  }
+
+  const handleSave = async (values) => {
+    setSaving(true)
+    try {
+      if (editing) {
+        await api.updateCampaign(editing.id, values)
+        message.success('Campaign updated')
+      } else {
+        await api.createCampaign({ ...values, client_id: clientId })
+        message.success('Campaign created')
+      }
+      setModalOpen(false)
+      load()
+    } catch (e) {
+      message.error('Save failed: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (camp) => {
+    Modal.confirm({
+      title: `Delete campaign "${camp.name}"?`,
+      content: 'Leads already linked to this campaign will be kept (unlinked). This cannot be undone.',
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await api.deleteCampaign(camp.id)
+          message.success('Campaign deleted')
+          load()
+        } catch (e) {
+          message.error('Delete failed: ' + e.message)
+        }
+      },
+    })
+  }
+
+  const columns = [
+    {
+      title: 'Campaign',
+      dataIndex: 'name',
+      render: (v, r) => (
+        <div>
+          <Text strong>{v}</Text>
+          <div style={{ fontSize: 11, color: '#888' }}>
+            Created {dayjs(r.created_at).format('MMM D, YYYY')}
+          </div>
+        </div>
+      ),
+    },
+    { title: 'Channel', dataIndex: 'channel', render: c => <Tag>{c?.replace('_', ' ')}</Tag>, width: 140 },
+    { title: 'Status', dataIndex: 'status', render: s => <CampaignStatusTag status={s} />, width: 120 },
+    { title: 'Leads', dataIndex: 'lead_count', align: 'right', width: 80 },
+    { title: 'Qualified', dataIndex: 'qualified_count', align: 'right', width: 90 },
+    { title: 'Converted', dataIndex: 'converted_count', align: 'right', width: 100 },
+    {
+      title: 'Qual Rate',
+      width: 100,
+      align: 'center',
+      render: (_, r) => r.lead_count > 0
+        ? <Text style={{ fontWeight: 600 }}>{Math.round(r.qualified_count / r.lead_count * 100)}%</Text>
+        : <Text type="secondary">—</Text>,
+    },
+    {
+      title: '',
+      width: 180,
+      render: (_, r) => (
+        <Space size="small">
+          <Button size="small" onClick={() => onViewCampaignLeads(r)}>View Leads</Button>
+          <Button size="small" onClick={() => openEdit(r)}>Edit</Button>
+          <Button size="small" danger onClick={() => handleDelete(r)}>
+            <DeleteOutlined />
+          </Button>
+        </Space>
+      ),
+    },
+  ]
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <Space wrap>
+          <Select allowClear placeholder="Status" style={{ width: 130 }} value={statusFilter}
+            onChange={v => setStatusFilter(v)}>
+            {CAMPAIGN_STATUS_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+          </Select>
+          <Select allowClear placeholder="Channel" style={{ width: 160 }} value={channelFilter}
+            onChange={v => setChannelFilter(v)}>
+            {SOURCE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s.replace('_',' ')}</Select.Option>)}
+          </Select>
+          {(statusFilter || channelFilter) && (
+            <Button size="small" onClick={() => { setStatusFilter(null); setChannelFilter(null) }}>
+              <FilterOutlined /> Clear
+            </Button>
+          )}
+          <Text type="secondary" style={{ fontSize: 12 }}>{total} campaign(s)</Text>
+        </Space>
+        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+          New Campaign
+        </Button>
+      </div>
+
+      <Table
+        dataSource={campaigns}
+        columns={columns}
+        rowKey="id"
+        loading={loading}
+        size="small"
+        pagination={{ pageSize: 10, showTotal: t => `${t} campaigns` }}
+      />
+
+      <Modal
+        title={editing ? `Edit Campaign: ${editing.name}` : 'New Campaign'}
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        onOk={() => form.submit()}
+        confirmLoading={saving}
+        okText={editing ? 'Save Changes' : 'Create Campaign'}
+        destroyOnClose
+      >
+        <Form form={form} layout="vertical" onFinish={handleSave} style={{ marginTop: 16 }}>
+          <Form.Item name="name" label="Campaign Name" rules={[{ required: true, message: 'Name is required' }]}>
+            <Input placeholder="e.g. HARO Q3 Security Push" />
+          </Form.Item>
+          <Form.Item name="channel" label="Channel" rules={[{ required: true, message: 'Channel is required' }]}>
+            <Select placeholder="Select channel">
+              {SOURCE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s.replace('_',' ')}</Select.Option>)}
+            </Select>
+          </Form.Item>
+          <Form.Item name="status" label="Status">
+            <Select>
+              {CAMPAIGN_STATUS_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  )
+}
+
 // ── User Management Tab ───────────────────────────────────────────────────────
 
 function UsersTab({ user: currentUser, clients }) {
@@ -863,6 +1072,8 @@ export default function App() {
   const [selectedClientId, setSelectedClientId] = useState(null)
   const [tab, setTab] = useState('dashboard')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [campaignFilter, setCampaignFilter] = useState(null)
+  const [campaignName, setCampaignName] = useState(null)
 
   // Listen for auth:logout events from api.js
   useEffect(() => {
@@ -950,7 +1161,30 @@ export default function App() {
 
             <TabPane tab={<span><DatabaseOutlined /> Leads</span>} key="leads">
               <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
-                <LeadsTab clientId={selectedClientId} refreshKey={refreshKey} />
+                <LeadsTab
+                  clientId={selectedClientId}
+                  refreshKey={refreshKey}
+                  campaignFilter={campaignFilter}
+                  campaignName={campaignName}
+                  onClearCampaign={() => {
+                    setCampaignFilter(null)
+                    setCampaignName(null)
+                  }}
+                />
+              </div>
+            </TabPane>
+
+            <TabPane tab={<span><FlagOutlined /> Campaigns</span>} key="campaigns">
+              <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                <CampaignsTab
+                  clientId={selectedClientId}
+                  refreshKey={refreshKey}
+                  onViewCampaignLeads={(camp) => {
+                    setCampaignFilter(camp.id)
+                    setCampaignName(camp.name)
+                    setTab('leads')
+                  }}
+                />
               </div>
             </TabPane>
 

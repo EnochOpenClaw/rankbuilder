@@ -49,7 +49,7 @@ def dashboard_summary(
     qualification_rate = round((qualified / total * 100), 1) if total > 0 else 0.0
     conversion_rate = round((converted / qualified * 100), 1) if qualified > 0 else 0.0
 
-    # Avg response time (NEW → SENT)
+    # Avg response time (NEW → SENT) with percentiles
     sent_leads = db.query(Lead).filter(
         Lead.client_id == client_id,
         Lead.sent_to_client_at.isnot(None),
@@ -57,13 +57,20 @@ def dashboard_summary(
     ).all()
 
     if sent_leads:
-        diffs = [
+        diffs = sorted([
             (l.sent_to_client_at - l.created_at).total_seconds() / 3600
             for l in sent_leads
-        ]
-        avg_response_time = round(sum(diffs) / len(diffs), 1)
+        ])
+        n = len(diffs)
+        avg_response_time = round(sum(diffs) / n, 1)
+        p50_idx = int(n * 0.50)
+        p95_idx = int(n * 0.95)
+        p50_response_time = round(diffs[p50_idx], 1)
+        p95_response_time = round(diffs[p95_idx], 1)
     else:
         avg_response_time = None
+        p50_response_time = None
+        p95_response_time = None
 
     summary = DashboardSummary(
         total_leads=total,
@@ -74,6 +81,8 @@ def dashboard_summary(
         qualification_rate=qualification_rate,
         conversion_rate=conversion_rate,
         avg_response_time_hours=avg_response_time,
+        p50_response_time_hours=p50_response_time,
+        p95_response_time_hours=p95_response_time,
     )
 
     # Source breakdown
@@ -96,11 +105,27 @@ def dashboard_summary(
             )
             .scalar()
         )
+        # Per-source response time
+        src_sent_leads = db.query(Lead).filter(
+            Lead.client_id == client_id,
+            Lead.source == row[0],
+            Lead.sent_to_client_at.isnot(None),
+            Lead.created_at >= cutoff,
+        ).all()
+        if src_sent_leads:
+            src_diffs = [(l.sent_to_client_at - l.created_at).total_seconds() / 3600 for l in src_sent_leads]
+            src_avg_rt = round(sum(src_diffs) / len(src_diffs), 1)
+            src_sent_count = len(src_sent_leads)
+        else:
+            src_avg_rt = None
+            src_sent_count = 0
         source_breakdown.append(
             SourceBreakdown(
                 source=row[0].value if hasattr(row[0], "value") else str(row[0]),
                 count=row[1],
                 qualified_count=qualified_count or 0,
+                avg_response_time_hours=src_avg_rt,
+                leads_sent=src_sent_count,
             )
         )
 
