@@ -26,6 +26,12 @@ from backend.schemas import (
     LeadHistoryResponse,
 )
 from backend.notifications import notify_new_lead, notify_lead_sent
+from backend.routes.auth import (
+    get_current_user,
+    require_admin_or_owner,
+    enforce_client_scope,
+)
+from backend.database import User
 
 # Thread pool for async notification dispatch
 _executor = ThreadPoolExecutor(max_workers=4)
@@ -103,8 +109,16 @@ def _lead_to_response(lead: Lead) -> LeadResponse:
 
 
 @router.post("", response_model=LeadResponse, status_code=201)
-def create_lead(payload: LeadCreate, db: Session = Depends(get_db)):
-    """Create a new lead. Called by RankBuilder agents."""
+def create_lead(
+    payload: LeadCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner()),
+):
+    """Create a new lead. Called by RankBuilder agents (service token) or admins."""
+    # Enforce client scope — agents/admins can only write to their own client
+    # (SYSTEM_ADMIN may write to any; CLIENT_ADMIN forced to own client)
+    effective_client_id = enforce_client_scope(payload.client_id, current_user)
+
     # Validate source
     try:
         source_val = LeadSource(payload.source)
@@ -126,7 +140,7 @@ def create_lead(payload: LeadCreate, db: Session = Depends(get_db)):
             )
 
     lead = Lead(
-        client_id=payload.client_id,
+        client_id=effective_client_id,
         campaign_id=payload.campaign_id,
         source=source_val,
         source_query=payload.source_query,
@@ -176,15 +190,18 @@ def list_leads(
     lead_type: Optional[str] = Query(None, description="Filter by lead type: VALID/INVALID/FOLLOW_UP"),
     source: Optional[str] = Query(None, description="Filter by source"),
     search: Optional[str] = Query(None, description="Search by company name or email"),
+    contact_email: Optional[str] = Query(None, description="Lookup by exact email"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """List leads with optional filters."""
+    """List leads with optional filters. Scoped to the authenticated user's client."""
+    effective_client_id = enforce_client_scope(client_id, current_user)
     q = db.query(Lead)
 
-    if client_id:
-        q = q.filter(Lead.client_id == client_id)
+    if effective_client_id:
+        q = q.filter(Lead.client_id == effective_client_id)
     if campaign_id:
         q = q.filter(Lead.campaign_id == campaign_id)
     if status:
@@ -220,20 +237,30 @@ def list_leads(
 
 
 @router.get("/{lead_id}", response_model=LeadResponse)
-def get_lead(lead_id: str, db: Session = Depends(get_db)):
-    """Get a single lead by ID."""
+def get_lead(
+    lead_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get a single lead by ID (scoped to user's client)."""
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
+    enforce_client_scope(lead.client_id, current_user)
     return _lead_to_response(lead)
 
 
 @router.get("/{lead_id}/history", response_model=LeadHistoryResponse)
-def get_lead_history(lead_id: str, db: Session = Depends(get_db)):
-    """Get the full audit/history trail for a lead."""
+def get_lead_history(
+    lead_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get the full audit/history trail for a lead (scoped to user's client)."""
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
+    enforce_client_scope(lead.client_id, current_user)
     rows = (
         db.query(LeadHistory)
         .filter(LeadHistory.lead_id == lead_id)
@@ -257,11 +284,17 @@ def get_lead_history(lead_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/{lead_id}", response_model=LeadResponse)
-def update_lead(lead_id: str, payload: LeadUpdate, db: Session = Depends(get_db)):
+def update_lead(
+    lead_id: str,
+    payload: LeadUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner()),
+):
     """Update lead fields. Records all changes in lead history."""
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
+    enforce_client_scope(lead.client_id, current_user)
 
     changes = []
 
@@ -300,10 +333,15 @@ def update_lead(lead_id: str, payload: LeadUpdate, db: Session = Depends(get_db)
 
 
 @router.delete("/{lead_id}", status_code=204)
-def delete_lead(lead_id: str, db: Session = Depends(get_db)):
+def delete_lead(
+    lead_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner()),
+):
     """Delete a lead."""
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
+    enforce_client_scope(lead.client_id, current_user)
     db.delete(lead)
     db.commit()

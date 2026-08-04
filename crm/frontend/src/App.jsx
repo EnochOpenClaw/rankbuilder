@@ -262,7 +262,7 @@ const STATUS_OPTIONS = ['NEW','REVIEWED','QUALIFIED','SENT','CONTACTED','CONVERT
 const SOURCE_OPTIONS  = ['HARO','CONNECTIVELY','GUEST_OUTREACH','WEBSITE','FACEBOOK','DIRECT_MAIL','CALL_IN','WEB_SEARCH','MANUAL']
 const TYPE_OPTIONS    = ['VALID','INVALID','FOLLOW_UP']
 
-export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign }) {
+export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign, canWrite = true }) {
   const [leads, setLeads] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -426,6 +426,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
       <LeadDrawer
         lead={selectedRow}
         open={drawerOpen}
+        canWrite={canWrite}
         onClose={() => { setDrawerOpen(false); setSelectedRow(null) }}
         onUpdate={loadLeads}
       />
@@ -435,7 +436,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
 
 // ── Lead Drawer ────────────────────────────────────────────────────────────────
 
-function LeadDrawer({ lead, open, onClose, onUpdate }) {
+function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true }) {
   const [notes, setNotes] = useState('')
   const [clientResponse, setClientResponse] = useState('')
   const [status, setStatus] = useState(null)
@@ -565,10 +566,14 @@ function LeadDrawer({ lead, open, onClose, onUpdate }) {
       placement="right" width={560}
       open={open} onClose={onClose}
       extra={
-        <Space>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button type="primary" loading={saving} onClick={handleSave}>Save Changes</Button>
-        </Space>
+        canWrite ? (
+          <Space>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button type="primary" loading={saving} onClick={handleSave}>Save Changes</Button>
+          </Space>
+        ) : (
+          <Button onClick={onClose}>Close</Button>
+        )
       }
     >
       {/* Tabs: Details | Activity */}
@@ -675,55 +680,68 @@ function LeadDrawer({ lead, open, onClose, onUpdate }) {
             </>
           )}
 
-          {/* Editable fields */}
+          {/* Editable fields — admin only; VIEWER sees read-only summary */}
           <Title level={5} style={{ margin: '12px 0 8px', fontSize: 13, color: '#555' }}>
-            Lead Management
+            Lead Status
           </Title>
-          <Form layout="vertical" form={form}>
-            <Row gutter={12}>
-              <Col span={12}>
-                <Form.Item label="Status" style={{ marginBottom: 8 }}>
-                  <Select value={status} onChange={setStatus} style={{ width: '100%' }}>
-                    {STATUS_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item label="Lead Type" style={{ marginBottom: 8 }}>
-                  <Select value={leadType} onChange={setLeadType} allowClear placeholder="Select type" style={{ width: '100%' }}>
-                    {TYPE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
-            <Form.Item label="Quality Score" style={{ marginBottom: 8 }}>
-              <Rate value={qualityScore} onChange={setQualityScore} character={({ index = 0 }) => index + 1} style={{ fontSize: 18 }} />
-              <Text type="secondary" style={{ marginLeft: 8 }}>{qualityScore ? `${qualityScore}/5` : ''}</Text>
-            </Form.Item>
-            <Form.Item label="Location" style={{ marginBottom: 8 }}>
-              <Input
-                value={location}
-                onChange={e => setLocation(e.target.value)}
-                placeholder="e.g. Sandton, Johannesburg"
-              />
-            </Form.Item>
-            <Form.Item label="Client Response" style={{ marginBottom: 8 }}>
-              <Input.TextArea
-                value={clientResponse}
-                onChange={e => setClientResponse(e.target.value)}
-                rows={2}
-                placeholder="What the client said / outcome..."
-              />
-            </Form.Item>
-            <Form.Item label="Internal Notes" style={{ marginBottom: 0 }}>
-              <Input.TextArea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                rows={2}
-                placeholder="Private notes for the team..."
-              />
-            </Form.Item>
-          </Form>
+          {canWrite ? (
+            <Form layout="vertical" form={form}>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item label="Status" style={{ marginBottom: 8 }}>
+                    <Select value={status} onChange={setStatus} style={{ width: '100%' }}>
+                      {STATUS_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="Lead Type" style={{ marginBottom: 8 }}>
+                    <Select value={leadType} onChange={setLeadType} allowClear placeholder="Select type" style={{ width: '100%' }}>
+                      {TYPE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item label="Quality Score" style={{ marginBottom: 8 }}>
+                <Rate value={qualityScore} onChange={setQualityScore} character={({ index = 0 }) => index + 1} style={{ fontSize: 18 }} />
+                <Text type="secondary" style={{ marginLeft: 8 }}>{qualityScore ? `${qualityScore}/5` : ''}</Text>
+              </Form.Item>
+              <Form.Item label="Location" style={{ marginBottom: 8 }}>
+                <Input
+                  value={location}
+                  onChange={e => setLocation(e.target.value)}
+                  placeholder="e.g. Sandton, Johannesburg"
+                />
+              </Form.Item>
+              <Form.Item label="Client Response" style={{ marginBottom: 8 }}>
+                <Input.TextArea
+                  value={clientResponse}
+                  onChange={e => setClientResponse(e.target.value)}
+                  rows={2}
+                  placeholder="What the client said / outcome..."
+                />
+              </Form.Item>
+              <Form.Item label="Internal Notes" style={{ marginBottom: 0 }}>
+                <Input.TextArea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Private notes for the team..."
+                />
+              </Form.Item>
+            </Form>
+          ) : (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Status"><StatusTag status={lead.status} /></Descriptions.Item>
+              <Descriptions.Item label="Lead Type"><LeadTypeTag type={lead.lead_type} /></Descriptions.Item>
+              <Descriptions.Item label="Quality Score">
+                {lead.quality_score ? `${lead.quality_score}/5` : '—'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Location">{lead.location || '—'}</Descriptions.Item>
+              {lead.client_response && <Descriptions.Item label="Client Response">{lead.client_response}</Descriptions.Item>}
+              {lead.notes && <Descriptions.Item label="Notes">{lead.notes}</Descriptions.Item>}
+            </Descriptions>
+          )}
         </TabPane>
 
         <TabPane tab={
@@ -754,7 +772,7 @@ function CampaignStatusTag({ status }) {
   return <Tag color={map[status] || 'default'}>{status || '—'}</Tag>
 }
 
-function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads }) {
+function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads, canWrite = true }) {
   const [campaigns, setCampaigns] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -865,14 +883,16 @@ function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads }) {
     },
     {
       title: '',
-      width: 180,
+      width: canWrite ? 180 : 100,
       render: (_, r) => (
         <Space size="small">
           <Button size="small" onClick={() => onViewCampaignLeads(r)}>View Leads</Button>
-          <Button size="small" onClick={() => openEdit(r)}>Edit</Button>
-          <Button size="small" danger onClick={() => handleDelete(r)}>
-            <DeleteOutlined />
-          </Button>
+          {canWrite && <Button size="small" onClick={() => openEdit(r)}>Edit</Button>}
+          {canWrite && (
+            <Button size="small" danger onClick={() => handleDelete(r)}>
+              <DeleteOutlined />
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -897,9 +917,11 @@ function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads }) {
           )}
           <Text type="secondary" style={{ fontSize: 12 }}>{total} campaign(s)</Text>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          New Campaign
-        </Button>
+        {canWrite && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+            New Campaign
+          </Button>
+        )}
       </div>
 
       <Table
@@ -1115,6 +1137,9 @@ export default function App() {
 
   const role = user.role
   const isAdmin = role === 'SYSTEM_ADMIN' || role === 'CLIENT_ADMIN'
+  const isViewer = role === 'VIEWER'
+  const canWrite = isAdmin  // VIEWER is read-only
+  const isMultiClientAdmin = role === 'SYSTEM_ADMIN'
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
@@ -1122,7 +1147,7 @@ export default function App() {
       <Layout.Header style={{ background: '#001529', display: 'flex', alignItems: 'center', gap: 16, padding: '0 24px' }}>
         <Title level={4} style={{ color: '#fff', margin: 0 }}>RankBuilder CRM</Title>
 
-        {clients.length > 0 && isAdmin && (
+        {clients.length > 0 && isMultiClientAdmin && (
           <Select
             value={selectedClientId}
             onChange={id => { setSelectedClientId(id); setRefreshKey(k => k + 1) }}
@@ -1166,6 +1191,7 @@ export default function App() {
                   refreshKey={refreshKey}
                   campaignFilter={campaignFilter}
                   campaignName={campaignName}
+                  canWrite={canWrite}
                   onClearCampaign={() => {
                     setCampaignFilter(null)
                     setCampaignName(null)
@@ -1174,19 +1200,22 @@ export default function App() {
               </div>
             </TabPane>
 
-            <TabPane tab={<span><FlagOutlined /> Campaigns</span>} key="campaigns">
-              <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
-                <CampaignsTab
-                  clientId={selectedClientId}
-                  refreshKey={refreshKey}
-                  onViewCampaignLeads={(camp) => {
-                    setCampaignFilter(camp.id)
-                    setCampaignName(camp.name)
-                    setTab('leads')
-                  }}
-                />
-              </div>
-            </TabPane>
+            {isAdmin && (
+              <TabPane tab={<span><FlagOutlined /> Campaigns</span>} key="campaigns">
+                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                  <CampaignsTab
+                    clientId={selectedClientId}
+                    refreshKey={refreshKey}
+                    canWrite={canWrite}
+                    onViewCampaignLeads={(camp) => {
+                      setCampaignFilter(camp.id)
+                      setCampaignName(camp.name)
+                      setTab('leads')
+                    }}
+                  />
+                </div>
+              </TabPane>
+            )}
 
             {isAdmin && (
               <TabPane tab={<span><UserOutlined /> Users</span>} key="users">

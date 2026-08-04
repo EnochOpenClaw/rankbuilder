@@ -20,6 +20,12 @@ from backend.schemas import (
     CampaignResponse,
     CampaignListResponse,
 )
+from backend.routes.auth import (
+    get_current_user,
+    require_admin_or_owner,
+    enforce_client_scope,
+)
+from backend.database import User
 
 router = APIRouter()
 
@@ -47,8 +53,14 @@ def _campaign_to_response(campaign: Campaign, db: Session) -> CampaignResponse:
 
 
 @router.post("", response_model=CampaignResponse, status_code=201)
-def create_campaign(payload: CampaignCreate, db: Session = Depends(get_db)):
-    """Create a new campaign for a client."""
+def create_campaign(
+    payload: CampaignCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner()),
+):
+    """Create a new campaign for a client (admin only, scoped to own client)."""
+    effective_client_id = enforce_client_scope(payload.client_id, current_user)
+
     # Validate channel
     try:
         channel_val = LeadSource(payload.channel)
@@ -68,7 +80,7 @@ def create_campaign(payload: CampaignCreate, db: Session = Depends(get_db)):
         )
 
     campaign = Campaign(
-        client_id=payload.client_id,
+        client_id=effective_client_id,
         name=payload.name,
         channel=channel_val,
         status=status_val,
@@ -87,12 +99,14 @@ def list_campaigns(
     status: Optional[str] = Query(None, description="Filter by status: ACTIVE/PAUSED/COMPLETED"),
     channel: Optional[str] = Query(None, description="Filter by channel/source"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """List campaigns with optional filters and live lead counts."""
+    """List campaigns with optional filters (scoped to user's client)."""
+    effective_client_id = enforce_client_scope(client_id, current_user)
     q = db.query(Campaign)
 
-    if client_id:
-        q = q.filter(Campaign.client_id == client_id)
+    if effective_client_id:
+        q = q.filter(Campaign.client_id == effective_client_id)
     if status:
         try:
             q = q.filter(Campaign.status == CampaignStatus(status))
@@ -112,20 +126,31 @@ def list_campaigns(
 
 
 @router.get("/{campaign_id}", response_model=CampaignResponse)
-def get_campaign(campaign_id: str, db: Session = Depends(get_db)):
-    """Get a single campaign with lead counts."""
+def get_campaign(
+    campaign_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get a single campaign with lead counts (scoped to user's client)."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    enforce_client_scope(campaign.client_id, current_user)
     return _campaign_to_response(campaign, db)
 
 
 @router.patch("/{campaign_id}", response_model=CampaignResponse)
-def update_campaign(campaign_id: str, payload: CampaignUpdate, db: Session = Depends(get_db)):
-    """Update campaign fields."""
+def update_campaign(
+    campaign_id: str,
+    payload: CampaignUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner()),
+):
+    """Update campaign fields (admin only)."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    enforce_client_scope(campaign.client_id, current_user)
 
     for field, value in payload.model_dump(exclude_unset=True).items():
         if value is None:
@@ -148,10 +173,15 @@ def update_campaign(campaign_id: str, payload: CampaignUpdate, db: Session = Dep
 
 
 @router.delete("/{campaign_id}", status_code=204)
-def delete_campaign(campaign_id: str, db: Session = Depends(get_db)):
-    """Delete a campaign. Associated leads keep their campaign_id value (orphaned)."""
+def delete_campaign(
+    campaign_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner()),
+):
+    """Delete a campaign (admin only). Associated leads keep their campaign_id value."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    enforce_client_scope(campaign.client_id, current_user)
     db.delete(campaign)
     db.commit()
