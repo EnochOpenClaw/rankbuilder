@@ -135,7 +135,7 @@ def _brevo_send(to_email: str, subject: str, html_body: str,
     except Exception:
         BREVO_API_KEY   = os.environ.get("BREVO_API_KEY", "")
         BREVO_ENDPOINT  = "https://api.brevo.com/v3/smtp/email"
-        SENDER_EMAIL    = os.environ.get("SENDER_EMAIL", "support@ctdesignz.co.za")
+        SENDER_EMAIL    = os.environ.get("SENDER_EMAIL", "craig@fortressblinds.co.za")
         SENDER_NAME     = "Craig Pauls"
 
     payload = {
@@ -825,6 +825,24 @@ def send_daily_batch(limit=10):
                 db["prospects"][url]["email"] = email
             sent += 1
             log.info("  ✅ Sent (message_id=%s)", result.get("message_id", ""))
+
+            # ── CRM: Create lead ─────────────────────────────────────────────
+            try:
+                from lib.crm_client import get_or_create_lead, mark_lead_sent, CRMError as CRMErr
+                lead = get_or_create_lead(
+                    source="GUEST_OUTREACH",
+                    contact_email=email,
+                    contact_name=editor_name,
+                    company_name=prospect.get("site_name", prospect["domain"]),
+                    company_website=prospect.get("website", f"https://{prospect['domain']}"),
+                    source_query=f"Guest post: {angle.get('topic', '')} — {prospect.get('domain', '')}",
+                    pitch_sent=html_body[:2000] if html_body else None,
+                    quality_score=3,
+                )
+                mark_lead_sent(lead["id"], pitch_sent=html_body[:2000] if html_body else None)
+                log.info("  CRM: created lead %s → SENT", lead["id"])
+            except CRMErr as e:
+                log.warning("  CRM lead creation failed: %s", e)
         else:
             log.warning("  ❌ Failed: %s", result.get("error", ""))
 

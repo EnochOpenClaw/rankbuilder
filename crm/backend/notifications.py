@@ -23,19 +23,33 @@ if not BREVO_API_KEY:
         "BREVO_API_KEY not set — email notifications disabled"
     )
 BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "ai@fortressblinds.co.za")
-SENDER_NAME = "RankBuilder AI"
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "craig@fortressblinds.co.za")
+SENDER_NAME = "Craig Pauls"
+
+# ── Route-based senders ────────────────────────────────────────────────────────
+# Sales/quote leads → notify Tiaan from sales@
+# Backlink/blog/outreach leads → notify Craig from craig@
+SALES_SENDER_EMAIL = os.environ.get("SALES_SENDER_EMAIL", "sales@fortressblinds.co.za")
+SALES_SENDER_NAME = "Fortress Blinds Sales"
+
+# Lead sources that are SALES leads (need fast response + Tiaan)
+SALES_SOURCES = {"WEBSITE", "CALL_IN", "DIRECT_MAIL", "FACEBOOK", "MANUAL"}
+# Lead sources that are BACKLINK/BLOG/OUTREACH (need Craig follow-up)
+OUTREACH_SOURCES = {"HARO", "CONNECTIVELY", "GUEST_OUTREACH", "WEB_SEARCH"}
 
 
 # ── Low-level Brevo send ───────────────────────────────────────────────────────
 
-def _brevo_send(to_email: str, subject: str, html_body: str, to_name: str = "") -> dict:
+def _brevo_send(to_email: str, subject: str, html_body: str, to_name: str = "",
+                sender_email: str = None, sender_name: str = None) -> dict:
     """Send transactional email via Brevo SMTP API."""
+    sender_email = sender_email or SENDER_EMAIL
+    sender_name = sender_name or SENDER_NAME
     payload = {
         "subject": subject,
         "to": [{"email": to_email, "name": to_name}] if to_name else [{"email": to_email}],
         "htmlContent": html_body,
-        "sender": {"name": SENDER_NAME, "email": SENDER_EMAIL},
+        "sender": {"name": sender_name, "email": sender_email},
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -133,19 +147,27 @@ def _lead_detail_html(lead: dict) -> str:
 def notify_new_lead(lead: dict, db=None) -> None:
     """
     Called when a new lead is created in the CRM.
-    Sends a 'New Lead Alert' to the client's notification recipients.
+    Routes by source:
+      - SALES leads (WEBSITE/CALL_IN/DIRECT_MAIL/FACEBOOK/MANUAL) → Tiaan, from sales@
+      - OUTREACH leads (HARO/CONNECTIVELY/GUEST_OUTREACH/WEB_SEARCH) → Craig, from craig@
     """
     client_id = lead.get("client_id")
     if not client_id:
         return
 
-    # Look up notification settings from DB
-    recipients = _get_notification_recipients(client_id, db)
-    if not recipients:
-        log.debug(f"No notification recipients for client {client_id}, skipping email.")
-        return
+    source = (lead.get("source") or "UNKNOWN").upper()
+    is_sales = source in SALES_SOURCES
 
-    source = lead.get("source", "UNKNOWN")
+    # Determine sender + recipients based on route
+    if is_sales:
+        sender_email = SALES_SENDER_EMAIL
+        sender_name = SALES_SENDER_NAME
+        recipients = [("tiaan@houseofsupreme.co.za", "Tiaan")]
+    else:
+        sender_email = SENDER_EMAIL
+        sender_name = SENDER_NAME
+        recipients = [("craig@fortressblinds.co.za", "Craig")]
+
     company = lead.get("company_name") or "Unknown company"
     subject = f"🔔 [RankBuilder] New {source} Lead: {company}"
     badge = _lead_source_badge(source)
@@ -179,7 +201,8 @@ def notify_new_lead(lead: dict, db=None) -> None:
 </html>"""
 
     for email, name in recipients:
-        _brevo_send(email, subject, html_body, to_name=name)
+        _brevo_send(email, subject, html_body, to_name=name,
+                    sender_email=sender_email, sender_name=sender_name)
 
 
 def notify_lead_sent(lead: dict, db=None) -> None:
