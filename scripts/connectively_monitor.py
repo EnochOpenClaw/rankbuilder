@@ -29,7 +29,7 @@ from haro_responder import (
     TARGET_KEYWORDS, EXCLUDED_KEYWORDS,
     is_relevant_query, score_relevance
 )
-from pitch_templates import select_angle, get_angle_for_query, get_angle_guidance, build_pitch_response
+from pitch_templates import get_angle_for_query, get_angle_guidance, build_pitch_response
 from credentials import (
     BREVO_API_KEY, BREVO_ENDPOINT,
     SENDER_EMAIL, SENDER_NAME, NOTIFY_EMAIL,
@@ -41,9 +41,6 @@ STATE_FILE = Path(__file__).parent / "state" / "processed_connectively.jsonl"
 STATE_FILE.parent.mkdir(exist_ok=True)
 
 LOG_FILE = Path(__file__).parent / "logs" / "connectively_monitor.log"
-LOG_FILE.parent.mkdir(exist_ok=True)
-
-SCRIPT_FILE = Path("/tmp/connectively_pw.js")
 
 # ============================================================================
 # LOGGING
