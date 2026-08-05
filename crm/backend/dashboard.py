@@ -10,14 +10,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.database import get_db, Lead, LeadSource, LeadStatus, LeadType, User
+from backend.database import get_db, Lead, LeadSource, LeadStatus, LeadType
 from backend.schemas import (
     DashboardSummary,
     SourceBreakdown,
     LeadsOverTime,
     DashboardResponse,
 )
-from backend.routes.auth import get_current_user, enforce_client_scope
 
 router = APIRouter()
 
@@ -27,16 +26,14 @@ def dashboard_summary(
     client_id: str = Query(..., description="Client ID to show dashboard for"),
     days: int = Query(30, ge=1, le=365, description="Lookback window in days"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
-    """Aggregated stats for a client's leads (scoped to user's client)."""
-    effective_client_id = enforce_client_scope(client_id, current_user)
+    """Aggregated stats for a client's leads."""
 
     cutoff = datetime.utcnow() - timedelta(days=days)
 
     # Base filtered query
     base = db.query(Lead).filter(
-        Lead.client_id == effective_client_id,
+        Lead.client_id == client_id,
         Lead.created_at >= cutoff,
     )
 

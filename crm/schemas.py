@@ -167,53 +167,6 @@ class LeadListResponse(BaseModel):
 
 # ── Client Schemas ─────────────────────────────────────────────────────────────
 
-# ── Campaign Schemas ────────────────────────────────────────────────────────────
-
-class CampaignStatus(str):
-    ACTIVE = "ACTIVE"
-    PAUSED = "PAUSED"
-    COMPLETED = "COMPLETED"
-
-
-class CampaignCreate(BaseModel):
-    client_id: str
-    name: str
-    channel: str  # LeadSource enum value
-    status: str = "ACTIVE"
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
-
-
-class CampaignUpdate(BaseModel):
-    name: Optional[str] = None
-    channel: Optional[str] = None
-    status: Optional[str] = None
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
-
-
-class CampaignResponse(BaseModel):
-    id: str
-    client_id: str
-    name: str
-    channel: str
-    status: str
-    started_at: Optional[datetime]
-    ended_at: Optional[datetime]
-    lead_count: int = 0
-    qualified_count: int = 0
-    converted_count: int = 0
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class CampaignListResponse(BaseModel):
-    total: int
-    campaigns: list[CampaignResponse]
-
-
 class ClientCreate(BaseModel):
     company_name: str
     contact_email: str

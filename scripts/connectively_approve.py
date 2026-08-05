@@ -23,6 +23,14 @@ from credentials import (
     CONNECTIVELY_EMAIL, CONNECTIVELY_PASSWORD
 )
 
+# CRM integration
+try:
+    from lib.crm_client import get_or_create_lead, mark_lead_sent, CRMError as CRMErr
+    CRM_AVAILABLE = True
+except ImportError:
+    CRM_AVAILABLE = False
+    CRMErr = Exception
+
 STATE_FILE = Path(__file__).parent / "state" / "processed_connectively.jsonl"
 LOG_FILE = Path(__file__).parent / "logs" / "connectively_approvals.log"
 LOG_FILE.parent.mkdir(exist_ok=True)
@@ -413,6 +421,25 @@ def process_pending_approvals():
                     f"<p>Submitted to: {answer_url}</p><p>URL after submit: {submit_result.get('url', 'N/A')}</p>"
                 )
                 log(f"  [{query_id}] ✅ Submitted! URL: {submit_result.get('url')}")
+
+                # ── CRM: Create lead ────────────────────────────────────────
+                if CRM_AVAILABLE:
+                    try:
+                        outlet_name = answer_url.split('/')[-3] if answer_url else "Connectively"
+                        lead = get_or_create_lead(
+                            source="CONNECTIVELY",
+                            company_name=outlet_name.title(),
+                            company_website=f"https://{outlet_name}.com" if outlet_name else None,
+                            source_query=drafted[:200] or None,
+                            message_excerpt=drafted[:500],
+                            pitch_sent=drafted[:2000] or None,
+                            quality_score=4,
+                        )
+                        mark_lead_sent(lead["id"], pitch_sent=drafted[:2000] or None)
+                        log(f"  CRM: created lead {lead['id']} → SENT")
+                    except CRMErr as e:
+                        log(f"  CRM lead creation failed: {e}")
+
             else:
                 update_status(query_id, "SUBMIT_ERROR")
                 send_confirmation(
@@ -475,6 +502,24 @@ def manual_approve(query_id: str = None, edited_response: str = None, skip: bool
         send_confirmation(SENDER_EMAIL, "SUBMITTED", query_id,
                          f"<p>Submitted to: {answer_url}</p>")
         log(f"✅ Submitted! URL: {result.get('url')}")
+
+        # ── CRM: Create lead ───────────────────────────────────────────────
+        if CRM_AVAILABLE:
+            try:
+                outlet = answer_url.split('/')[-3] if answer_url else "Connectively"
+                lead = get_or_create_lead(
+                    source="CONNECTIVELY",
+                    company_name=outlet.title() if outlet else "Connectively",
+                    company_website=f"https://{outlet}.com" if outlet else None,
+                    source_query=answer_text[:200] if answer_text else None,
+                    message_excerpt=answer_text[:500] if answer_text else None,
+                    pitch_sent=answer_text[:2000] if answer_text else None,
+                    quality_score=4,
+                )
+                mark_lead_sent(lead["id"], pitch_sent=answer_text[:2000] if answer_text else None)
+                log(f"  CRM: created lead {lead['id']} → SENT")
+            except CRMErr as e:
+                log(f"  CRM lead creation failed: {e}")
     else:
         log(f"❌ Failed: {result.get('error')}")
 

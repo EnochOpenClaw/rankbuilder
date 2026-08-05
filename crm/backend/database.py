@@ -107,6 +107,7 @@ class Campaign(Base):
     status = Column(SAEnum(CampaignStatus), default=CampaignStatus.ACTIVE)
     started_at = Column(DateTime, default=datetime.utcnow)
     ended_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     client = relationship("Client", back_populates="campaigns")
     leads = relationship("Lead", back_populates="campaign")

@@ -17,6 +17,15 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'lib'))
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME
+from lib.n8n_webhook import send_event as n8n_event
+
+# CRM integration — create lead when pitch is sent
+try:
+    from lib.crm_client import get_or_create_lead, update_lead, mark_lead_sent, CRMError as CRMErr
+    CRM_AVAILABLE = True
+except ImportError:
+    CRM_AVAILABLE = False
+    CRMErr = Exception
 
 CAREER_EMAIL = "craig@fortressblinds.co.za"
 BLIND_CC = "craig@fortressblinds.co.za"
@@ -219,6 +228,10 @@ def process_approval(approval_email_body: str, approval_email_id: str) -> dict:
     
     if action == "SKIP":
         update_status(original_email_id, "SKIPPED")
+        n8n_event("haro_pitch", "rejected",
+                   prospect=latest.get("email_id", ""),
+                   query="",
+                   extra={"original_email_id": original_email_id})
         return {
             "action": "SKIPPED",
             "original_email_id": original_email_id,
@@ -242,6 +255,40 @@ def process_approval(approval_email_body: str, approval_email_id: str) -> dict:
         
         if send_result.get("success"):
             update_status(original_email_id, "SENT")
+
+            # ── CRM: Create lead ──────────────────────────────────────────────
+            if CRM_AVAILABLE:
+                try:
+                    from haro_responder import read_email, extract_forwarded_haro_content
+                    body = read_email(original_email_id)
+                    qdata = extract_forwarded_haro_content(body) if body else {}
+                    outlet = qdata.get("outlet", "Unknown")
+                    journalist = qdata.get("journalist_name", "")
+
+                    lead = get_or_create_lead(
+                        source="HARO",
+                        contact_email=reply_to,
+                        contact_name=journalist,
+                        company_name=outlet,
+                        company_website=qdata.get("website", ""),
+                        source_query=qdata.get("query_text", "")[:200] or None,
+                        message_excerpt=qdata.get("query_text", "")[:500],
+                        pitch_sent=drafted_response[:2000] or None,
+                        quality_score=4,
+                    )
+                    mark_lead_sent(lead["id"], pitch_sent=drafted_response[:2000] or None)
+                    log(f"  CRM: created lead {lead['id']} → SENT")
+                except CRMErr as e:
+                    logging.warning(f"CRM lead creation failed: {e}")
+
+            n8n_event("haro_pitch", "approved",
+                       prospect=latest.get('outlet', 'HARO'),
+                       query=latest.get('query_text', '')[:100] if latest else '',
+                       extra={
+                           "original_email_id": original_email_id,
+                           "reply_to": reply_to,
+                           "message_id": send_result.get('messageId', '')
+                       })
             return {
                 "action": "SENT",
                 "original_email_id": original_email_id,
@@ -250,6 +297,10 @@ def process_approval(approval_email_body: str, approval_email_id: str) -> dict:
             }
         else:
             update_status(original_email_id, "SEND_FAILED")
+            n8n_event("haro_pitch", "error",
+                       prospect=latest.get('outlet', 'HARO'),
+                       query=latest.get('query_text', '')[:100] if latest else '',
+                       extra={"original_email_id": original_email_id, "error": send_result.get("error")})
             return {
                 "action": "SEND_FAILED",
                 "original_email_id": original_email_id,
@@ -310,8 +361,27 @@ def manual_approve(email_id: str, edited_response: str = None):
     if send_result.get("success"):
         update_status(email_id, "SENT")
         log(f"✅ Response sent! Message ID: {send_result.get('messageId')}")
-        send_confirmation(SENDER_EMAIL, SENDER_EMAIL, summary, "SENT", 
+        send_confirmation(SENDER_EMAIL, SENDER_EMAIL, summary, "SENT",
                          f"<p>Response sent to journalist at {reply_to}</p>")
+
+        # ── CRM: Create lead ─────────────────────────────────────────────────
+        if CRM_AVAILABLE:
+            try:
+                lead = get_or_create_lead(
+                    source="HARO",
+                    contact_email=reply_to,
+                    contact_name=journalist,
+                    company_name=outlet,
+                    source_query=summary[:200] if summary else None,
+                    message_excerpt=summary[:500] if summary else None,
+                    pitch_sent=drafted[:2000] or None,
+                    quality_score=4,
+                )
+                mark_lead_sent(lead["id"], pitch_sent=drafted[:2000] or None)
+                log(f"  CRM: created lead {lead['id']} → SENT")
+            except CRMErr as e:
+                logging.warning(f"CRM lead creation failed: {e}")
+
     else:
         log(f"❌ Send failed: {send_result.get('error')}")
 
