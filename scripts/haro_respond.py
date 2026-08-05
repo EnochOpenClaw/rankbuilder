@@ -24,7 +24,7 @@ from haro_responder import (
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME
 
 BLIND_CC = "craig@fortressblinds.co.za"  # Craig sees what went out
-CAREER_EMAIL = "support@ct-designs.co.za"  # Enoch's inbox
+CAREER_EMAIL = "enoch@fortressblinds.co.za"  # Enoch's inbox
 
 LOG_FILE = Path(__file__).parent / "logs" / "responses.jsonl"
 LOG_FILE.parent.mkdir(exist_ok=True)

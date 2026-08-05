@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db, Client, Lead, LeadHistory, LeadSource, LeadStatus
 from backend.schemas import LeadPublicCreate, LeadPublicResponse
+from backend.routes.leads import _executor, _notify_async
 
 router = APIRouter()
 
@@ -63,6 +64,10 @@ def capture_lead(
     )
     db.add(history)
     db.commit()
+
+    # ── Email notification: new lead alert ──────────────────────────────────
+    # Match the authenticated route: fire notification in background thread
+    _executor.submit(_notify_async, "new_lead", lead.id, db)
 
     return LeadPublicResponse(
         success=True,

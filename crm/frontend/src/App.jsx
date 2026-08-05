@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Layout, Typography, Card, Row, Col, Statistic, Table, Tag, Button,
   Drawer, Descriptions, Timeline, Select, Input, Space, message, Tabs,
@@ -7,7 +7,7 @@ import {
 import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
-  SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined
+  SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { api, auth } from './api'
@@ -262,7 +262,7 @@ const STATUS_OPTIONS = ['NEW','REVIEWED','QUALIFIED','SENT','CONTACTED','CONVERT
 const SOURCE_OPTIONS  = ['HARO','CONNECTIVELY','GUEST_OUTREACH','WEBSITE','FACEBOOK','DIRECT_MAIL','CALL_IN','WEB_SEARCH','MANUAL']
 const TYPE_OPTIONS    = ['VALID','INVALID','FOLLOW_UP']
 
-export function LeadsTab({ clientId, refreshKey }) {
+export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign, canWrite = true }) {
   const [leads, setLeads] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -277,6 +277,7 @@ export function LeadsTab({ clientId, refreshKey }) {
     setLoading(true)
     try {
       const params = { client_id: clientId, limit: pageSize, offset: (page - 1) * pageSize }
+      if (campaignFilter) params.campaign_id = campaignFilter
       if (filters.status) params.status = filters.status
       if (filters.source) params.source = filters.source
       if (filters.lead_type) params.lead_type = filters.lead_type
@@ -291,7 +292,15 @@ export function LeadsTab({ clientId, refreshKey }) {
     }
   }
 
-  useEffect(() => { loadLeads() }, [page, pageSize, filters, search, refreshKey, clientId])
+  useEffect(() => { loadLeads() }, [page, pageSize, filters, search, refreshKey, clientId, campaignFilter])
+
+  // Reset to page 1 when filters change (but not on page change itself)
+  const prevFilters = useRef()
+  useEffect(() => {
+    const sig = JSON.stringify({ filters, search, campaignFilter, clientId })
+    if (prevFilters.current && prevFilters.current !== sig && page !== 1) setPage(1)
+    prevFilters.current = sig
+  }, [filters, search, campaignFilter, clientId])
 
   const columns = [
     {
@@ -370,6 +379,11 @@ export function LeadsTab({ clientId, refreshKey }) {
   return (
     <div>
       <Space wrap style={{ marginBottom: 12 }}>
+        {campaignFilter && (
+          <Tag closable color="geekblue" onClose={onClearCampaign}>
+            <FlagOutlined /> {campaignName || 'Campaign'} filter
+          </Tag>
+        )}
         <Input.Search
           placeholder="Search company / email / name"
           style={{ width: 240 }}
@@ -412,6 +426,7 @@ export function LeadsTab({ clientId, refreshKey }) {
       <LeadDrawer
         lead={selectedRow}
         open={drawerOpen}
+        canWrite={canWrite}
         onClose={() => { setDrawerOpen(false); setSelectedRow(null) }}
         onUpdate={loadLeads}
       />
@@ -421,7 +436,7 @@ export function LeadsTab({ clientId, refreshKey }) {
 
 // ── Lead Drawer ────────────────────────────────────────────────────────────────
 
-function LeadDrawer({ lead, open, onClose, onUpdate }) {
+function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true }) {
   const [notes, setNotes] = useState('')
   const [clientResponse, setClientResponse] = useState('')
   const [status, setStatus] = useState(null)
@@ -551,10 +566,14 @@ function LeadDrawer({ lead, open, onClose, onUpdate }) {
       placement="right" width={560}
       open={open} onClose={onClose}
       extra={
-        <Space>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button type="primary" loading={saving} onClick={handleSave}>Save Changes</Button>
-        </Space>
+        canWrite ? (
+          <Space>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button type="primary" loading={saving} onClick={handleSave}>Save Changes</Button>
+          </Space>
+        ) : (
+          <Button onClick={onClose}>Close</Button>
+        )
       }
     >
       {/* Tabs: Details | Activity */}
@@ -661,55 +680,68 @@ function LeadDrawer({ lead, open, onClose, onUpdate }) {
             </>
           )}
 
-          {/* Editable fields */}
+          {/* Editable fields — admin only; VIEWER sees read-only summary */}
           <Title level={5} style={{ margin: '12px 0 8px', fontSize: 13, color: '#555' }}>
-            Lead Management
+            Lead Status
           </Title>
-          <Form layout="vertical" form={form}>
-            <Row gutter={12}>
-              <Col span={12}>
-                <Form.Item label="Status" style={{ marginBottom: 8 }}>
-                  <Select value={status} onChange={setStatus} style={{ width: '100%' }}>
-                    {STATUS_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item label="Lead Type" style={{ marginBottom: 8 }}>
-                  <Select value={leadType} onChange={setLeadType} allowClear placeholder="Select type" style={{ width: '100%' }}>
-                    {TYPE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
-            <Form.Item label="Quality Score" style={{ marginBottom: 8 }}>
-              <Rate value={qualityScore} onChange={setQualityScore} character={({ index = 0 }) => index + 1} style={{ fontSize: 18 }} />
-              <Text type="secondary" style={{ marginLeft: 8 }}>{qualityScore ? `${qualityScore}/5` : ''}</Text>
-            </Form.Item>
-            <Form.Item label="Location" style={{ marginBottom: 8 }}>
-              <Input
-                value={location}
-                onChange={e => setLocation(e.target.value)}
-                placeholder="e.g. Sandton, Johannesburg"
-              />
-            </Form.Item>
-            <Form.Item label="Client Response" style={{ marginBottom: 8 }}>
-              <Input.TextArea
-                value={clientResponse}
-                onChange={e => setClientResponse(e.target.value)}
-                rows={2}
-                placeholder="What the client said / outcome..."
-              />
-            </Form.Item>
-            <Form.Item label="Internal Notes" style={{ marginBottom: 0 }}>
-              <Input.TextArea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                rows={2}
-                placeholder="Private notes for the team..."
-              />
-            </Form.Item>
-          </Form>
+          {canWrite ? (
+            <Form layout="vertical" form={form}>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item label="Status" style={{ marginBottom: 8 }}>
+                    <Select value={status} onChange={setStatus} style={{ width: '100%' }}>
+                      {STATUS_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="Lead Type" style={{ marginBottom: 8 }}>
+                    <Select value={leadType} onChange={setLeadType} allowClear placeholder="Select type" style={{ width: '100%' }}>
+                      {TYPE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item label="Quality Score" style={{ marginBottom: 8 }}>
+                <Rate value={qualityScore} onChange={setQualityScore} character={({ index = 0 }) => index + 1} style={{ fontSize: 18 }} />
+                <Text type="secondary" style={{ marginLeft: 8 }}>{qualityScore ? `${qualityScore}/5` : ''}</Text>
+              </Form.Item>
+              <Form.Item label="Location" style={{ marginBottom: 8 }}>
+                <Input
+                  value={location}
+                  onChange={e => setLocation(e.target.value)}
+                  placeholder="e.g. Sandton, Johannesburg"
+                />
+              </Form.Item>
+              <Form.Item label="Client Response" style={{ marginBottom: 8 }}>
+                <Input.TextArea
+                  value={clientResponse}
+                  onChange={e => setClientResponse(e.target.value)}
+                  rows={2}
+                  placeholder="What the client said / outcome..."
+                />
+              </Form.Item>
+              <Form.Item label="Internal Notes" style={{ marginBottom: 0 }}>
+                <Input.TextArea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Private notes for the team..."
+                />
+              </Form.Item>
+            </Form>
+          ) : (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Status"><StatusTag status={lead.status} /></Descriptions.Item>
+              <Descriptions.Item label="Lead Type"><LeadTypeTag type={lead.lead_type} /></Descriptions.Item>
+              <Descriptions.Item label="Quality Score">
+                {lead.quality_score ? `${lead.quality_score}/5` : '—'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Location">{lead.location || '—'}</Descriptions.Item>
+              {lead.client_response && <Descriptions.Item label="Client Response">{lead.client_response}</Descriptions.Item>}
+              {lead.notes && <Descriptions.Item label="Notes">{lead.notes}</Descriptions.Item>}
+            </Descriptions>
+          )}
         </TabPane>
 
         <TabPane tab={
@@ -728,6 +760,205 @@ function LeadDrawer({ lead, open, onClose, onUpdate }) {
         </TabPane>
       </Tabs>
     </Drawer>
+  )
+}
+
+// ── Campaigns Tab ───────────────────────────────────────────────────────────
+
+const CAMPAIGN_STATUS_OPTIONS = ['ACTIVE','PAUSED','COMPLETED']
+
+function CampaignStatusTag({ status }) {
+  const map = { ACTIVE: 'success', PAUSED: 'warning', COMPLETED: 'default' }
+  return <Tag color={map[status] || 'default'}>{status || '—'}</Tag>
+}
+
+function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads, canWrite = true }) {
+  const [campaigns, setCampaigns] = useState([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [statusFilter, setStatusFilter] = useState(null)
+  const [channelFilter, setChannelFilter] = useState(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState(null)   // campaign being edited, or null for create
+  const [saving, setSaving] = useState(false)
+  const [form] = Form.useForm()
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const params = { client_id: clientId }
+      if (statusFilter) params.status = statusFilter
+      if (channelFilter) params.channel = channelFilter
+      const res = await api.listCampaigns(params)
+      setCampaigns(res.campaigns)
+      setTotal(res.total)
+    } catch (e) {
+      message.error('Failed to load campaigns: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [clientId, statusFilter, channelFilter, refreshKey])
+
+  const openCreate = () => {
+    setEditing(null)
+    form.resetFields()
+    form.setFieldsValue({ status: 'ACTIVE' })
+    setModalOpen(true)
+  }
+
+  const openEdit = (camp) => {
+    setEditing(camp)
+    form.setFieldsValue({
+      name: camp.name,
+      channel: camp.channel,
+      status: camp.status,
+    })
+    setModalOpen(true)
+  }
+
+  const handleSave = async (values) => {
+    setSaving(true)
+    try {
+      if (editing) {
+        await api.updateCampaign(editing.id, values)
+        message.success('Campaign updated')
+      } else {
+        await api.createCampaign({ ...values, client_id: clientId })
+        message.success('Campaign created')
+      }
+      setModalOpen(false)
+      load()
+    } catch (e) {
+      message.error('Save failed: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (camp) => {
+    Modal.confirm({
+      title: `Delete campaign "${camp.name}"?`,
+      content: 'Leads already linked to this campaign will be kept (unlinked). This cannot be undone.',
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await api.deleteCampaign(camp.id)
+          message.success('Campaign deleted')
+          load()
+        } catch (e) {
+          message.error('Delete failed: ' + e.message)
+        }
+      },
+    })
+  }
+
+  const columns = [
+    {
+      title: 'Campaign',
+      dataIndex: 'name',
+      render: (v, r) => (
+        <div>
+          <Text strong>{v}</Text>
+          <div style={{ fontSize: 11, color: '#888' }}>
+            Created {dayjs(r.created_at).format('MMM D, YYYY')}
+          </div>
+        </div>
+      ),
+    },
+    { title: 'Channel', dataIndex: 'channel', render: c => <Tag>{c?.replace('_', ' ')}</Tag>, width: 140 },
+    { title: 'Status', dataIndex: 'status', render: s => <CampaignStatusTag status={s} />, width: 120 },
+    { title: 'Leads', dataIndex: 'lead_count', align: 'right', width: 80 },
+    { title: 'Qualified', dataIndex: 'qualified_count', align: 'right', width: 90 },
+    { title: 'Converted', dataIndex: 'converted_count', align: 'right', width: 100 },
+    {
+      title: 'Qual Rate',
+      width: 100,
+      align: 'center',
+      render: (_, r) => r.lead_count > 0
+        ? <Text style={{ fontWeight: 600 }}>{Math.round(r.qualified_count / r.lead_count * 100)}%</Text>
+        : <Text type="secondary">—</Text>,
+    },
+    {
+      title: '',
+      width: canWrite ? 180 : 100,
+      render: (_, r) => (
+        <Space size="small">
+          <Button size="small" onClick={() => onViewCampaignLeads(r)}>View Leads</Button>
+          {canWrite && <Button size="small" onClick={() => openEdit(r)}>Edit</Button>}
+          {canWrite && (
+            <Button size="small" danger onClick={() => handleDelete(r)}>
+              <DeleteOutlined />
+            </Button>
+          )}
+        </Space>
+      ),
+    },
+  ]
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <Space wrap>
+          <Select allowClear placeholder="Status" style={{ width: 130 }} value={statusFilter}
+            onChange={v => setStatusFilter(v)}>
+            {CAMPAIGN_STATUS_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+          </Select>
+          <Select allowClear placeholder="Channel" style={{ width: 160 }} value={channelFilter}
+            onChange={v => setChannelFilter(v)}>
+            {SOURCE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s.replace('_',' ')}</Select.Option>)}
+          </Select>
+          {(statusFilter || channelFilter) && (
+            <Button size="small" onClick={() => { setStatusFilter(null); setChannelFilter(null) }}>
+              <FilterOutlined /> Clear
+            </Button>
+          )}
+          <Text type="secondary" style={{ fontSize: 12 }}>{total} campaign(s)</Text>
+        </Space>
+        {canWrite && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+            New Campaign
+          </Button>
+        )}
+      </div>
+
+      <Table
+        dataSource={campaigns}
+        columns={columns}
+        rowKey="id"
+        loading={loading}
+        size="small"
+        pagination={{ pageSize: 10, showTotal: t => `${t} campaigns` }}
+      />
+
+      <Modal
+        title={editing ? `Edit Campaign: ${editing.name}` : 'New Campaign'}
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        onOk={() => form.submit()}
+        confirmLoading={saving}
+        okText={editing ? 'Save Changes' : 'Create Campaign'}
+        destroyOnClose
+      >
+        <Form form={form} layout="vertical" onFinish={handleSave} style={{ marginTop: 16 }}>
+          <Form.Item name="name" label="Campaign Name" rules={[{ required: true, message: 'Name is required' }]}>
+            <Input placeholder="e.g. HARO Q3 Security Push" />
+          </Form.Item>
+          <Form.Item name="channel" label="Channel" rules={[{ required: true, message: 'Channel is required' }]}>
+            <Select placeholder="Select channel">
+              {SOURCE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s.replace('_',' ')}</Select.Option>)}
+            </Select>
+          </Form.Item>
+          <Form.Item name="status" label="Status">
+            <Select>
+              {CAMPAIGN_STATUS_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
   )
 }
 
@@ -863,6 +1094,8 @@ export default function App() {
   const [selectedClientId, setSelectedClientId] = useState(null)
   const [tab, setTab] = useState('dashboard')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [campaignFilter, setCampaignFilter] = useState(null)
+  const [campaignName, setCampaignName] = useState(null)
 
   // Listen for auth:logout events from api.js
   useEffect(() => {
@@ -904,6 +1137,9 @@ export default function App() {
 
   const role = user.role
   const isAdmin = role === 'SYSTEM_ADMIN' || role === 'CLIENT_ADMIN'
+  const isViewer = role === 'VIEWER'
+  const canWrite = isAdmin  // VIEWER is read-only
+  const isMultiClientAdmin = role === 'SYSTEM_ADMIN'
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
@@ -911,7 +1147,7 @@ export default function App() {
       <Layout.Header style={{ background: '#001529', display: 'flex', alignItems: 'center', gap: 16, padding: '0 24px' }}>
         <Title level={4} style={{ color: '#fff', margin: 0 }}>RankBuilder CRM</Title>
 
-        {clients.length > 0 && isAdmin && (
+        {clients.length > 0 && isMultiClientAdmin && (
           <Select
             value={selectedClientId}
             onChange={id => { setSelectedClientId(id); setRefreshKey(k => k + 1) }}
@@ -950,9 +1186,36 @@ export default function App() {
 
             <TabPane tab={<span><DatabaseOutlined /> Leads</span>} key="leads">
               <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
-                <LeadsTab clientId={selectedClientId} refreshKey={refreshKey} />
+                <LeadsTab
+                  clientId={selectedClientId}
+                  refreshKey={refreshKey}
+                  campaignFilter={campaignFilter}
+                  campaignName={campaignName}
+                  canWrite={canWrite}
+                  onClearCampaign={() => {
+                    setCampaignFilter(null)
+                    setCampaignName(null)
+                  }}
+                />
               </div>
             </TabPane>
+
+            {isAdmin && (
+              <TabPane tab={<span><FlagOutlined /> Campaigns</span>} key="campaigns">
+                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                  <CampaignsTab
+                    clientId={selectedClientId}
+                    refreshKey={refreshKey}
+                    canWrite={canWrite}
+                    onViewCampaignLeads={(camp) => {
+                      setCampaignFilter(camp.id)
+                      setCampaignName(camp.name)
+                      setTab('leads')
+                    }}
+                  />
+                </div>
+              </TabPane>
+            )}
 
             {isAdmin && (
               <TabPane tab={<span><UserOutlined /> Users</span>} key="users">

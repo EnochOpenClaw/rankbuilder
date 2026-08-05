@@ -1,0 +1,17 @@
+[Unit]
+Description=RankBuilder CRM (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/rankbuilder/crm
+Environment="PYTHONUNBUFFERED=1"
+Environment="BREVO_API_KEY=__BREVO_API_KEY__"
+Environment="SENDER_EMAIL=craig@fortressblinds.co.za"
+ExecStart=/root/rankbuilder/venv/bin/python3 -m uvicorn backend.app:app --host 0.0.0.0 --port 8001
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
