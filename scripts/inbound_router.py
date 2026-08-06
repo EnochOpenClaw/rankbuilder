@@ -22,7 +22,7 @@ Channels detected:
   - Connectively alerts (Q&A + Bylined Article requests, magic-link format)
   - Direct guest-post/backlink/contribute emails
 
-Run: python inbound_router.py [--dry-run] [--account info|agentdev|all]
+Run: python inbound_router.py [--dry-run] [--account ai|info|enoch|agentdev|all]
 """
 
 import sys
@@ -56,27 +56,35 @@ except ImportError:
     CRMErr = Exception
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-PRIMARY_ACCOUNT = "info"       # info@fortressblinds.co.za (subscriber inbox)
-SECONDARY_ACCOUNT = "agentdev" # agentdevelopmentops@gmail.com (forwards)
-DEFAULT_ACCOUNTS = ["info", "agentdev"]
+PRIMARY_ACCOUNT = "info"       # info@fortressblinds.co.za (subscriber inbox, Mailcow)
+SECONDARY_ACCOUNT = "agentdev" # agentdevelopmentops@gmail.com (forwards, still Google)
+# Watch list: 3 Mailcow mailboxes (ai, info, enoch) + agentdev (Google, kept active)
+DEFAULT_ACCOUNTS = ["ai", "info", "enoch", "agentdev"]
 
-# IMAP credentials for direct Gmail access (fallback when himalaya is not
-# installed, e.g. on the VPS). Keyed by account name.
-# app passwords:
-#   info      — zpwzuioojiatdxsu
-#   agentdev  — uefvxqfsmpquasky
+# IMAP credentials for direct access (fallback when himalaya is not installed,
+# e.g. on the VPS). Keyed by account name.
+# Mailcow mailboxes (repointed off Google 2026-08-06):
+#   ai    — nTHEVE,?,77
+#   info  — 69,%,GrAtuR
+#   enoch — UREfER,96,#
+# agentdev stays on Google (still active):
+#   agentdev — uefvxqfsmpquasky
 IMAP_ACCOUNTS = {
+    "ai": {
+        "host": "mail.fortressblinds.co.za", "port": 993,
+        "login": "ai@fortressblinds.co.za", "password": "nTHEVE,?,77",
+    },
     "info": {
-        "host": "imap.gmail.com", "port": 993,
-        "login": "info@fortressblinds.co.za", "password": "zpwzuioojiatdxsu",
+        "host": "mail.fortressblinds.co.za", "port": 993,
+        "login": "info@fortressblinds.co.za", "password": "69,%,GrAtuR",
+    },
+    "enoch": {
+        "host": "mail.fortressblinds.co.za", "port": 993,
+        "login": "enoch@fortressblinds.co.za", "password": "UREfER,96,#",
     },
     "agentdev": {
         "host": "imap.gmail.com", "port": 993,
         "login": "agentdevelopmentops@gmail.com", "password": "uefvxqfsmpquasky",
-    },
-    "enoch": {
-        "host": "imap.gmail.com", "port": 993,
-        "login": "enoch@fortressblinds.co.za", "password": "dmdl epoy afdf zjmo".replace(" ", ""),
     },
 }
 
@@ -721,12 +729,12 @@ def main():
     DRY_RUN = "--dry-run" in sys.argv
     accounts = DEFAULT_ACCOUNTS
 
-    # Allow account override: --account info|agentdev|all
+    # Allow account override: --account ai|info|enoch|agentdev|all
     if "--account" in sys.argv:
         idx = sys.argv.index("--account")
         if idx + 1 < len(sys.argv):
             val = sys.argv[idx + 1]
-            accounts = ["info", "agentdev"] if val == "all" else [val]
+            accounts = DEFAULT_ACCOUNTS if val == "all" else [val]
 
     mode = "DRY-RUN" if DRY_RUN else "LIVE"
     log(f"=== Inbound Router [{mode}] — accounts: {accounts} ===")
