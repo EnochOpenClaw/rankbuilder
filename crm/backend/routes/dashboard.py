@@ -15,6 +15,7 @@ from backend.schemas import (
     DashboardSummary,
     SourceBreakdown,
     LeadsOverTime,
+    FunnelStage,
     DashboardResponse,
 )
 from backend.routes.auth import get_current_user, enforce_client_scope
@@ -149,8 +150,33 @@ def dashboard_summary(
         for r in date_rows
     ]
 
+    # Funnel — count leads at each pipeline stage (status)
+    funnel_stages = [
+        ("New", LeadStatus.NEW),
+        ("Reviewed", LeadStatus.REVIEWED),
+        ("Qualified", LeadStatus.QUALIFIED),
+        ("Sent", LeadStatus.SENT),
+        ("Contacted", LeadStatus.CONTACTED),
+        ("Converted", LeadStatus.CONVERTED),
+        ("Lost", LeadStatus.LOST),
+    ]
+    funnel = []
+    for label, status in funnel_stages:
+        count = (
+            db.query(func.count(Lead.id))
+            .filter(
+                Lead.client_id == client_id,
+                Lead.created_at >= cutoff,
+                Lead.status == status,
+            )
+            .scalar()
+            or 0
+        )
+        funnel.append(FunnelStage(stage=label, count=count))
+
     return DashboardResponse(
         summary=summary,
         source_breakdown=source_breakdown,
         leads_over_time=leads_over_time,
+        funnel=funnel,
     )

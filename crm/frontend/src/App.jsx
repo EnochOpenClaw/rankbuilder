@@ -243,6 +243,44 @@ function Dashboard({ clientId }) {
         </Card>
       )}
 
+      {/* ── Lead Pipeline Funnel ───────────────────────────────────────── */}
+      {data?.funnel?.length > 0 && (
+        <Card
+          title="Lead Pipeline Funnel"
+          size="small"
+          style={{ marginBottom: 24 }}
+          extra={<Text type="secondary" style={{ fontSize: 11 }}>Leads at each stage</Text>}
+        >
+          {data.funnel.map((stage, i) => {
+            const maxCount = Math.max(...data.funnel.map(s => s.count), 1)
+            const isConverted = stage.stage === 'Converted'
+            const isLost = stage.stage === 'Lost'
+            const color = isConverted ? '#52c41a' : isLost ? '#ff4d4f' : '#1677ff'
+            const widthPct = maxCount > 0 ? Math.round((stage.count / maxCount) * 100) : 0
+            return (
+              <div key={stage.stage} style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                  <Text style={{ color: '#555' }}>{stage.stage}</Text>
+                  <Text strong style={{ color }}>{stage.count}</Text>
+                </div>
+                <div style={{ background: '#f0f0f0', borderRadius: 4, height: 20, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: `${Math.max(widthPct, stage.count > 0 ? 4 : 0)}%`,
+                      height: '100%',
+                      background: color,
+                      borderRadius: 4,
+                      transition: 'width 0.5s ease',
+                      opacity: isLost ? 0.5 : 0.85,
+                    }}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </Card>
+      )}
+
       {/* ── Source Performance Table ───────────────────────────────────── */}
       {source_breakdown?.length > 0 && (
         <Card

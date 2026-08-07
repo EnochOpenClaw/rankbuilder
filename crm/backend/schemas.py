@@ -282,7 +282,13 @@ class LeadsOverTime(BaseModel):
     count: int
 
 
+class FunnelStage(BaseModel):
+    stage: str
+    count: int
+
+
 class DashboardResponse(BaseModel):
     summary: DashboardSummary
     source_breakdown: list[SourceBreakdown]
     leads_over_time: list[LeadsOverTime]
+    funnel: list[FunnelStage]
