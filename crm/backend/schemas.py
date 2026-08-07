@@ -221,16 +221,37 @@ class ClientCreate(BaseModel):
     notification_target: str
 
 
+class ClientOnboardRequest(BaseModel):
+    """Provision a new client with admin user + API key + default campaign."""
+    company_name: str
+    contact_email: str
+    admin_email: str
+    admin_password: str
+    admin_full_name: str = ""
+    notification_channel: str = "EMAIL"
+    notification_target: str = ""
+    campaign_name: str = ""
+
+
 class ClientResponse(BaseModel):
     id: str
     company_name: str
     contact_email: str
     notification_channel: str
     notification_target: str
+    api_key: str = ""
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class ClientOnboardResponse(BaseModel):
+    client: ClientResponse
+    api_key: str
+    admin_user: dict
+    admin_password: str = ""
+    campaign: dict
 
 
 # ── Dashboard Schemas ───────────────────────────────────────────────────────────

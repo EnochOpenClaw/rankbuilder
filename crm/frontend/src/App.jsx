@@ -1144,6 +1144,130 @@ function UsersTab({ user: currentUser, clients }) {
   )
 }
 
+// ── Clients Tab (SYSTEM_ADMIN only) ─────────────────────────────────────────────
+
+function ClientsTab({ onClientAdded }) {
+  const [clients, setClients] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form] = Form.useForm()
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult] = useState(null)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const cs = await api.listClients()
+      setClients(cs)
+    } catch (e) {
+      message.error('Failed to load clients: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleOnboard = async (values) => {
+    setSubmitting(true)
+    try {
+      const res = await api.onboardClient(values)
+      setResult(res)
+      await load()
+      if (onClientAdded) onClientAdded()
+    } catch (e) {
+      message.error('Onboarding failed: ' + e.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const closeModal = () => {
+    setModalOpen(false)
+    setResult(null)
+    form.resetFields()
+  }
+
+  return (
+    <div>
+      <Space style={{ marginBottom: 16 }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+          Onboard New Client
+        </Button>
+        <Text type="secondary">{clients.length} client{clients.length === 1 ? '' : 's'}</Text>
+      </Space>
+
+      <Table
+        dataSource={clients}
+        rowKey="id"
+        loading={loading}
+        size="small"
+        pagination={false}
+        columns={[
+          { title: 'Company', dataIndex: 'company_name' },
+          { title: 'Contact Email', dataIndex: 'contact_email' },
+          { title: 'API Key', dataIndex: 'api_key', render: k => k ? <Text code style={{ fontSize: 11 }}>{k.slice(0, 12)}…</Text> : '—' },
+          { title: 'Created', dataIndex: 'created_at', render: d => d ? dayjs(d).format('DD MMM YYYY') : '—' },
+        ]}
+      />
+
+      <Modal
+        title={result ? 'Client Onboarded ✅' : 'Onboard New Client'}
+        open={modalOpen}
+        onCancel={closeModal}
+        footer={result ? (
+          <Button type="primary" onClick={closeModal}>Done</Button>
+        ) : (
+          <>
+            <Button onClick={closeModal}>Cancel</Button>
+            <Button type="primary" loading={submitting} onClick={() => form.submit()}>
+              Onboard Client
+            </Button>
+          </>
+        )}
+        width={result ? 520 : 480}
+      >
+        {result ? (
+          <div>
+            <p style={{ marginBottom: 12 }}>Client <strong>{result.client.company_name}</strong> is ready. Share these credentials with the client admin:</p>
+            <Descriptions column={1} size="small" bordered>
+              <Descriptions.Item label="Client ID"><Text code>{result.client.id}</Text></Descriptions.Item>
+              <Descriptions.Item label="API Key"><Text code copyable>{result.api_key}</Text></Descriptions.Item>
+              <Descriptions.Item label="Admin Login"><Text code>{result.admin_user.email}</Text></Descriptions.Item>
+              <Descriptions.Item label="Admin Password"><Text code copyable>{result.admin_password || '—'}</Text></Descriptions.Item>
+              <Descriptions.Item label="Campaign">{result.campaign.name}</Descriptions.Item>
+            </Descriptions>
+            <p style={{ marginTop: 12, color: '#888', fontSize: 12 }}>
+              The admin can log in at the portal URL and use the API key for the public lead capture endpoint.
+            </p>
+          </div>
+        ) : (
+          <Form form={form} layout="vertical" onFinish={handleOnboard}>
+            <Form.Item name="company_name" label="Company Name" rules={[{ required: true }]}>
+              <Input placeholder="e.g. Acme Renovations" />
+            </Form.Item>
+            <Form.Item name="contact_email" label="Contact Email" rules={[{ required: true, type: 'email' }]}>
+              <Input placeholder="contact@company.com" />
+            </Form.Item>
+            <Form.Item name="admin_email" label="Admin Email" rules={[{ required: true, type: 'email' }]}>
+              <Input placeholder="admin@company.com" />
+            </Form.Item>
+            <Form.Item name="admin_password" label="Admin Password" rules={[{ required: true, min: 8 }]}>
+              <Input.Password placeholder="Set a strong password" />
+            </Form.Item>
+            <Form.Item name="admin_full_name" label="Admin Full Name">
+              <Input placeholder="e.g. Jane Doe" />
+            </Form.Item>
+            <Form.Item name="campaign_name" label="Default Campaign Name">
+              <Input placeholder="e.g. Acme-Q3-Outreach (optional)" />
+            </Form.Item>
+          </Form>
+        )}
+      </Modal>
+    </div>
+  )
+}
+
 // ── Main App ───────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -1279,6 +1403,14 @@ export default function App() {
               <TabPane tab={<span><UserOutlined /> Users</span>} key="users">
                 <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
                   <UsersTab user={user} clients={clients} />
+                </div>
+              </TabPane>
+            )}
+
+            {isMultiClientAdmin && (
+              <TabPane tab={<span><GlobalOutlined /> Clients</span>} key="clients">
+                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                  <ClientsTab onClientAdded={() => setRefreshKey(k => k + 1)} />
                 </div>
               </TabPane>
             )}
