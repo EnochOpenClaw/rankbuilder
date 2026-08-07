@@ -10,6 +10,7 @@ import {
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 import { api, auth } from './api'
 
 const { Title, Text } = Typography
@@ -212,6 +213,35 @@ function Dashboard({ clientId }) {
           )
         })}
       </Row>
+
+      {/* ── Leads Over Time Chart ─────────────────────────────────────── */}
+      {data?.leads_over_time?.length > 0 && (
+        <Card
+          title="Lead Volume Over Time"
+          size="small"
+          style={{ marginBottom: 24 }}
+          extra={<Text type="secondary" style={{ fontSize: 11 }}>Daily new leads</Text>}
+        >
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={data.leads_over_time} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10 }}
+                tickFormatter={(d) => dayjs(d).format('MMM D')}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
+              <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+              <Tooltip
+                formatter={(v) => [`${v} lead${v === 1 ? '' : 's'}`, 'New']}
+                labelFormatter={(d) => dayjs(d).format('DD MMM YYYY')}
+              />
+              <Bar dataKey="count" fill="#1677ff" radius={[3, 3, 0, 0]} maxBarSize={28} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
 
       {/* ── Source Performance Table ───────────────────────────────────── */}
       {source_breakdown?.length > 0 && (
