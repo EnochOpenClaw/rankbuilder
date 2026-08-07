@@ -82,6 +82,10 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request('GET', `/leads${qs ? '?' + qs : ''}`, null, true);
   },
+  exportLeads: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request('GET', `/leads/export${qs ? '?' + qs : ''}`, null, true);
+  },
   getLead: (id) => request('GET', `/leads/${id}`, null, true),
   getLeadHistory: (id) => request('GET', `/leads/${id}/history`, null, true),
   updateLead: (id, data) => request('PATCH', `/leads/${id}`, data, true),

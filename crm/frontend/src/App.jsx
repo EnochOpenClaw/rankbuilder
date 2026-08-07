@@ -7,7 +7,7 @@ import {
 import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
-  SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined
+  SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { api, auth } from './api'
@@ -294,6 +294,31 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
 
   useEffect(() => { loadLeads() }, [page, pageSize, filters, search, refreshKey, clientId, campaignFilter])
 
+  const handleExport = async () => {
+    try {
+      const params = { client_id: clientId }
+      if (campaignFilter) params.campaign_id = campaignFilter
+      if (filters.status) params.status = filters.status
+      if (filters.source) params.source = filters.source
+      if (filters.lead_type) params.lead_type = filters.lead_type
+      if (search) params.search = search
+      const csv = await api.exportLeads(params)
+      // Trigger browser download
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `leads_export_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      message.success('Leads exported')
+    } catch (e) {
+      message.error('Export failed: ' + e.message)
+    }
+  }
+
   // Reset to page 1 when filters change (but not on page change itself)
   const prevFilters = useRef()
   useEffect(() => {
@@ -404,6 +429,9 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         </Select>
         <Button onClick={() => setFilters({})} size="small">
           <FilterOutlined /> Clear
+        </Button>
+        <Button onClick={handleExport} size="small" icon={<DownloadOutlined />}>
+          Export
         </Button>
         <Text type="secondary" style={{ fontSize: 12 }}>{total} leads</Text>
       </Space>

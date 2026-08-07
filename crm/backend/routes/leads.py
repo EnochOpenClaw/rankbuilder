@@ -9,11 +9,14 @@ POST   /api/leads/{id}/history — Add a note/transition to history
 """
 
 import threading
+import csv
+import io
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.database import get_db, Lead, LeadHistory, LeadSource, LeadStatus, LeadType
@@ -234,6 +237,102 @@ def list_leads(
     leads = q.order_by(Lead.created_at.desc()).offset(offset).limit(limit).all()
 
     return LeadListResponse(total=total, leads=[_lead_to_response(l) for l in leads])
+
+
+@router.get("/export")
+def export_leads(
+    client_id: Optional[str] = Query(None, description="Filter by client"),
+    campaign_id: Optional[str] = Query(None, description="Filter by campaign"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    lead_type: Optional[str] = Query(None, description="Filter by lead type"),
+    source: Optional[str] = Query(None, description="Filter by source"),
+    search: Optional[str] = Query(None, description="Search by company/email/name"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Export leads as CSV (scoped to the authenticated user's client).
+    Returns a downloadable CSV file with all matching leads.
+    """
+    effective_client_id = enforce_client_scope(client_id, current_user)
+    q = db.query(Lead)
+
+    if effective_client_id:
+        q = q.filter(Lead.client_id == effective_client_id)
+    if campaign_id:
+        q = q.filter(Lead.campaign_id == campaign_id)
+    if status:
+        try:
+            q = q.filter(Lead.status == LeadStatus(status))
+        except ValueError:
+            pass
+    if lead_type:
+        try:
+            q = q.filter(Lead.lead_type == LeadType(lead_type))
+        except ValueError:
+            pass
+    if source:
+        try:
+            q = q.filter(Lead.source == LeadSource(source))
+        except ValueError:
+            pass
+    if search:
+        search_term = f"%{search}%"
+        q = q.filter(
+            (Lead.company_name.ilike(search_term)) |
+            (Lead.contact_email.ilike(search_term)) |
+            (Lead.contact_name.ilike(search_term))
+        )
+
+    leads = q.order_by(Lead.created_at.desc()).all()
+
+    # Build CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "ID", "Created", "Source", "Source Detail", "Campaign", "Status",
+        "Lead Type", "Quality", "Contact Name", "Email", "Phone",
+        "Company", "Website", "Location", "UTM Source", "UTM Medium",
+        "UTM Campaign", "Message", "Pitch Sent", "Sent To Client",
+        "Client Response", "Conversion", "Converted At", "Notes",
+    ])
+
+    for lead in leads:
+        campaign_name = lead.campaign.name if lead.campaign else ""
+        writer.writerow([
+            lead.id,
+            lead.created_at.strftime("%Y-%m-%d %H:%M") if lead.created_at else "",
+            lead.source.value if isinstance(lead.source, LeadSource) else str(lead.source or ""),
+            lead.source_detail or "",
+            campaign_name,
+            lead.status.value if isinstance(lead.status, LeadStatus) else str(lead.status or ""),
+            lead.lead_type.value if isinstance(lead.lead_type, LeadType) else str(lead.lead_type or ""),
+            lead.quality_score if lead.quality_score is not None else "",
+            lead.contact_name or "",
+            lead.contact_email or "",
+            lead.contact_phone or "",
+            lead.company_name or "",
+            lead.company_website or "",
+            lead.location or "",
+            lead.utm_source or "",
+            lead.utm_medium or "",
+            lead.utm_campaign or "",
+            lead.message_excerpt or "",
+            lead.pitch_sent or "",
+            lead.sent_to_client_at.strftime("%Y-%m-%d %H:%M") if lead.sent_to_client_at else "",
+            lead.client_response or "",
+            lead.conversion_status or "",
+            lead.converted_at.strftime("%Y-%m-%d %H:%M") if lead.converted_at else "",
+            lead.notes or "",
+        ])
+
+    output.seek(0)
+    filename = f"leads_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{lead_id}", response_model=LeadResponse)
