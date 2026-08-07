@@ -32,7 +32,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
-from fastapi import APIRouter, Request, Response, HTTPException
+from fastapi import APIRouter, Request, Response, HTTPException, Query
 
 log = logging.getLogger("crm.facebook")
 
@@ -161,9 +161,9 @@ def _fetch_lead_details(leadgen_id: str) -> dict:
 
 @router.get("/facebook/webhook")
 def verify_webhook(
-    hub_mode: str = None,
-    hub_verify_token: str = None,
-    hub_challenge: str = None,
+    hub_mode: str = Query(None, alias="hub.mode"),
+    hub_verify_token: str = Query(None, alias="hub.verify_token"),
+    hub_challenge: str = Query(None, alias="hub.challenge"),
 ):
     """
     Meta webhook verification handshake.
