@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db, Client, Lead, LeadHistory, LeadSource, LeadStatus
 from backend.schemas import LeadPublicCreate, LeadPublicResponse
 from backend.routes.leads import _executor, _notify_async
+from backend.dedupe import find_duplicate, merge_duplicate
 
 router = APIRouter()
 
@@ -33,6 +34,33 @@ def capture_lead(
     # Map source_detail roughly to a source type if it's recognizable
     detail_lower = (payload.product_interest or "").lower()
     source = LeadSource.WEBSITE  # default
+
+    # ── Deduplication check ────────────────────────────────────────────────
+    existing = find_duplicate(db, client.id, payload.contact_email, payload.contact_phone)
+    if existing:
+        new_fields = {
+            "contact_name": payload.contact_name,
+            "contact_phone": payload.contact_phone,
+            "company_name": payload.company_name,
+            "location": payload.location,
+            "message_excerpt": payload.message,
+            "source_detail": payload.product_interest or "Direct enquiry",
+        }
+        lead, _ = merge_duplicate(db, existing, new_fields, source="public_form")
+        hist = LeadHistory(
+            lead_id=existing.id,
+            field_changed="duplicate_attempt",
+            old_value=None,
+            new_value="Duplicate lead from public form merged into existing",
+            changed_by="system",
+        )
+        db.add(hist)
+        db.commit()
+        return LeadPublicResponse(
+            success=True,
+            lead_id=existing.id,
+            message="Lead already exists — merged new info into existing lead.",
+        )
 
     # Build the lead
     lead = Lead(

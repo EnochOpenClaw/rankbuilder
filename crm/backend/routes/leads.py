@@ -29,6 +29,7 @@ from backend.schemas import (
     LeadHistoryResponse,
 )
 from backend.notifications import notify_new_lead, notify_lead_sent
+from backend.dedupe import find_duplicate, merge_duplicate
 from backend.routes.auth import (
     get_current_user,
     require_admin_or_owner,
@@ -141,6 +142,35 @@ def create_lead(
                 status_code=400,
                 detail=f"Invalid lead_type: {payload.lead_type}. Must be VALID, INVALID, or FOLLOW_UP.",
             )
+
+    # ── Deduplication check ────────────────────────────────────────────────
+    existing = find_duplicate(
+        db, effective_client_id, payload.contact_email, payload.contact_phone
+    )
+    if existing:
+        # Merge new info into the existing lead instead of creating a duplicate
+        new_fields = {
+            "contact_name": payload.contact_name,
+            "contact_phone": payload.contact_phone,
+            "company_name": payload.company_name,
+            "company_website": payload.company_website,
+            "location": payload.location,
+            "message_excerpt": payload.message_excerpt,
+            "pitch_sent": payload.pitch_sent,
+            "notes": payload.notes,
+        }
+        lead, _ = merge_duplicate(db, existing, new_fields, source="system")
+        # Record that a duplicate was attempted
+        hist = LeadHistory(
+            lead_id=existing.id,
+            field_changed="duplicate_attempt",
+            old_value=None,
+            new_value=f"Duplicate lead from {source_val.value} merged into existing",
+            changed_by="system",
+        )
+        db.add(hist)
+        db.commit()
+        return _lead_to_response(lead)
 
     lead = Lead(
         client_id=effective_client_id,
