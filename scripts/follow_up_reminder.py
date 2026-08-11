@@ -24,6 +24,28 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _CRM_ROOT = os.path.join(_HERE, "..", "crm")
 if os.path.isdir(_CRM_ROOT) and _CRM_ROOT not in sys.path:
     sys.path.insert(0, _CRM_ROOT)
+
+# Load .env (repo root) so BREVO_API_KEY etc. are available when run via cron.
+def _load_env_file():
+    env_path = os.path.join(_HERE, "..", ".env")
+    if not os.path.isfile(env_path):
+        return
+    try:
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception:
+        pass
+
+_load_env_file()
+
 from backend.database import SessionLocal, Lead, LeadStatus
 
 log = logging.getLogger("crm.followup")
