@@ -17,7 +17,7 @@ import json
 import logging
 import urllib.request
 import urllib.error
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Allow running as a standalone script — resolve the CRM backend package.
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -88,7 +88,8 @@ def _brevo_send(to_email, subject, html_body, to_name=""):
 
 def find_due_leads(db, hours=REMINDER_HOURS):
     """Leads due for follow-up: assigned, not converted/lost, no follow-up in N hours."""
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    from datetime import datetime, timezone, timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     leads = (
         db.query(Lead)
         .filter(
@@ -140,7 +141,7 @@ def main():
             <div style='background:white;border-radius:12px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.08);'>
               <div style='border-bottom:2px solid #f0f0f0;padding-bottom:16px;margin-bottom:20px;'>
                 <h1 style='margin:0;font-size:20px;color:#333;'>⏰ Follow-up Reminder</h1>
-                <p style='margin:8px 0 0;color:#888;font-size:13px;'>RankBuilder CRM · {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</p>
+                <p style='margin:8px 0 0;color:#888;font-size:13px;'>RankBuilder CRM · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
               </div>
               <p style='color:#555;font-size:14px;'>You have <strong>{len(leads)}</strong> lead(s) that haven't been followed up in over {REMINDER_HOURS} hours:</p>
               <table style='width:100%;border-collapse:collapse;margin:16px 0;'>
