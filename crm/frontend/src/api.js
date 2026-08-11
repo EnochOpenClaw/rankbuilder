@@ -91,6 +91,8 @@ export const api = {
   getLeadHistory: (id) => request('GET', `/leads/${id}/history`, null, true),
   updateLead: (id, data) => request('PATCH', `/leads/${id}`, data, true),
   deleteLead: (id) => request('DELETE', `/leads/${id}`, null, true),
+  assignLead: (id, data) => request('POST', `/leads/${id}/assign`, data, true),
+  logFollowUp: (id, data) => request('POST', `/leads/${id}/follow-up`, data, true),
 
   // Users
   createUser: (data) => request('POST', '/auth/register', data, true),

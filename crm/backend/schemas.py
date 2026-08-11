@@ -135,11 +135,36 @@ class LeadResponse(BaseModel):
     conversion_status: Optional[str]
     converted_at: Optional[datetime]
     notes: Optional[str]
+    # ── Sales rep assignment & follow-up ───────────────────────────────────
+    assigned_to: Optional[str] = None
+    assigned_to_name: Optional[str] = None
+    assigned_at: Optional[datetime] = None
+    last_follow_up_at: Optional[datetime] = None
+    follow_up_count: Optional[int] = 0
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class LeadAssignRequest(BaseModel):
+    """Reassign a lead to a specific rep."""
+    assigned_to: str  # rep email
+    assigned_to_name: Optional[str] = None
+
+
+class LeadFollowUpRequest(BaseModel):
+    """Log a follow-up action on a lead."""
+    note: str  # what was done during the follow-up
+    changed_by: Optional[str] = None
+
+
+class LeadFollowUpResponse(BaseModel):
+    lead_id: str
+    follow_up_count: int
+    last_follow_up_at: Optional[datetime]
+    message: str
 
 
 class LeadHistoryItem(BaseModel):
@@ -287,8 +312,22 @@ class FunnelStage(BaseModel):
     count: int
 
 
+class RepBreakdown(BaseModel):
+    """Per-sales-rep productivity stats."""
+    rep_email: str
+    rep_name: str
+    assigned_leads: int = 0
+    follow_ups: int = 0          # total follow-up actions logged
+    contacted: int = 0           # leads moved to CONTACTED
+    converted: int = 0           # leads converted
+    lost: int = 0                # leads lost
+    avg_response_hours: Optional[float] = None
+    last_follow_up_at: Optional[datetime] = None
+
+
 class DashboardResponse(BaseModel):
     summary: DashboardSummary
     source_breakdown: list[SourceBreakdown]
     leads_over_time: list[LeadsOverTime]
     funnel: list[FunnelStage]
+    rep_breakdown: list[RepBreakdown] = []

@@ -27,9 +27,18 @@ from backend.schemas import (
     LeadListResponse,
     LeadHistoryItem,
     LeadHistoryResponse,
+    LeadAssignRequest,
+    LeadFollowUpRequest,
+    LeadFollowUpResponse,
 )
 from backend.notifications import notify_new_lead, notify_lead_sent
 from backend.dedupe import find_duplicate, merge_duplicate
+from backend.assignment import (
+    resolve_rep_for_location,
+    assign_lead,
+    log_follow_up,
+    due_for_follow_up,
+)
 from backend.routes.auth import (
     get_current_user,
     require_admin_or_owner,
@@ -67,6 +76,9 @@ def _notify_async(trigger: str, lead_id: str, db: Session):
                 "pitch_sent": lead.pitch_sent,
                 "sent_to_client_at": str(lead.sent_to_client_at) if lead.sent_to_client_at else None,
                 "notes": lead.notes,
+                "assigned_to": lead.assigned_to,
+                "assigned_to_name": lead.assigned_to_name,
+                "location": lead.location,
             }
             if trigger == "new_lead":
                 notify_new_lead(lead_dict, db=session)
@@ -107,6 +119,11 @@ def _lead_to_response(lead: Lead) -> LeadResponse:
         conversion_status=lead.conversion_status,
         converted_at=lead.converted_at,
         notes=lead.notes,
+        assigned_to=lead.assigned_to,
+        assigned_to_name=lead.assigned_to_name,
+        assigned_at=lead.assigned_at,
+        last_follow_up_at=lead.last_follow_up_at,
+        follow_up_count=lead.follow_up_count,
         created_at=lead.created_at,
         updated_at=lead.updated_at,
     )
@@ -207,6 +224,9 @@ def create_lead(
         changed_by="system",
     )
     db.add(history)
+
+    # ── Auto-assign to sales rep based on region ──────────────────────────
+    assign_lead(db, lead, changed_by="system")
     db.commit()
 
     # ── Email notification: new lead alert ──────────────────────────────────
@@ -409,6 +429,77 @@ def get_lead_history(
             )
             for r in rows
         ]
+    )
+
+
+@router.post("/{lead_id}/assign", response_model=LeadResponse)
+def assign_lead_manual(
+    lead_id: str,
+    payload: LeadAssignRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner()),
+):
+    """Manually reassign a lead to a specific sales rep. Logs the change."""
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    enforce_client_scope(lead.client_id, current_user)
+
+    old_rep = lead.assigned_to
+    lead.assigned_to = payload.assigned_to
+    lead.assigned_to_name = payload.assigned_to_name or payload.assigned_to
+    lead.assigned_at = datetime.utcnow()
+
+    hist = LeadHistory(
+        lead_id=lead.id,
+        field_changed="assigned_to",
+        old_value=old_rep or "",
+        new_value=f"{lead.assigned_to_name} <{lead.assigned_to}>",
+        changed_by=current_user.email if current_user else "system",
+    )
+    db.add(hist)
+    db.commit()
+    db.refresh(lead)
+    return _lead_to_response(lead)
+
+
+@router.post("/{lead_id}/follow-up", response_model=LeadFollowUpResponse)
+def log_follow_up_endpoint(
+    lead_id: str,
+    payload: LeadFollowUpRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner()),
+):
+    """
+    Log a follow-up action on a lead. Increments follow-up count, records the
+    activity in the lead timeline for productivity tracking.
+    """
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    enforce_client_scope(lead.client_id, current_user)
+
+    who = payload.changed_by or (current_user.email if current_user else "system")
+    result = log_follow_up(db, lead, payload.note, changed_by=who)
+
+    # Also mark the lead as CONTACTED if it's still NEW/REVIEWED
+    if lead.status in (LeadStatus.NEW, LeadStatus.REVIEWED):
+        lead.status = LeadStatus.CONTACTED
+        hist = LeadHistory(
+            lead_id=lead.id,
+            field_changed="status",
+            old_value="NEW",
+            new_value="CONTACTED",
+            changed_by=who,
+        )
+        db.add(hist)
+        db.commit()
+
+    return LeadFollowUpResponse(
+        lead_id=lead.id,
+        follow_up_count=result["follow_up_count"],
+        last_follow_up_at=lead.last_follow_up_at,
+        message=f"Follow-up logged. Total follow-ups: {result['follow_up_count']}",
     )
 
 

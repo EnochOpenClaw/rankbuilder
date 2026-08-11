@@ -149,7 +149,7 @@ function Dashboard({ clientId }) {
 
   if (loading) return <Spin style={{ display: 'block', margin: 60 }} />
 
-  const { summary, source_breakdown } = data || {}
+  const { summary, source_breakdown, rep_breakdown } = data || {}
 
   // Response time badge colour: green < 2h, yellow < 8h, red >= 8h
   const rtColor = (h) => h == null ? '#999' : h < 2 ? '#52c41a' : h < 8 ? '#faad14' : '#ff4d4f'
@@ -320,6 +320,55 @@ function Dashboard({ clientId }) {
           />
         </Card>
       )}
+
+      {/* ── Rep Productivity ───────────────────────────────────────────── */}
+      {rep_breakdown?.length > 0 && (
+        <Card
+          title="Sales Rep Productivity"
+          size="small"
+          style={{ marginBottom: 24 }}
+          bodyStyle={{ padding: '0 12px 12px' }}
+          extra={
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              Assigned leads & follow-up activity
+            </Text>
+          }
+        >
+          <Table
+            dataSource={rep_breakdown.map(r => ({
+              key: r.rep_email,
+              rep: r.rep_name || r.rep_email,
+              assigned: r.assigned_leads,
+              followUps: r.follow_ups,
+              contacted: r.contacted,
+              converted: r.converted,
+              lost: r.lost,
+              lastFu: r.last_follow_up_at ? dayjs(r.last_follow_up_at).format('MMM D, HH:mm') : '—',
+            }))}
+            columns={[
+              { title: 'Sales Rep', dataIndex: 'rep', width: 160 },
+              { title: 'Assigned Leads', dataIndex: 'assigned', align: 'right' },
+              { title: 'Follow-ups', dataIndex: 'followUps', align: 'right' },
+              { title: 'Contacted', dataIndex: 'contacted', align: 'right' },
+              {
+                title: 'Converted',
+                dataIndex: 'converted',
+                align: 'right',
+                render: v => <Text style={{ color: '#52c41a', fontWeight: 600 }}>{v}</Text>,
+              },
+              {
+                title: 'Lost',
+                dataIndex: 'lost',
+                align: 'right',
+                render: v => <Text style={{ color: '#ff4d4f' }}>{v}</Text>,
+              },
+              { title: 'Last Follow-up', dataIndex: 'lastFu', align: 'center' },
+            ]}
+            pagination={false}
+            size="small"
+          />
+        </Card>
+      )}
     </div>
   )
 }
@@ -424,6 +473,16 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
       dataIndex: 'location',
       render: v => v ? <Text style={{ fontSize: 12 }}>{v}</Text> : '—',
       width: 130,
+    },
+    {
+      title: 'Assigned',
+      dataIndex: 'assigned_to_name',
+      render: (v, r) => v ? (
+        <Tag color={r.assigned_to === 'richard@houseofsupreme.co.za' ? 'geekblue' : r.assigned_to === 'tiaan@houseofsupreme.co.za' ? 'purple' : 'green'} style={{ fontSize: 11 }}>
+          {v}
+        </Tag>
+      ) : '—',
+      width: 110,
     },
     {
       title: 'Status',
@@ -543,6 +602,11 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true }) {
   const [history, setHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [activeTab, setActiveTab] = useState('details')
+  const [followUpNote, setFollowUpNote] = useState('')
+  const [assignEmail, setAssignEmail] = useState('')
+  const [assignName, setAssignName] = useState('')
+  const [savingFollowUp, setSavingFollowUp] = useState(false)
+  const [savingAssign, setSavingAssign] = useState(false)
   const [form] = Form.useForm()
 
   // Reset + fetch history when a lead is opened
@@ -554,6 +618,9 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true }) {
     setLeadType(lead.lead_type)
     setQualityScore(lead.quality_score)
     setLocation(lead.location || '')
+    setFollowUpNote('')
+    setAssignEmail(lead.assigned_to || '')
+    setAssignName(lead.assigned_to_name || '')
     setActiveTab('details')
     setLoadingHistory(true)
     api.getLeadHistory(lead.id)
@@ -588,6 +655,52 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true }) {
   }
 
   if (!lead) return null
+
+  // ── Follow-up & assignment handlers ───────────────────────────────────────
+
+  const handleLogFollowUp = async () => {
+    if (!followUpNote.trim()) {
+      message.warning('Please describe the follow-up action')
+      return
+    }
+    setSavingFollowUp(true)
+    try {
+      await api.logFollowUp(lead.id, { note: followUpNote })
+      message.success('Follow-up logged')
+      setFollowUpNote('')
+      // Refresh history + lead
+      const h = await api.getLeadHistory(lead.id)
+      setHistory(h.history || [])
+      onUpdate()
+    } catch (e) {
+      message.error('Failed to log follow-up: ' + e.message)
+    } finally {
+      setSavingFollowUp(false)
+    }
+  }
+
+  const handleAssign = async () => {
+    if (!assignEmail) {
+      message.warning('Select a sales rep')
+      return
+    }
+    setSavingAssign(true)
+    try {
+      await api.assignLead(lead.id, { assigned_to: assignEmail, assigned_to_name: assignName })
+      message.success('Lead assigned')
+      onUpdate()
+    } catch (e) {
+      message.error('Assign failed: ' + e.message)
+    } finally {
+      setSavingAssign(false)
+    }
+  }
+
+  const REP_OPTIONS = [
+    { email: 'tiaan@houseofsupreme.co.za', name: 'Tiaan (Johannesburg)' },
+    { email: 'richard@houseofsupreme.co.za', name: 'Richard (Cape Town)' },
+    { email: 'craig@houseofsupreme.co.za', name: 'Craig (Other regions)' },
+  ]
 
   // ── History helpers ─────────────────────────────────────────────────────────
 
@@ -838,6 +951,64 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true }) {
               {lead.notes && <Descriptions.Item label="Notes">{lead.notes}</Descriptions.Item>}
             </Descriptions>
           )}
+
+          {/* ── Sales Rep Assignment ────────────────────────────────────── */}
+          <Card size="small" style={{ marginTop: 16, background: '#fafafa' }}>
+            <Title level={5} style={{ margin: '0 0 8px', fontSize: 13, color: '#555' }}>
+              <UserOutlined /> Sales Rep Assignment
+            </Title>
+            <Descriptions column={1} size="small" bordered style={{ marginBottom: 8 }}>
+              <Descriptions.Item label="Assigned To">
+                {lead.assigned_to_name || '—'}
+                {lead.assigned_to && <Text type="secondary" style={{ fontSize: 11 }}> · {lead.assigned_to}</Text>}
+              </Descriptions.Item>
+              <Descriptions.Item label="Follow-ups">
+                <Text strong>{lead.follow_up_count || 0}</Text>
+                {lead.last_follow_up_at && (
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    {' '}· last {dayjs(lead.last_follow_up_at).format('MMM D, HH:mm')}
+                  </Text>
+                )}
+              </Descriptions.Item>
+            </Descriptions>
+            {canWrite && (
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Space.Compact style={{ width: '100%' }}>
+                  <Select
+                    value={assignEmail}
+                    onChange={(v) => {
+                      setAssignEmail(v)
+                      const rep = REP_OPTIONS.find(r => r.email === v)
+                      setAssignName(rep ? rep.name.split(' (')[0] : v)
+                    }}
+                    placeholder="Assign to sales rep"
+                    style={{ flex: 1 }}
+                  >
+                    {REP_OPTIONS.map(r => (
+                      <Select.Option key={r.email} value={r.email}>{r.name}</Select.Option>
+                    ))}
+                  </Select>
+                  <Button type="primary" onClick={handleAssign} loading={savingAssign}>
+                    Assign
+                  </Button>
+                </Space.Compact>
+                <Input.TextArea
+                  value={followUpNote}
+                  onChange={e => setFollowUpNote(e.target.value)}
+                  rows={2}
+                  placeholder="Log a follow-up... e.g. 'Called client, arranging site visit for Thursday'"
+                />
+                <Button
+                  onClick={handleLogFollowUp}
+                  loading={savingFollowUp}
+                  icon={<CheckCircleOutlined />}
+                  block
+                >
+                  Log Follow-up
+                </Button>
+              </Space>
+            )}
+          </Card>
         </TabPane>
 
         <TabPane tab={

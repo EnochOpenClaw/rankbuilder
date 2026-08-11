@@ -159,6 +159,14 @@ class Lead(Base):
 
     # Internal
     notes = Column(Text, nullable=True)
+
+    # ── Sales rep assignment & follow-up ───────────────────────────────────
+    assigned_to = Column(String(255), nullable=True)          # rep email
+    assigned_to_name = Column(String(255), nullable=True)     # rep display name
+    assigned_at = Column(DateTime, nullable=True)
+    last_follow_up_at = Column(DateTime, nullable=True)
+    follow_up_count = Column(Integer, default=0)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

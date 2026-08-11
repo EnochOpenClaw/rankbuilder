@@ -10,12 +10,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.database import get_db, Lead, LeadSource, LeadStatus, LeadType, User
+from backend.database import get_db, Lead, LeadHistory, LeadSource, LeadStatus, LeadType, User
 from backend.schemas import (
     DashboardSummary,
     SourceBreakdown,
     LeadsOverTime,
     FunnelStage,
+    RepBreakdown,
     DashboardResponse,
 )
 from backend.routes.auth import get_current_user, enforce_client_scope
@@ -174,9 +175,94 @@ def dashboard_summary(
         )
         funnel.append(FunnelStage(stage=label, count=count))
 
+    # ── Rep productivity breakdown ─────────────────────────────────────────
+    # Group leads by assigned rep (only leads that have been assigned)
+    rep_rows = (
+        db.query(Lead.assigned_to, Lead.assigned_to_name, func.count(Lead.id).label("count"))
+        .filter(
+            Lead.client_id == client_id,
+            Lead.created_at >= cutoff,
+            Lead.assigned_to.isnot(None),
+        )
+        .group_by(Lead.assigned_to, Lead.assigned_to_name)
+        .all()
+    )
+
+    rep_breakdown = []
+    for rep_email, rep_name, assigned_count in rep_rows:
+        rep_name = rep_name or rep_email
+        # Follow-ups logged for this rep's leads (via LeadHistory follow_up entries)
+        follow_ups = (
+            db.query(func.count(LeadHistory.id))
+            .join(Lead, Lead.id == LeadHistory.lead_id)
+            .filter(
+                Lead.client_id == client_id,
+                Lead.assigned_to == rep_email,
+                LeadHistory.field_changed == "follow_up",
+                LeadHistory.changed_at >= cutoff,
+            )
+            .scalar()
+            or 0
+        )
+        contacted = (
+            db.query(func.count(Lead.id))
+            .filter(
+                Lead.client_id == client_id,
+                Lead.assigned_to == rep_email,
+                Lead.created_at >= cutoff,
+                Lead.status == LeadStatus.CONTACTED,
+            )
+            .scalar()
+            or 0
+        )
+        converted = (
+            db.query(func.count(Lead.id))
+            .filter(
+                Lead.client_id == client_id,
+                Lead.assigned_to == rep_email,
+                Lead.created_at >= cutoff,
+                Lead.conversion_status == "CONVERTED",
+            )
+            .scalar()
+            or 0
+        )
+        lost = (
+            db.query(func.count(Lead.id))
+            .filter(
+                Lead.client_id == client_id,
+                Lead.assigned_to == rep_email,
+                Lead.created_at >= cutoff,
+                Lead.conversion_status == "LOST",
+            )
+            .scalar()
+            or 0
+        )
+        # Last follow-up time for this rep
+        last_fu = (
+            db.query(func.max(Lead.last_follow_up_at))
+            .filter(
+                Lead.client_id == client_id,
+                Lead.assigned_to == rep_email,
+            )
+            .scalar()
+        )
+        rep_breakdown.append(
+            RepBreakdown(
+                rep_email=rep_email,
+                rep_name=rep_name,
+                assigned_leads=assigned_count,
+                follow_ups=follow_ups,
+                contacted=contacted,
+                converted=converted,
+                lost=lost,
+                last_follow_up_at=last_fu,
+            )
+        )
+
     return DashboardResponse(
         summary=summary,
         source_breakdown=source_breakdown,
         leads_over_time=leads_over_time,
         funnel=funnel,
+        rep_breakdown=rep_breakdown,
     )

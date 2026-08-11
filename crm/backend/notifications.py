@@ -147,9 +147,9 @@ def _lead_detail_html(lead: dict) -> str:
 def notify_new_lead(lead: dict, db=None) -> None:
     """
     Called when a new lead is created in the CRM.
-    Routes by source:
-      - SALES leads (WEBSITE/CALL_IN/DIRECT_MAIL/FACEBOOK/MANUAL) → Tiaan, from sales@
-      - OUTREACH leads (HARO/CONNECTIVELY/GUEST_OUTREACH/WEB_SEARCH) → Craig, from craig@
+    Routes by assigned rep (region-based):
+      - Lead assigned to a rep → notify that rep directly
+      - Fallback: SALES sources → Tiaan; OUTREACH sources → Craig
     """
     client_id = lead.get("client_id")
     if not client_id:
@@ -158,8 +158,14 @@ def notify_new_lead(lead: dict, db=None) -> None:
     source = (lead.get("source") or "UNKNOWN").upper()
     is_sales = source in SALES_SOURCES
 
-    # Determine sender + recipients based on route
-    if is_sales:
+    # Determine recipient based on assigned rep first, then source fallback
+    assigned_to = lead.get("assigned_to")
+    assigned_name = lead.get("assigned_to_name") or "Assigned Rep"
+    if assigned_to:
+        sender_email = SALES_SENDER_EMAIL if is_sales else SENDER_EMAIL
+        sender_name = SALES_SENDER_NAME if is_sales else SENDER_NAME
+        recipients = [(assigned_to, assigned_name)]
+    elif is_sales:
         sender_email = SALES_SENDER_EMAIL
         sender_name = SALES_SENDER_NAME
         recipients = [("tiaan@houseofsupreme.co.za", "Tiaan")]
@@ -172,6 +178,15 @@ def notify_new_lead(lead: dict, db=None) -> None:
     subject = f"🔔 [RankBuilder] New {source} Lead: {company}"
     badge = _lead_source_badge(source)
 
+    # Assigned rep highlight
+    assigned_block = ""
+    if assigned_to:
+        assigned_block = f"""
+    <div style='margin-bottom:20px;padding:12px;background:#f0f4ff;border:1px solid #dbe4ff;border-radius:8px;'>
+      <p style='margin:0;color:#333;font-size:14px;'><strong>Assigned to:</strong> {assigned_name} ({assigned_to})</p>
+      <p style='margin:6px 0 0;color:#888;font-size:12px;'>This lead has been auto-routed to you based on the region.</p>
+    </div>"""
+
     html_body = f"""
 <!DOCTYPE html>
 <html>
@@ -183,6 +198,7 @@ def notify_new_lead(lead: dict, db=None) -> None:
     </div>
 
     <div style='margin-bottom:20px;'>{badge}</div>
+    {assigned_block}
 
     <h2 style='margin:0 0 16px;font-size:18px;color:#111;'>{company}</h2>
 
@@ -190,7 +206,7 @@ def notify_new_lead(lead: dict, db=None) -> None:
 
     <div style='margin-top:24px;padding:16px;background:#eef2ff;border-radius:8px;text-align:center;'>
       <p style='margin:0 0 8px;color:#333;font-size:14px;'><strong>What to do next:</strong></p>
-      <p style='margin:0;color:#666;font-size:13px;'>Review this lead in the CRM portal. Update the status to CONTACTED once you've reached out, or mark CONVERTED/LOST when the outcome is known.</p>
+      <p style='margin:0;color:#666;font-size:13px;'>Log your follow-up in the CRM portal (assigning it as CONTACTED) so your activity is tracked. Update to CONVERTED/LOST when the outcome is known.</p>
     </div>
 
     <p style='margin:20px 0 0;color:#aaa;font-size:11px;text-align:center;'>
