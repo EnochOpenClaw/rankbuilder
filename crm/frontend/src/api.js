@@ -95,7 +95,7 @@ export const api = {
   logFollowUp: (id, data) => request('POST', `/leads/${id}/follow-up`, data, true),
 
   // Users
-  createUser: (data) => request('POST', '/auth/register', data, true),
+  createUser: (data) => request('POST', '/auth/users', data, true),
   listUsers: () => request('GET', '/auth/users', null, true),
   deleteUser: (id) => request('DELETE', `/auth/users/${id}`, null, true),
 

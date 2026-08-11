@@ -51,6 +51,8 @@ def migrate():
         print("Richard user already exists")
     else:
         import uuid
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")
         client_id = None
         c.execute("SELECT id FROM clients LIMIT 1")
         row = c.fetchone()
@@ -58,10 +60,10 @@ def migrate():
             client_id = row[0]
         hashed = hash_password("Richard1234!")
         c.execute(
-            "INSERT INTO users (id, email, hashed_password, full_name, client_id, role, is_active) "
-            "VALUES (?, ?, ?, ?, ?, ?, 1)",
+            "INSERT INTO users (id, email, hashed_password, full_name, client_id, role, created_at, updated_at, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
             (str(uuid.uuid4()), "richard@houseofsupreme.co.za", hashed,
-             "Richard", client_id, "CLIENT_ADMIN"),
+             "Richard", client_id, "CLIENT_ADMIN", now, now),
         )
         print("Created Richard user (Cape Town rep)")
 

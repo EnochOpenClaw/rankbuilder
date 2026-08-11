@@ -34,7 +34,7 @@ class UserResponse(BaseModel):
     full_name: str
     client_id: str | None
     role: str
-    created_at: datetime
+    created_at: datetime | None = None  # optional — a missing timestamp shouldn't break the list
 
     class Config:
         from_attributes = True
