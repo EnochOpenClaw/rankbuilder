@@ -19,9 +19,11 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta
 
-# Allow running as a standalone script
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
-
+# Allow running as a standalone script — resolve the CRM backend package.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_CRM_ROOT = os.path.join(_HERE, "..", "crm")
+if os.path.isdir(_CRM_ROOT) and _CRM_ROOT not in sys.path:
+    sys.path.insert(0, _CRM_ROOT)
 from backend.database import SessionLocal, Lead, LeadStatus
 
 log = logging.getLogger("crm.followup")
