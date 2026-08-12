@@ -36,6 +36,9 @@ class LeadSource(str, enum.Enum):
     CALL_IN = "CALL_IN"
     WEB_SEARCH = "WEB_SEARCH"
     MANUAL = "MANUAL"
+    WHATSAPP = "WHATSAPP"
+    PPC = "PPC"
+    WORD_OF_MOUTH = "WORD_OF_MOUTH"
 
 
 class LeadStatus(str, enum.Enum):
@@ -173,6 +176,8 @@ class Lead(Base):
     client = relationship("Client", back_populates="leads")
     campaign = relationship("Campaign", back_populates="leads")
     history = relationship("LeadHistory", back_populates="lead", cascade="all, delete-orphan")
+    activities = relationship("LeadActivity", back_populates="lead", cascade="all, delete-orphan")
+    emails = relationship("EmailLog", back_populates="lead", cascade="all, delete-orphan")
 
 
 class LeadHistory(Base):
@@ -191,6 +196,21 @@ class LeadHistory(Base):
     lead = relationship("Lead", back_populates="history")
 
 
+class NotificationGroup(Base):
+    """Named group of notification recipients for a client (e.g. 'Sales Team')."""
+
+    __tablename__ = "notification_groups"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    client_id = Column(String(36), ForeignKey("clients.id"), nullable=False)
+    name = Column(String(100), nullable=False)                 # e.g. "Sales Team"
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    client = relationship("Client")
+    members = relationship("NotificationSetting", back_populates="group", cascade="all, delete-orphan")
+
+
 class NotificationSetting(Base):
     """Per-client notification delivery settings (email/SMS/webhook)."""
 
@@ -198,6 +218,7 @@ class NotificationSetting(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     client_id = Column(String(36), ForeignKey("clients.id"), nullable=False)
+    group_id = Column(String(36), ForeignKey("notification_groups.id"), nullable=True)
     notification_type = Column(String(20), nullable=False)  # EMAIL | SMS | WEBHOOK
     target = Column(String(255), nullable=True)              # email address, phone, or webhook URL
     name = Column(String(100), nullable=True)                 # friendly recipient name
@@ -205,6 +226,52 @@ class NotificationSetting(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     client = relationship("Client")
+    group = relationship("NotificationGroup", back_populates="members")
+
+
+class LeadActivity(Base):
+    """Stacked activity log for a lead — every call/email/contact attempt gets its own row.
+
+    This replaces the old single 'last_follow_up_at' counter model. Each attempt
+    (e.g. called 08:00 no answer, called 10:00 no answer) is preserved as a
+    separate entry so the full history is visible on the lead timeline.
+    """
+
+    __tablename__ = "lead_activities"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    lead_id = Column(String(36), ForeignKey("leads.id"), nullable=False)
+    activity_type = Column(String(20), nullable=False)  # CALL | EMAIL | WHATSAPP | SMS | NOTE | OTHER
+    outcome = Column(String(20), nullable=True)          # NO_ANSWER | LEFT_VOICEMAIL | SPOKE | SENT | RECEIVED | OTHER
+    note = Column(Text, nullable=True)                   # what happened during this attempt
+    occurred_at = Column(DateTime, default=datetime.utcnow)  # when the attempt happened
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String(255), nullable=True)      # user email
+
+    lead = relationship("Lead", back_populates="activities")
+
+
+class EmailLog(Base):
+    """Short-term email log — attach sent/received emails to a lead's timeline.
+
+    Phase 1: manual entry (paste email subject/body). Phase 2: Office 365 / Outlook
+    Graph integration to auto-capture.
+    """
+
+    __tablename__ = "email_logs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    lead_id = Column(String(36), ForeignKey("leads.id"), nullable=False)
+    direction = Column(String(10), nullable=False)  # INBOUND | OUTBOUND
+    subject = Column(String(500), nullable=True)
+    body = Column(Text, nullable=True)
+    from_email = Column(String(255), nullable=True)
+    to_email = Column(String(255), nullable=True)
+    sent_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String(255), nullable=True)
+
+    lead = relationship("Lead", back_populates="emails")
 
 
 class User(Base):

@@ -158,17 +158,18 @@ def notify_new_lead(lead: dict, db=None) -> None:
     source = (lead.get("source") or "UNKNOWN").upper()
     is_sales = source in SALES_SOURCES
 
-    # Determine recipient based on assigned rep first, then source fallback
+    # Determine recipients:
+    #   - Sales leads → notify the full Sales Team group (all 4 HOS reps)
+    #   - Outreach leads → notify Craig
+    #   - If a specific rep is assigned, still notify the team but highlight the rep
     assigned_to = lead.get("assigned_to")
     assigned_name = lead.get("assigned_to_name") or "Assigned Rep"
-    if assigned_to:
-        sender_email = SALES_SENDER_EMAIL if is_sales else SENDER_EMAIL
-        sender_name = SALES_SENDER_NAME if is_sales else SENDER_NAME
-        recipients = [(assigned_to, assigned_name)]
-    elif is_sales:
+    if is_sales:
         sender_email = SALES_SENDER_EMAIL
         sender_name = SALES_SENDER_NAME
-        recipients = [("tiaan@houseofsupreme.co.za", "Tiaan")]
+        recipients = _get_notification_recipients(client_id, db)
+        if not recipients:
+            recipients = [("tiaan@houseofsupreme.co.za", "Tiaan")]
     else:
         sender_email = SENDER_EMAIL
         sender_name = SENDER_NAME
@@ -289,10 +290,12 @@ def _get_notification_recipients(client_id: str, db) -> list[tuple[str, str]]:
     Falls back to a hardcoded HOS list if DB lookup fails.
     """
     # Fast path: if no db provided, use HOS defaults
+    # House of Supreme Sales Team — all 4 notified on new leads
     HOS_DEFAULT = [
-        ("tiaan@houseofsupreme.co.za", "Tiaan"),
-        ("robin@houseofsupreme.co.za", "Robin"),
-        ("craigp@ct-designs.co.za", "Craig"),
+        ("lee-ann@houseofsupreme.co.za", "Lee-Ann Van Zyl"),
+        ("robin@houseofsupreme.co.za", "Robin Bras"),
+        ("tiaan@houseofsupreme.co.za", "Tiaan van der Walt"),
+        ("vanessa@houseofsupreme.co.za", "Vanessa Bras"),
     ]
 
     if db is None:

@@ -19,7 +19,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from backend.database import get_db, Lead, LeadHistory, LeadSource, LeadStatus, LeadType
+from backend.database import (
+    get_db, Lead, LeadHistory, LeadSource, LeadStatus, LeadType,
+    LeadActivity, EmailLog,
+)
 from backend.schemas import (
     LeadCreate,
     LeadUpdate,
@@ -30,6 +33,11 @@ from backend.schemas import (
     LeadAssignRequest,
     LeadFollowUpRequest,
     LeadFollowUpResponse,
+    LeadActivityItem,
+    LeadActivityResponse,
+    EmailLogCreate,
+    EmailLogItem,
+    EmailLogResponse,
 )
 from backend.notifications import notify_new_lead, notify_lead_sent
 from backend.dedupe import find_duplicate, merge_duplicate
@@ -480,7 +488,12 @@ def log_follow_up_endpoint(
     enforce_client_scope(lead.client_id, current_user)
 
     who = payload.changed_by or (current_user.email if current_user else "system")
-    result = log_follow_up(db, lead, payload.note, changed_by=who)
+    result = log_follow_up(
+        db, lead, payload.note, changed_by=who,
+        activity_type=payload.activity_type,
+        outcome=payload.outcome,
+        occurred_at=payload.occurred_at,
+    )
 
     # Also mark the lead as CONTACTED if it's still NEW/REVIEWED
     if lead.status in (LeadStatus.NEW, LeadStatus.REVIEWED):
@@ -500,6 +513,127 @@ def log_follow_up_endpoint(
         follow_up_count=result["follow_up_count"],
         last_follow_up_at=lead.last_follow_up_at,
         message=f"Follow-up logged. Total follow-ups: {result['follow_up_count']}",
+    )
+
+
+@router.get("/{lead_id}/activities", response_model=LeadActivityResponse)
+def get_lead_activities(lead_id: str, db: Session = Depends(get_db)):
+    """Get the full stacked activity timeline for a lead (calls, emails, etc.).
+
+    Every attempt is preserved as its own row — e.g. called 08:00 no answer,
+    called 10:00 no answer — so the full history is visible.
+    """
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    rows = (
+        db.query(LeadActivity)
+        .filter(LeadActivity.lead_id == lead_id)
+        .order_by(LeadActivity.occurred_at.asc())
+        .all()
+    )
+    return LeadActivityResponse(
+        activities=[
+            LeadActivityItem(
+                id=r.id,
+                lead_id=r.lead_id,
+                activity_type=r.activity_type,
+                outcome=r.outcome,
+                note=r.note,
+                occurred_at=r.occurred_at,
+                created_at=r.created_at,
+                created_by=r.created_by,
+            )
+            for r in rows
+        ]
+    )
+
+
+@router.post("/{lead_id}/emails", response_model=EmailLogItem, status_code=201)
+def log_email(
+    lead_id: str,
+    payload: EmailLogCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner()),
+):
+    """Attach an email to a lead's timeline (short-term manual entry).
+
+    Phase 2 will replace this with Office 365 / Outlook Graph auto-capture.
+    """
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    enforce_client_scope(lead.client_id, current_user)
+
+    who = payload.created_by or (current_user.email if current_user else "system")
+    email = EmailLog(
+        lead_id=lead.id,
+        direction=payload.direction,
+        subject=payload.subject,
+        body=payload.body,
+        from_email=payload.from_email,
+        to_email=payload.to_email,
+        sent_at=payload.sent_at or datetime.utcnow(),
+        created_by=who,
+    )
+    db.add(email)
+    db.commit()
+    db.refresh(email)
+
+    # Also log it as an activity on the timeline
+    activity = LeadActivity(
+        lead_id=lead.id,
+        activity_type="EMAIL",
+        outcome="SENT" if payload.direction == "OUTBOUND" else "RECEIVED",
+        note=f"Email {payload.direction.lower()}: {payload.subject or '(no subject)'}",
+        occurred_at=email.sent_at,
+        created_by=who,
+    )
+    db.add(activity)
+    db.commit()
+
+    return EmailLogItem(
+        id=email.id,
+        lead_id=email.lead_id,
+        direction=email.direction,
+        subject=email.subject,
+        body=email.body,
+        from_email=email.from_email,
+        to_email=email.to_email,
+        sent_at=email.sent_at,
+        created_at=email.created_at,
+        created_by=email.created_by,
+    )
+
+
+@router.get("/{lead_id}/emails", response_model=EmailLogResponse)
+def get_lead_emails(lead_id: str, db: Session = Depends(get_db)):
+    """Get the email log for a lead."""
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    rows = (
+        db.query(EmailLog)
+        .filter(EmailLog.lead_id == lead_id)
+        .order_by(EmailLog.sent_at.asc())
+        .all()
+    )
+    return EmailLogResponse(
+        emails=[
+            EmailLogItem(
+                id=r.id,
+                lead_id=r.lead_id,
+                direction=r.direction,
+                subject=r.subject,
+                body=r.body,
+                from_email=r.from_email,
+                to_email=r.to_email,
+                sent_at=r.sent_at,
+                created_at=r.created_at,
+                created_by=r.created_by,
+            )
+            for r in rows
+        ]
     )
 
 

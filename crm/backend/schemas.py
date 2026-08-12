@@ -21,6 +21,9 @@ class LeadSource(str):
     CALL_IN = "CALL_IN"
     WEB_SEARCH = "WEB_SEARCH"
     MANUAL = "MANUAL"
+    WHATSAPP = "WHATSAPP"
+    PPC = "PPC"
+    WORD_OF_MOUTH = "WORD_OF_MOUTH"
 
 
 class LeadStatus(str):
@@ -158,6 +161,9 @@ class LeadFollowUpRequest(BaseModel):
     """Log a follow-up action on a lead."""
     note: str  # what was done during the follow-up
     changed_by: Optional[str] = None
+    activity_type: str = "CALL"  # CALL | EMAIL | WHATSAPP | SMS | NOTE | OTHER
+    outcome: Optional[str] = None  # NO_ANSWER | LEFT_VOICEMAIL | SPOKE | SENT | RECEIVED | OTHER
+    occurred_at: Optional[datetime] = None  # when the attempt happened (defaults to now)
 
 
 class LeadFollowUpResponse(BaseModel):
@@ -165,6 +171,79 @@ class LeadFollowUpResponse(BaseModel):
     follow_up_count: int
     last_follow_up_at: Optional[datetime]
     message: str
+
+
+class LeadActivityItem(BaseModel):
+    """A single stacked activity/attempt on a lead timeline."""
+    id: str
+    lead_id: str
+    activity_type: str
+    outcome: Optional[str]
+    note: Optional[str]
+    occurred_at: Optional[datetime]
+    created_at: datetime
+    created_by: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class LeadActivityResponse(BaseModel):
+    activities: list[LeadActivityItem]
+
+
+class EmailLogCreate(BaseModel):
+    """Attach an email to a lead's timeline (short-term manual entry)."""
+    direction: str = "OUTBOUND"  # INBOUND | OUTBOUND
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    from_email: Optional[str] = None
+    to_email: Optional[str] = None
+    sent_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+
+
+class EmailLogItem(BaseModel):
+    id: str
+    lead_id: str
+    direction: str
+    subject: Optional[str]
+    body: Optional[str]
+    from_email: Optional[str]
+    to_email: Optional[str]
+    sent_at: Optional[datetime]
+    created_at: datetime
+    created_by: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class EmailLogResponse(BaseModel):
+    emails: list[EmailLogItem]
+
+
+class NotificationGroupCreate(BaseModel):
+    """Create a named notification group for a client."""
+    client_id: str
+    name: str
+    description: Optional[str] = None
+    members: list[dict] = []  # [{target, name, notification_type}]
+
+
+class NotificationGroupItem(BaseModel):
+    id: str
+    client_id: str
+    name: str
+    description: Optional[str]
+    members: list[dict] = []
+
+    class Config:
+        from_attributes = True
+
+
+class NotificationGroupResponse(BaseModel):
+    groups: list[NotificationGroupItem]
 
 
 class LeadHistoryItem(BaseModel):

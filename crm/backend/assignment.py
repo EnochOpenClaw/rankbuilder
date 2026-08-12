@@ -109,18 +109,35 @@ def assign_lead(db, lead: Lead, changed_by: str = "system") -> bool:
     return True
 
 
-def log_follow_up(db, lead: Lead, note: str, changed_by: str = "system") -> dict:
+def log_follow_up(db, lead: Lead, note: str, changed_by: str = "system",
+                  activity_type: str = "CALL", outcome: str = None,
+                  occurred_at: datetime = None) -> dict:
     """
     Log a follow-up action on a lead. Increments follow_up_count, updates
-    last_follow_up_at, and records it in LeadHistory for productivity tracking.
+    last_follow_up_at, and records a stacked LeadActivity row so every attempt
+    (e.g. called 08:00 no answer, called 10:00 no answer) is preserved on the
+    timeline.
 
     Returns a dict with the updated counters for the response.
     """
+    from backend.database import LeadActivity
     from datetime import datetime as _dt
     now = _dt.utcnow()
+    occurred = occurred_at or now
 
     lead.follow_up_count = (lead.follow_up_count or 0) + 1
-    lead.last_follow_up_at = now
+    lead.last_follow_up_at = occurred
+
+    # Stacked activity row — one per attempt, never overwritten
+    activity = LeadActivity(
+        lead_id=lead.id,
+        activity_type=activity_type,
+        outcome=outcome,
+        note=note or "Follow-up logged",
+        occurred_at=occurred,
+        created_by=changed_by,
+    )
+    db.add(activity)
 
     hist = LeadHistory(
         lead_id=lead.id,
