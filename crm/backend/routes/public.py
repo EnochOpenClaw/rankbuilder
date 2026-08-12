@@ -33,7 +33,15 @@ def capture_lead(
 
     # Map source_detail roughly to a source type if it's recognizable
     detail_lower = (payload.product_interest or "").lower()
-    source = LeadSource.WEBSITE  # default
+    # Use explicit source if provided (e.g. WhatsApp webhook passes WHATSAPP),
+    # otherwise default to WEBSITE.
+    if payload.source:
+        try:
+            source = LeadSource(payload.source.upper())
+        except ValueError:
+            source = LeadSource.WEBSITE
+    else:
+        source = LeadSource.WEBSITE  # default
 
     # ── Deduplication check ────────────────────────────────────────────────
     existing = find_duplicate(db, client.id, payload.contact_email, payload.contact_phone)

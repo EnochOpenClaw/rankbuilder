@@ -140,6 +140,7 @@ def _handle_message(msg: dict, contacts: list):
         "contact_phone": _format_phone(from_wa),
         "message": text or f"WhatsApp message received from {from_wa}",
         "product_interest": SOURCE_DETAIL,
+        "source": "WHATSAPP",
     }
 
     _push_to_crm(payload)

@@ -96,6 +96,7 @@ class LeadPublicCreate(BaseModel):
     product_interest: Optional[str] = None  # what they enquired about
     location: Optional[str] = None  # suburb / city
     message: Optional[str] = None  # their enquiry message
+    source: Optional[str] = None  # optional source override (WEBSITE default)
     # UTM tracking
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
