@@ -7,7 +7,8 @@ import {
 import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
-  SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined
+  SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
+  PaperClipOutlined, UploadOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -632,6 +633,10 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   const [assignName, setAssignName] = useState('')
   const [savingFollowUp, setSavingFollowUp] = useState(false)
   const [savingAssign, setSavingAssign] = useState(false)
+  const [documents, setDocuments] = useState([])
+  const [loadingDocs, setLoadingDocs] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [docCategory, setDocCategory] = useState('OTHER')
   const [form] = Form.useForm()
 
   // Reset + fetch history when a lead is opened
@@ -658,6 +663,11 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
       .then(res => setHistory(res.history || []))
       .catch(() => setHistory([]))
       .finally(() => setLoadingHistory(false))
+    setLoadingDocs(true)
+    api.listDocuments(lead.id)
+      .then(res => setDocuments(res.documents || []))
+      .catch(() => setDocuments([]))
+      .finally(() => setLoadingDocs(false))
   }, [lead, open])
 
   const handleSave = async () => {
@@ -1102,6 +1112,96 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
               </Space>
             )}
           </Card>
+        </TabPane>
+
+        <TabPane tab={<span><PaperClipOutlined /> Documents <Badge count={documents.length} size="small" style={{ marginLeft: 4 }} /></span>} key="documents">
+          {canWrite && (
+            <Space direction="vertical" style={{ width: '100%', marginBottom: 12 }}>
+              <Space.Compact style={{ width: '100%' }}>
+                <Select value={docCategory} onChange={setDocCategory} style={{ width: 140 }}>
+                  <Select.Option value="EMAIL">Email</Select.Option>
+                  <Select.Option value="QUOTE">Quote</Select.Option>
+                  <Select.Option value="RESPONSE">Response</Select.Option>
+                  <Select.Option value="OTHER">Other</Select.Option>
+                </Select>
+                <input
+                  type="file"
+                  id={`file-upload-${lead.id}`}
+                  style={{ display: 'none' }}
+                  onChange={async (e) => {
+                    const file = e.target.files && e.target.files[0]
+                    if (!file) return
+                    setUploading(true)
+                    try {
+                      await api.uploadDocument(lead.id, file, docCategory)
+                      message.success('Document uploaded')
+                      const res = await api.listDocuments(lead.id)
+                      setDocuments(res.documents || [])
+                    } catch (err) {
+                      message.error(err.message || 'Upload failed')
+                    } finally {
+                      setUploading(false)
+                      e.target.value = ''
+                    }
+                  }}
+                />
+                <Button
+                  icon={<UploadOutlined />}
+                  loading={uploading}
+                  onClick={() => document.getElementById(`file-upload-${lead.id}`).click()}
+                  style={{ flex: 1 }}
+                >
+                  {uploading ? 'Uploading...' : 'Upload Document'}
+                </Button>
+              </Space.Compact>
+              <Text type="secondary" style={{ fontSize: 11 }}>Attach response emails, quotes sent, or other files (max 25 MB).</Text>
+            </Space>
+          )}
+          {loadingDocs ? (
+            <Spin style={{ display: 'block', marginTop: 40 }} />
+          ) : documents.length === 0 ? (
+            <Empty description="No documents attached yet" style={{ marginTop: 40 }} />
+          ) : (
+            <div>
+              {documents.map(doc => (
+                <div key={doc.id} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  border: '1px solid #f0f0f0', borderRadius: 6, padding: '8px 12px', marginBottom: 8
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {doc.filename}
+                    </div>
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      {doc.category} · {doc.size > 0 ? `${(doc.size / 1024).toFixed(0)} KB` : ''}
+                      {' '}· {doc.uploaded_by || ''} · {dayjs(doc.created_at).format('MMM D, YYYY HH:mm')}
+                    </Text>
+                  </div>
+                  <Space>
+                    <Button
+                      size="small" type="link" icon={<DownloadOutlined />}
+                      href={api.downloadDocumentUrl(lead.id, doc.id)} target="_blank"
+                    >Open</Button>
+                    {canWrite && (
+                      <Button
+                        size="small" type="text" danger icon={<DeleteOutlined />}
+                        onClick={async () => {
+                          try {
+                            await api.deleteDocument(lead.id, doc.id)
+                            message.success('Document deleted')
+                            const res = await api.listDocuments(lead.id)
+                            setDocuments(res.documents || [])
+                          } catch (err) {
+                            message.error('Delete failed: ' + err.message)
+                          }
+                        }}
+                      />
+                    )}
+                  </Space>
+                </div>
+              ))}
+            </div>
+          )}
         </TabPane>
 
         <TabPane tab={

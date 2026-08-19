@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from backend.database import engine, Base
-from backend.routes import leads, clients, dashboard, auth, notifications, public, facebook, campaigns, whatsapp
+from backend.routes import leads, clients, dashboard, auth, notifications, public, facebook, campaigns, whatsapp, documents
 
 # Build artifact path — served as static files in production
 BACKEND_DIR   = Path(__file__).parent   # .../crm/backend/
@@ -49,6 +49,7 @@ app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"]
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(facebook.router, prefix="/api", tags=["Facebook"])  # /api/facebook/webhook
 app.include_router(whatsapp.router, prefix="/api", tags=["WhatsApp"])  # /api/whatsapp/webhook
+app.include_router(documents.router, prefix="/api/leads", tags=["Documents"])  # /api/leads/{id}/documents
 app.include_router(campaigns.router, prefix="/api/campaigns", tags=["Campaigns"])
 
 

@@ -180,6 +180,7 @@ class Lead(Base):
     history = relationship("LeadHistory", back_populates="lead", cascade="all, delete-orphan")
     activities = relationship("LeadActivity", back_populates="lead", cascade="all, delete-orphan")
     emails = relationship("EmailLog", back_populates="lead", cascade="all, delete-orphan")
+    documents = relationship("LeadDocument", back_populates="lead", cascade="all, delete-orphan")
 
 
 class LeadHistory(Base):
@@ -274,6 +275,28 @@ class EmailLog(Base):
     created_by = Column(String(255), nullable=True)
 
     lead = relationship("Lead", back_populates="emails")
+
+
+class LeadDocument(Base):
+    """Attached documents for a lead — response emails, quotes sent, etc.
+
+    Files are stored on disk under {UPLOAD_DIR}/{lead_id}/; this row holds the
+    metadata (original filename, stored name, size, category).
+    """
+
+    __tablename__ = "lead_documents"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    lead_id = Column(String(36), ForeignKey("leads.id"), nullable=False)
+    filename = Column(String(500), nullable=False)   # original display name
+    stored_name = Column(String(500), nullable=False) # uuid-based name on disk
+    content_type = Column(String(255), nullable=True)
+    size = Column(Integer, default=0)
+    category = Column(String(50), nullable=True)     # EMAIL | QUOTE | RESPONSE | OTHER
+    uploaded_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    lead = relationship("Lead", back_populates="documents")
 
 
 class User(Base):

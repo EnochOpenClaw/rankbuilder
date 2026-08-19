@@ -94,6 +94,28 @@ export const api = {
   assignLead: (id, data) => request('POST', `/leads/${id}/assign`, data, true),
   logFollowUp: (id, data) => request('POST', `/leads/${id}/follow-up`, data, true),
 
+  // Documents (attachments)
+  listDocuments: (id) => request('GET', `/leads/${id}/documents`, null, true),
+  uploadDocument: (id, file, category) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (category) fd.append('category', category);
+    const token = getToken();
+    return fetch(`${BASE}/leads/${id}/documents${category ? '?category=' + category : ''}`, {
+      method: 'POST',
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      body: fd,
+    }).then(async res => {
+      if (!res.ok) {
+        const raw = await res.text();
+        throw new Error(`Upload failed: ${res.status} ${raw.slice(0, 120)}`);
+      }
+      return res.json();
+    });
+  },
+  downloadDocumentUrl: (id, docId) => `/api/leads/${id}/documents/${docId}/download`,
+  deleteDocument: (id, docId) => request('DELETE', `/leads/${id}/documents/${docId}`, null, true),
+
   // Users
   createUser: (data) => request('POST', '/auth/users', data, true),
   listUsers: () => request('GET', '/auth/users', null, true),
