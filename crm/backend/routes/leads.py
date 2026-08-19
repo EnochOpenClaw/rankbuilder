@@ -114,6 +114,7 @@ def _lead_to_response(lead: Lead) -> LeadResponse:
         utm_medium=lead.utm_medium,
         utm_campaign=lead.utm_campaign,
         location=lead.location,
+        address=lead.address,
         status=lead.status.value if isinstance(lead.status, LeadStatus) else lead.status,
         lead_type=lead.lead_type.value if isinstance(lead.lead_type, LeadType) else lead.lead_type,
         quality_score=lead.quality_score,

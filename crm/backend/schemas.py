@@ -82,6 +82,14 @@ class LeadUpdate(BaseModel):
     conversion_status: Optional[str] = None  # CONVERTED or LOST
     source_detail: Optional[str] = None
     location: Optional[str] = None
+    # ── Editable contact info (agent can update) ─────────────────────────
+    contact_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    company_name: Optional[str] = None
+    company_website: Optional[str] = None
+    # Full confirmed street address
+    address: Optional[str] = None
 
     class Config:
         use_enum_values = True
@@ -124,6 +132,7 @@ class LeadResponse(BaseModel):
     utm_medium: Optional[str]
     utm_campaign: Optional[str]
     location: Optional[str]
+    address: Optional[str]
     status: str
     lead_type: Optional[str]
     quality_score: Optional[int]

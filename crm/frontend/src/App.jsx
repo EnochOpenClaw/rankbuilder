@@ -617,6 +617,12 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   const [leadType, setLeadType] = useState(null)
   const [qualityScore, setQualityScore] = useState(null)
   const [location, setLocation] = useState('')
+  const [contactName, setContactName] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
+  const [companyName, setCompanyName] = useState('')
+  const [companyWebsite, setCompanyWebsite] = useState('')
+  const [address, setAddress] = useState('')
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -637,6 +643,12 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
     setLeadType(lead.lead_type)
     setQualityScore(lead.quality_score)
     setLocation(lead.location || '')
+    setContactName(lead.contact_name || '')
+    setContactEmail(lead.contact_email || '')
+    setContactPhone(lead.contact_phone || '')
+    setCompanyName(lead.company_name || '')
+    setCompanyWebsite(lead.company_website || '')
+    setAddress(lead.address || '')
     setFollowUpNote('')
     setAssignEmail(lead.assigned_to || '')
     setAssignName(lead.assigned_to_name || '')
@@ -659,6 +671,12 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
         lead_type: leadType,
         quality_score: qualityScore,
         location,
+        contact_name: contactName,
+        contact_email: contactEmail,
+        contact_phone: contactPhone,
+        company_name: companyName,
+        company_website: companyWebsite,
+        address,
         conversion_status:
           status === 'CONVERTED' ? 'CONVERTED' :
           status === 'LOST' ? 'LOST' : undefined,
@@ -835,44 +853,104 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
           <Title level={5} style={{ margin: '12px 0 8px', fontSize: 13, color: '#555' }}>
             Contact Information
           </Title>
-          <Descriptions column={1} bordered size="small">
-            <Descriptions.Item label="Company">{lead.company_name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Contact">{lead.contact_name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Email">
-              {lead.contact_email
-                ? <a href={`mailto:${lead.contact_email}`}>{lead.contact_email}</a>
-                : '—'}
-            </Descriptions.Item>
-            <Descriptions.Item label="Phone">{lead.contact_phone || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Website">
-              {lead.company_website
-                ? <a href={lead.company_website} target="_blank" rel="noreferrer">{lead.company_website}</a>
-                : '—'}
-            </Descriptions.Item>
-            {lead.source_query && <Descriptions.Item label="Query/Article">{lead.source_query}</Descriptions.Item>}
-            <Descriptions.Item label="Created">
-              {dayjs(lead.created_at).format('YYYY-MM-DD HH:mm')}
-            </Descriptions.Item>
-            {lead.sent_to_client_at && (
-              <Descriptions.Item label="Sent to Client">
-                {dayjs(lead.sent_to_client_at).format('YYYY-MM-DD HH:mm')}
+          {canWrite ? (
+            <>
+              <Input
+                value={companyName}
+                onChange={e => setCompanyName(e.target.value)}
+                placeholder="Company name"
+                style={{ marginBottom: 8 }}
+              />
+              <Input
+                value={contactName}
+                onChange={e => setContactName(e.target.value)}
+                placeholder="Contact person"
+                style={{ marginBottom: 8 }}
+              />
+              <Input
+                value={contactEmail}
+                onChange={e => setContactEmail(e.target.value)}
+                placeholder="Email address"
+                style={{ marginBottom: 8 }}
+              />
+              <Input
+                value={contactPhone}
+                onChange={e => setContactPhone(e.target.value)}
+                placeholder="Phone number"
+                style={{ marginBottom: 8 }}
+              />
+              <Input
+                value={companyWebsite}
+                onChange={e => setCompanyWebsite(e.target.value)}
+                placeholder="Website (optional)"
+                style={{ marginBottom: 8 }}
+              />
+              <Descriptions column={1} bordered size="small" style={{ marginTop: 8 }}>
+                {lead.source_query && <Descriptions.Item label="Query/Article">{lead.source_query}</Descriptions.Item>}
+                <Descriptions.Item label="Created">
+                  {dayjs(lead.created_at).format('YYYY-MM-DD HH:mm')}
+                </Descriptions.Item>
+                {lead.sent_to_client_at && (
+                  <Descriptions.Item label="Sent to Client">
+                    {dayjs(lead.sent_to_client_at).format('YYYY-MM-DD HH:mm')}
+                  </Descriptions.Item>
+                )}
+                {lead.converted_at && (
+                  <Descriptions.Item label="Converted At">
+                    {dayjs(lead.converted_at).format('YYYY-MM-DD HH:mm')}
+                  </Descriptions.Item>
+                )}
+              </Descriptions>
+            </>
+          ) : (
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Company">{lead.company_name || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Contact">{lead.contact_name || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Email">
+                {lead.contact_email
+                  ? <a href={`mailto:${lead.contact_email}`}>{lead.contact_email}</a>
+                  : '—'}
               </Descriptions.Item>
-            )}
-            {lead.converted_at && (
-              <Descriptions.Item label="Converted At">
-                {dayjs(lead.converted_at).format('YYYY-MM-DD HH:mm')}
+              <Descriptions.Item label="Phone">{lead.contact_phone || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Website">
+                {lead.company_website
+                  ? <a href={lead.company_website} target="_blank" rel="noreferrer">{lead.company_website}</a>
+                  : '—'}
               </Descriptions.Item>
-            )}
-          </Descriptions>
+              {lead.source_query && <Descriptions.Item label="Query/Article">{lead.source_query}</Descriptions.Item>}
+              <Descriptions.Item label="Created">
+                {dayjs(lead.created_at).format('YYYY-MM-DD HH:mm')}
+              </Descriptions.Item>
+              {lead.sent_to_client_at && (
+                <Descriptions.Item label="Sent to Client">
+                  {dayjs(lead.sent_to_client_at).format('YYYY-MM-DD HH:mm')}
+                </Descriptions.Item>
+              )}
+              {lead.converted_at && (
+                <Descriptions.Item label="Converted At">
+                  {dayjs(lead.converted_at).format('YYYY-MM-DD HH:mm')}
+                </Descriptions.Item>
+              )}
+            </Descriptions>
+          )}
 
-          {/* Attribution: Location + UTM */}
-          {(lead.location || lead.utm_source || lead.utm_medium || lead.utm_campaign || lead.source_detail) && (
+          {/* Attribution: Address + Location + UTM */}
+          {(canWrite || lead.location || lead.address || lead.utm_source || lead.utm_medium || lead.utm_campaign || lead.source_detail) && (
             <>
               <Title level={5} style={{ margin: '12px 0 8px', fontSize: 13, color: '#555' }}>
                 Attribution
               </Title>
+              {canWrite && (
+                <Input
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  placeholder="Full address (if confirmed) — e.g. 12 Main Rd, Sandton, 2196"
+                  style={{ marginBottom: 8 }}
+                />
+              )}
               <Descriptions column={1} bordered size="small">
                 {lead.location && <Descriptions.Item label="Location">{lead.location}</Descriptions.Item>}
+                {address && !canWrite && <Descriptions.Item label="Address">{lead.address}</Descriptions.Item>}
                 {lead.source_detail && <Descriptions.Item label="Form\/Channel">{lead.source_detail}</Descriptions.Item>}
                 {lead.utm_source && <Descriptions.Item label="UTM Source">{lead.utm_source}</Descriptions.Item>}
                 {lead.utm_medium && <Descriptions.Item label="UTM Medium">{lead.utm_medium}</Descriptions.Item>}

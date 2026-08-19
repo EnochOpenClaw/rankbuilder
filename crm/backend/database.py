@@ -136,6 +136,7 @@ class Lead(Base):
 
     # Location
     location = Column(String(255), nullable=True)  # suburb / city / province
+    address = Column(String(500), nullable=True)   # full street address (agent-confirmed)
 
     # Classification
     status = Column(SAEnum(LeadStatus), default=LeadStatus.NEW)
