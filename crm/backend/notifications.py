@@ -325,3 +325,72 @@ def _get_notification_recipients(client_id: str, db) -> list[tuple[str, str]]:
     except Exception as e:
         log.warning(f"Notification lookup failed: {e}, using defaults")
         return HOS_DEFAULT
+def notify_lead_allocated(lead: dict, rep_email: str, rep_name: str,
+                          allocated_by: str = "system", db=None) -> None:
+    """
+    Send a dedicated 'Lead Allocated to You' email to the assigned sales rep.
+
+    Fired whenever a lead is assigned to a rep — whether auto-routed on creation
+    or manually allocated by a manager via the assign endpoint. Gives the rep a
+    clear, personal notification that this lead is theirs and what to do next.
+    """
+    if not lead or not rep_email:
+        return
+
+    client_id = lead.get("client_id")
+    company = lead.get("company_name") or "Unknown company"
+    contact = lead.get("contact_name") or "—"
+    phone = lead.get("contact_phone") or "—"
+    location = lead.get("location") or "—"
+    source = (lead.get("source") or "UNKNOWN").upper()
+    source_detail = lead.get("source_detail") or ""
+
+    # Use sales sender for sales leads, default otherwise
+    if source in SALES_SOURCES:
+        sender_email = SALES_SENDER_EMAIL
+        sender_name = SALES_SENDER_NAME
+    else:
+        sender_email = SENDER_EMAIL
+        sender_name = SENDER_NAME
+
+    by = allocated_by if allocated_by and allocated_by != "system" else "the system (region auto-routing)"
+    subject = f"📋 [RankBuilder] Lead Allocated to You: {company}"
+
+    html_body = f"""
+<!DOCTYPE html>
+<html>
+<body style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#fafafa;'>
+  <div style='background:white;border-radius:12px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.08);'>
+    <div style='border-bottom:2px solid #f0f0f0;padding-bottom:16px;margin-bottom:20px;'>
+      <h1 style='margin:0;font-size:20px;color:#333;'>📋 Lead Allocated to You</h1>
+      <p style='margin:8px 0 0;color:#888;font-size:13px;'>RankBuilder CRM · {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</p>
+    </div>
+
+    <p style='color:#333;font-size:14px;'>Hi <strong>{rep_name}</strong>,</p>
+    <p style='color:#555;font-size:14px;'>A new lead has been <strong>allocated to you</strong> by {by}:</p>
+
+    <div style='background:#f0f4ff;border:1px solid #dbe4ff;border-radius:8px;padding:16px;margin:16px 0;'>
+      <h2 style='margin:0 0 12px;font-size:18px;color:#111;'>{company}</h2>
+      <table style='width:100%;border-collapse:collapse;font-size:14px;color:#444;'>
+        <tr><td style='padding:4px 0;width:110px;color:#888;'>Contact</td><td>{contact}</td></tr>
+        <tr><td style='padding:4px 0;color:#888;'>Phone</td><td>{phone}</td></tr>
+        <tr><td style='padding:4px 0;color:#888;'>Area</td><td>{location}</td></tr>
+        <tr><td style='padding:4px 0;color:#888;'>Source</td><td>{source}{' · ' + source_detail if source_detail else ''}</td></tr>
+      </table>
+    </div>
+
+    <div style='margin-top:20px;padding:16px;background:#eef2ff;border-radius:8px;text-align:center;'>
+      <p style='margin:0 0 8px;color:#333;font-size:14px;'><strong>Next step:</strong></p>
+      <p style='margin:0;color:#666;font-size:13px;'>Contact the lead and log your follow-up in the CRM portal so your activity is tracked. Update the lead to CONTACTED / CONVERTED / LOST when the outcome is known.</p>
+    </div>
+
+    <p style='margin:20px 0 0;color:#aaa;font-size:11px;text-align:center;'>
+      RankBuilder CRM · House of Supreme · Powered by AgenticFlows
+    </p>
+  </div>
+</body>
+</html>"""
+
+    _brevo_send(rep_email, subject, html_body, to_name=rep_name,
+                sender_email=sender_email, sender_name=sender_name)
+    log.info(f"Allocated notification sent to {rep_email} for lead {company} ({lead.get('id')})")

@@ -39,7 +39,7 @@ from backend.schemas import (
     EmailLogItem,
     EmailLogResponse,
 )
-from backend.notifications import notify_new_lead, notify_lead_sent
+from backend.notifications import notify_new_lead, notify_lead_sent, notify_lead_allocated
 from backend.dedupe import find_duplicate, merge_duplicate
 from backend.assignment import (
     resolve_rep_for_location,
@@ -89,11 +89,20 @@ def _notify_async(trigger: str, lead_id: str, db: Session):
                 "assigned_to": lead.assigned_to,
                 "assigned_to_name": lead.assigned_to_name,
                 "location": lead.location,
+                "allocated_by": getattr(lead, "_allocated_by", None) or "system",
             }
             if trigger == "new_lead":
                 notify_new_lead(lead_dict, db=session)
             elif trigger == "lead_sent":
                 notify_lead_sent(lead_dict, db=session)
+            elif trigger == "lead_allocated":
+                notify_lead_allocated(
+                    lead_dict,
+                    rep_email=lead_dict.get("assigned_to") or "",
+                    rep_name=lead_dict.get("assigned_to_name") or "Rep",
+                    allocated_by=lead_dict.get("allocated_by") or "system",
+                    db=session,
+                )
         finally:
             session.close()
     except Exception:
@@ -240,8 +249,11 @@ def create_lead(
     assign_lead(db, lead, changed_by="system")
     db.commit()
 
-    # ── Email notification: new lead alert ──────────────────────────────────
+    # ── Email notifications (background) ─────────────────────────────────────
     _executor.submit(_notify_async, "new_lead", lead.id, db)
+    if lead.assigned_to:
+        # Tell the rep this lead is now theirs (region auto-routing)
+        _executor.submit(_notify_async, "lead_allocated", lead.id, db)
 
     return _lead_to_response(lead)
 
@@ -481,6 +493,12 @@ def assign_lead_manual(
     db.add(hist)
     db.commit()
     db.refresh(lead)
+
+    # Notify the newly-assigned rep (manual manager allocation)
+    if lead.assigned_to:
+        lead._allocated_by = current_user.email if current_user else "system"
+        _executor.submit(_notify_async, "lead_allocated", lead.id, db)
+
     return _lead_to_response(lead)
 
 

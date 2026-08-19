@@ -127,6 +127,7 @@ def log_follow_up(db, lead: Lead, note: str, changed_by: str = "system",
 
     lead.follow_up_count = (lead.follow_up_count or 0) + 1
     lead.last_follow_up_at = occurred
+    lead.reminder_stage = 0  # a fresh follow-up resets the escalation ladder
 
     # Stacked activity row — one per attempt, never overwritten
     activity = LeadActivity(
