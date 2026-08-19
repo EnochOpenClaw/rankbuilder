@@ -20,6 +20,7 @@ from backend.schemas import (
     DashboardResponse,
 )
 from backend.routes.auth import get_current_user, enforce_client_scope
+from backend.database import UserRole
 
 router = APIRouter()
 
@@ -41,6 +42,9 @@ def dashboard_summary(
         Lead.client_id == effective_client_id,
         Lead.created_at >= cutoff,
     )
+    if current_user.role == UserRole.AGENT:
+        # Sales agents only see stats for leads assigned to them
+        base = base.filter(Lead.assigned_to == current_user.email)
 
     # Counts
     total = base.count()

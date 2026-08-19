@@ -10,6 +10,7 @@ from pydantic import BaseModel, EmailStr, Field
 class UserRole(str):
     SYSTEM_ADMIN = "SYSTEM_ADMIN"
     CLIENT_ADMIN = "CLIENT_ADMIN"
+    AGENT = "AGENT"
     VIEWER = "VIEWER"
 
 

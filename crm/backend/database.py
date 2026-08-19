@@ -66,6 +66,7 @@ class CampaignStatus(str, enum.Enum):
 class UserRole(str, enum.Enum):
     SYSTEM_ADMIN = "SYSTEM_ADMIN"
     CLIENT_ADMIN = "CLIENT_ADMIN"
+    AGENT = "AGENT"
     VIEWER = "VIEWER"
 
 

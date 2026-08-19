@@ -103,12 +103,14 @@ def require_client_access(
 
 
 def require_admin_or_owner():
-    """Dependency — CLIENT_ADMIN or SYSTEM_ADMIN (write-capable)."""
+    """Dependency — write-capable roles: SYSTEM_ADMIN, CLIENT_ADMIN, or AGENT.
+    AGENT writes are additionally restricted to their OWN assigned leads
+    (checked per-endpoint via enforce_agent_assignment)."""
     def checker(current_user: User = Depends(get_current_user)):
-        if current_user.role not in (UserRole.SYSTEM_ADMIN, UserRole.CLIENT_ADMIN):
+        if current_user.role not in (UserRole.SYSTEM_ADMIN, UserRole.CLIENT_ADMIN, UserRole.AGENT):
             raise HTTPException(
                 status_code=403,
-                detail="This action requires SYSTEM_ADMIN or CLIENT_ADMIN.",
+                detail="This action requires SYSTEM_ADMIN, CLIENT_ADMIN or AGENT.",
             )
         return current_user
     return checker
@@ -134,6 +136,16 @@ def enforce_client_scope(requested_client_id, current_user: User):
             detail="You can only access data for your own client.",
         )
     return current_user.client_id
+
+
+def enforce_agent_assignment(lead, current_user: User):
+    """AGENTs may only read/write leads assigned to them. No-op for admins."""
+    if current_user.role == UserRole.AGENT:
+        if lead.assigned_to != current_user.email:
+            raise HTTPException(
+                status_code=403,
+                detail="AGENTs can only access leads assigned to them.",
+            )
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────

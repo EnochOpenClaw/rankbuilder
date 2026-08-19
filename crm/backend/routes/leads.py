@@ -51,7 +51,9 @@ from backend.routes.auth import (
     get_current_user,
     require_admin_or_owner,
     enforce_client_scope,
+    enforce_agent_assignment,
 )
+from backend.database import UserRole
 from backend.database import User
 
 # Thread pool for async notification dispatch
@@ -263,6 +265,9 @@ def list_leads(
 
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
+    if current_user.role == UserRole.AGENT:
+        # Sales agents only see leads assigned to them
+        q = q.filter(Lead.assigned_to == current_user.email)
     if campaign_id:
         q = q.filter(Lead.campaign_id == campaign_id)
     if status:
@@ -317,6 +322,9 @@ def export_leads(
 
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
+    if current_user.role == UserRole.AGENT:
+        # Sales agents only see leads assigned to them
+        q = q.filter(Lead.assigned_to == current_user.email)
     if campaign_id:
         q = q.filter(Lead.campaign_id == campaign_id)
     if status:
@@ -404,6 +412,7 @@ def get_lead(
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     enforce_client_scope(lead.client_id, current_user)
+    enforce_agent_assignment(lead, current_user)
     return _lead_to_response(lead)
 
 
@@ -447,7 +456,10 @@ def assign_lead_manual(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_owner()),
 ):
-    """Manually reassign a lead to a specific sales rep. Logs the change."""
+    """Manually reassign a lead to a specific sales rep. Logs the change.
+    Admin-only: AGENTs cannot reassign leads."""
+    if current_user.role == UserRole.AGENT:
+        raise HTTPException(status_code=403, detail="Only admins can reassign leads.")
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -649,6 +661,7 @@ def update_lead(
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     enforce_client_scope(lead.client_id, current_user)
+    enforce_agent_assignment(lead, current_user)
 
     changes = []
 

@@ -389,6 +389,24 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
   const [search, setSearch] = useState('')
   const [selectedRow, setSelectedRow] = useState(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [repOptions, setRepOptions] = useState([])
+
+  // Load assignable sales reps (AGENT + CLIENT_ADMIN) for this client — drives the
+  // assignment dropdown dynamically instead of a hardcoded list (2026-08-19).
+  useEffect(() => {
+    let alive = true
+    api.listUsers()
+      .then(users => {
+        if (!alive) return
+        const assignable = (users || []).filter(u =>
+          (u.role === AGENT || u.role === CLIENT_ADMIN) &&
+          (!clientId || u.client_id === clientId)
+        ).map(u => ({ email: u.email, name: u.full_name || u.email }))
+        setRepOptions(assignable)
+      })
+      .catch(() => { /* non-fatal: fall back to empty list */ })
+    return () => { alive = false }
+  }, [clientId])
 
   const loadLeads = async () => {
     setLoading(true)
@@ -582,6 +600,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         lead={selectedRow}
         open={drawerOpen}
         canWrite={canWrite}
+        repOptions={repOptions}
         onClose={() => { setDrawerOpen(false); setSelectedRow(null) }}
         onUpdate={loadLeads}
       />
@@ -591,7 +610,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
 
 // ── Lead Drawer ────────────────────────────────────────────────────────────────
 
-function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true }) {
+function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions = [] }) {
   const [notes, setNotes] = useState('')
   const [clientResponse, setClientResponse] = useState('')
   const [status, setStatus] = useState(null)
@@ -696,11 +715,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true }) {
     }
   }
 
-  const REP_OPTIONS = [
-    { email: 'tiaan@houseofsupreme.co.za', name: 'Tiaan (Johannesburg)' },
-    { email: 'richard@houseofsupreme.co.za', name: 'Richard (Cape Town)' },
-    { email: 'craig@houseofsupreme.co.za', name: 'Craig (Other regions)' },
-  ]
+  const REP_OPTIONS = repOptions
 
   // ── History helpers ─────────────────────────────────────────────────────────
 
@@ -1279,7 +1294,7 @@ function UsersTab({ user: currentUser, clients }) {
     {
       title: 'Role',
       dataIndex: 'role',
-      render: r => <Tag color={r === 'SYSTEM_ADMIN' ? 'red' : r === 'CLIENT_ADMIN' ? 'blue' : 'default'}>{r}</Tag>,
+      render: r => <Tag color={r === 'SYSTEM_ADMIN' ? 'red' : r === 'CLIENT_ADMIN' ? 'blue' : r === 'AGENT' ? 'purple' : 'default'}>{r}</Tag>,
     },
     {
       title: 'Client',
@@ -1336,6 +1351,7 @@ function UsersTab({ user: currentUser, clients }) {
           <Form.Item name="role" label="Role" rules={[{ required: true }]} initialValue="VIEWER">
             <Select>
               <Select.Option value="CLIENT_ADMIN">CLIENT_ADMIN — Full access to their client</Select.Option>
+              <Select.Option value="AGENT">AGENT — Sales rep, sees only their assigned leads</Select.Option>
               <Select.Option value="VIEWER">VIEWER — Read-only access</Select.Option>
             </Select>
           </Form.Item>
@@ -1529,7 +1545,8 @@ export default function App() {
   const role = user.role
   const isAdmin = role === 'SYSTEM_ADMIN' || role === 'CLIENT_ADMIN'
   const isViewer = role === 'VIEWER'
-  const canWrite = isAdmin  // VIEWER is read-only
+  const isAgent = role === 'AGENT'
+  const canWrite = isAdmin || isAgent  // VIEWER is read-only
   const isMultiClientAdmin = role === 'SYSTEM_ADMIN'
 
   return (
