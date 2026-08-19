@@ -1749,9 +1749,9 @@ export default function App() {
         <div style={{ flex: 1 }} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ color: '#fff', fontSize: 13, lineHeight: 1.2 }}>{user.full_name}</div>
-            <div style={{ color: '#fff5', fontSize: 11 }}>{user.role}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, whiteSpace: 'nowrap' }}>
+            <span style={{ color: '#fff', fontSize: 13, lineHeight: 1.2 }}>{user.full_name}</span>
+            <span style={{ color: '#fff5', fontSize: 11 }}>{user.role}</span>
           </div>
           <Button icon={<LogoutOutlined />} onClick={handleLogout}
             style={{ color: '#fff', borderColor: '#fff5' }} ghost size="small">
