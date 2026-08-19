@@ -6,10 +6,16 @@ Phase 1: Lead capture, qualification, and HOS client portal
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+import json
+import re
+from datetime import datetime, timezone
+
+from fastapi import FastAPI, APIRouter
+from fastapi.routing import APIRoute
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from backend.database import engine, Base
 from backend.routes import leads, clients, dashboard, auth, notifications, public, facebook, campaigns, whatsapp, documents
@@ -18,10 +24,39 @@ from backend.routes import leads, clients, dashboard, auth, notifications, publi
 BACKEND_DIR   = Path(__file__).parent   # .../crm/backend/
 FRONTEND_DIST = BACKEND_DIR.parent / 'frontend' / 'dist'
 
+def _fix_utc(obj):
+    """Recursively append Z to naive UTC datetime strings (ISO-8601 without
+    offset) so the browser renders them in the user's local timezone (SAST).
+    Stored times are UTC; without Z, dayjs treats them as local and shows a 2h
+    offset. Strings already carrying a timezone (Z or +/-hh:mm) are left alone."""
+    dt_re = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$")
+    if isinstance(obj, dict):
+        return {k: _fix_utc(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_fix_utc(v) for v in obj]
+    if isinstance(obj, str) and dt_re.match(obj):
+        return obj + "Z"
+    return obj
+
+
+class TZAwareJSONResponse(JSONResponse):
+    def render(self, content):
+        # content is the JSON-serializable model (datetimes already ISO strings
+        # from FastAPI's encoder); append Z to naive UTC datetimes before dumps.
+        return json.dumps(
+            _fix_utc(content),
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+
 app = FastAPI(
     title="RankBuilder CRM",
     version="0.1.0",
     description="Autonomous SEO lead generation CRM",
+    default_response_class=TZAwareJSONResponse,
 )
 
 # CORS — allow frontend dev server + production domain
