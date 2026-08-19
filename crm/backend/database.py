@@ -314,6 +314,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = Column(Integer, default=1)  # SQLite bool (0/1)
+    must_change_password = Column(Integer, default=1)  # 1 = force password change on next login
 
     client = relationship("Client", back_populates="users")
 

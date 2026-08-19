@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Layout, Typography, Card, Row, Col, Statistic, Table, Tag, Button,
   Drawer, Descriptions, Timeline, Select, Input, Space, message, Tabs,
-  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate
+  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, Checkbox
 } from 'antd'
 import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
@@ -31,6 +31,7 @@ function LoginPage({ onLogin }) {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [mustChange, setMustChange] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -41,13 +42,43 @@ function LoginPage({ onLogin }) {
       localStorage.setItem('crm_token', res.access_token)
       localStorage.setItem('crm_user', JSON.stringify(res.user))
       message.success(`Welcome, ${res.user.full_name}`)
-      onLogin(res.user)
+      if (res.user.must_change_password) {
+        // Force the user to set a new password before entering the app
+        setMustChange(true)
+      } else {
+        onLogin(res.user)
+      }
     } catch (err) {
       console.error('Login error caught:', err, typeof err, err?.message, String(err))
       setError(String(err).substring(0, 200))
     } finally {
       setLoading(false)
     }
+  }
+
+  const handlePasswordChanged = async (newPassword) => {
+    try {
+      await api.changePassword(password, newPassword)
+      // Update the stored user (must_change_password now false)
+      const stored = JSON.parse(localStorage.getItem('crm_user') || 'null')
+      if (stored) {
+        stored.must_change_password = 0
+        localStorage.setItem('crm_user', JSON.stringify(stored))
+        onLogin(stored)
+      } else {
+        onLogin(JSON.parse(localStorage.getItem('crm_user') || '{}'))
+      }
+    } catch (err) {
+      throw err
+    }
+  }
+
+  if (mustChange) {
+    return <ChangePasswordScreen
+      email={email}
+      onDone={handlePasswordChanged}
+      onCancel={() => { setMustChange(false); onLogin(JSON.parse(localStorage.getItem('crm_user') || 'null')) }}
+    />
   }
 
   return (
@@ -85,6 +116,57 @@ function LoginPage({ onLogin }) {
         <div style={{ textAlign: 'left', fontSize: 12, color: '#888' }}>
           <div><Text code>craig@houseofsupreme.co.za</Text> — SYSTEM_ADMIN</div>
           <div><Text code>tiaan@houseofsupreme.co.za</Text> — CLIENT_ADMIN (HOS)</div>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ── Force password change on first login ─────────────────────────────────────
+
+function ChangePasswordScreen({ email, onDone, onCancel }) {
+  const [newPass, setNewPass] = useState('')
+  const [confirmPass, setConfirmPass] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    if (newPass.length < 8) { setError('Password must be at least 8 characters'); return }
+    if (newPass !== confirmPass) { setError('Passwords do not match'); return }
+    setLoading(true)
+    try {
+      await onDone(newPass)
+    } catch (err) {
+      setError(String(err.message || err).substring(0, 200))
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#001529', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Card style={{ width: 380, textAlign: 'center' }} styles={{ body: { padding: 32 } }}>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 44, marginBottom: 8 }}>🔒</div>
+          <Title level={4} style={{ margin: 0 }}>Change Your Password</Title>
+          <Text type="secondary">First-time login — please set a new password</Text>
+        </div>
+        <div style={{ marginBottom: 16, fontSize: 12, color: '#888' }}>Account: {email}</div>
+        <form onSubmit={handleSubmit}>
+          <Input.Password size="large" placeholder="New password (min 8 characters)"
+            value={newPass} onChange={e => setNewPass(e.target.value)}
+            style={{ marginBottom: 12 }} required />
+          <Input.Password size="large" placeholder="Confirm new password"
+            value={confirmPass} onChange={e => setConfirmPass(e.target.value)}
+            style={{ marginBottom: 12 }} required />
+          {error && <div style={{ color: '#ff4d4f', marginBottom: 12, fontSize: 13 }}>{error}</div>}
+          <Button type="primary" htmlType="submit" loading={loading} block size="large">
+            Update Password
+          </Button>
+        </form>
+        <div style={{ marginTop: 12 }}>
+          <Button type="link" size="small" onClick={onCancel}>Skip for now</Button>
         </div>
       </Card>
     </div>
@@ -1446,8 +1528,10 @@ function UsersTab({ user: currentUser, clients }) {
 
   const handleAddUser = async (values) => {
     try {
-      await api.createUser(values)
-      message.success('User created')
+      await api.createUser({ ...values, send_welcome: !!values.send_welcome })
+      message.success(values.send_welcome
+        ? 'User created — login details emailed'
+        : 'User created')
       setModalOpen(false)
       addForm.resetFields()
       load()
@@ -1539,6 +1623,9 @@ function UsersTab({ user: currentUser, clients }) {
               filterOption={(i, o) => o.props.children.toLowerCase().includes(i.toLowerCase())}>
               {clients.map(c => <Select.Option key={c.id} value={c.id}>{c.company_name}</Select.Option>)}
             </Select>
+          </Form.Item>
+          <Form.Item name="send_welcome" valuePropName="checked" style={{ marginBottom: 8 }}>
+            <Checkbox>Email login details to this user (site, email, temporary password)</Checkbox>
           </Form.Item>
           <Button type="primary" htmlType="submit" block>Create User</Button>
         </Form>

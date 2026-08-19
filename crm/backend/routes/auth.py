@@ -9,12 +9,17 @@ DELETE /api/auth/users/{id} — Disable user (SYSTEM_ADMIN only)
 """
 
 import uuid
+import os
+import json
+import urllib.request
+import urllib.error
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from jose import jwt
+from pydantic import BaseModel
 
 from backend.database import get_db, User, UserRole, Client
 from backend.auth import UserCreate, UserResponse, TokenResponse
@@ -215,6 +220,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db=Depends(get_db)):
             client_id=user.client_id,
             role=user.role.value,
             created_at=user.created_at,
+            must_change_password=user.must_change_password or 0,
         ),
     )
 
@@ -229,6 +235,40 @@ def get_me(current_user: User = Depends(get_current_user)):
         client_id=current_user.client_id,
         role=current_user.role.value,
         created_at=current_user.created_at,
+        must_change_password=current_user.must_change_password or 0,
+    )
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password", response_model=UserResponse)
+def change_password(
+    payload: ChangePasswordRequest,
+    db=Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Change the current user's password. Clears must_change_password flag."""
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+
+    current_user.hashed_password = hash_password(payload.new_password)
+    current_user.must_change_password = 0
+    db.commit()
+    db.refresh(current_user)
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        client_id=current_user.client_id,
+        role=current_user.role.value,
+        created_at=current_user.created_at,
+        must_change_password=0,
     )
 
 
@@ -256,10 +296,15 @@ def create_user(
         full_name=payload.full_name,
         client_id=payload.client_id,
         role=role,
+        must_change_password=1,  # new users must change password on first login
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Optionally email the user their login details
+    if payload.send_welcome:
+        _send_login_details(user, payload.password, role=role.value)
 
     return UserResponse(
         id=user.id,
@@ -268,6 +313,7 @@ def create_user(
         client_id=user.client_id,
         role=user.role.value,
         created_at=user.created_at,
+        must_change_password=1,
     )
 
 
@@ -320,3 +366,63 @@ def delete_user(
     user.is_active = 0
     user.updated_at = datetime.utcnow()
     db.commit()
+
+
+# ── Welcome email (login details) ──────────────────────────────────────────────
+
+def _send_login_details(user, temp_password: str, role: str = "VIEWER") -> None:
+    """
+    Email a newly-created user their login details: site address, email, and a
+    temporary password they must change on first login.
+    """
+    brevo_key = os.environ.get("BREVO_API_KEY", "")
+    if not brevo_key:
+        import logging
+        logging.getLogger("crm.auth").warning("BREVO_API_KEY not set - welcome email not sent")
+        return
+
+    site_url = os.environ.get("CRM_PORTAL_URL", "https://dashboard.fortressblinds.co.za")
+    sender_email = os.environ.get("SENDER_EMAIL", "ai@fortressblinds.co.za")
+    sender_name = os.environ.get("SENDER_NAME", "RankBuilder CRM")
+
+    subject = "🎉 Your RankBuilder CRM Login Details"
+    html = f"""
+<!DOCTYPE html>
+<html><body style='font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#fafafa;'>
+  <div style='background:white;border-radius:12px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.08);'>
+    <div style='border-bottom:2px solid #f0f0f0;padding-bottom:16px;margin-bottom:20px;'>
+      <h1 style='margin:0;font-size:20px;color:#333;'>🎉 Welcome, {user.full_name}!</h1>
+      <p style='margin:8px 0 0;color:#888;font-size:13px;'>Your RankBuilder CRM account has been created.</p>
+    </div>
+    <p style='color:#555;font-size:14px;'>Here are your login details:</p>
+    <div style='background:#f5f5f5;border-radius:8px;padding:16px;margin:16px 0;font-size:14px;'>
+      <p style='margin:0 0 8px;'><strong>Site address:</strong><br/><a href="{site_url}" style="color:#1e88e5;">{site_url}</a></p>
+      <p style='margin:0 0 8px;'><strong>Email:</strong><br/>{user.email}</p>
+      <p style='margin:0 0 8px;'><strong>Temporary password:</strong><br/><code style='background:#eef;padding:2px 8px;border-radius:4px;'>{temp_password}</code></p>
+      <p style='margin:0;'><strong>Role:</strong> {role}</p>
+    </div>
+    <div style='margin-top:16px;padding:14px;background:#fff8e1;border-radius:8px;'>
+      <p style='margin:0;color:#666;font-size:13px;'><strong>Important:</strong> For security, you will be asked to change your password the first time you log in.</p>
+    </div>
+    <p style='margin:20px 0 0;color:#aaa;font-size:11px;text-align:center;'>RankBuilder CRM · Powered by AgenticFlows</p>
+  </div>
+</body></html>"""
+
+    payload = {
+        "sender": {"name": sender_name, "email": sender_email},
+        "to": [{"email": user.email, "name": user.full_name}],
+        "subject": subject,
+        "htmlContent": html,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email", data=data,
+        headers={"Content-Type": "application/json", "api-key": brevo_key}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            import logging
+            logging.getLogger("crm.auth").info(f"Welcome email sent to {user.email}")
+    except Exception as e:
+        import logging
+        logging.getLogger("crm.auth").exception(f"Welcome email failed for {user.email}: {e}")
