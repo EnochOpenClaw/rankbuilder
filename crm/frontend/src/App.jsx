@@ -399,7 +399,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
       .then(users => {
         if (!alive) return
         const assignable = (users || []).filter(u =>
-          (u.role === AGENT || u.role === CLIENT_ADMIN) &&
+          (u.role === 'AGENT' || u.role === 'CLIENT_ADMIN') &&
           (!clientId || u.client_id === clientId)
         ).map(u => ({ email: u.email, name: u.full_name || u.email }))
         setRepOptions(assignable)
