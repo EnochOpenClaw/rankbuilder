@@ -22,7 +22,7 @@ def _load_env():
 _load_env()
 
 from backend.database import SessionLocal, Lead
-from backend.notifications import _brevo_send
+from backend.notifications import _brevo_send, _get_notification_recipients
 log = logging.getLogger("sla_monitor")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -67,9 +67,7 @@ def should_alert(lead):
     return (datetime.now(timezone.utc) - la) >= _td(hours=COOLDOWN_H)
 
 
-def notify(lead, rule, detail):
-    rep = lead.assigned_to
-    if not rep: return
+def notify(db, lead, rule, detail):
     co = lead.company_name or lead.contact_name or "Lead"
     sc = lead.quality_score or 0
     tier = "HOT" if sc >= 70 else "WARM" if sc >= 40 else "COLD"
@@ -80,20 +78,31 @@ def notify(lead, rule, detail):
     body += "<tr><td>Phone</td><td>%s</td></tr>" % (lead.contact_phone or "-")
     body += "<tr><td>Score</td><td>%s %s</td></tr></table>" % (tier, sc)
     body += "<p>Action this lead promptly so it does not go cold.</p>"
-    try:
-        _brevo_send(rep, subject, body, to_name=lead.assigned_to_name or rep,
-                    sender_email=SENDER, sender_name="RankBuilder CRM")
-        lead.last_sla_alert_at = datetime.utcnow()
-        from backend.database import SessionLocal as _SL
-        _s = _SL()
+
+    # Build recipient set: assigned rep + notification group (+ default rep if unassigned)
+    recipients = set()
+    if lead.assigned_to:
+        recipients.add((lead.assigned_to, lead.assigned_to_name or "Rep"))
+    else:
+        from backend.assignment import resolve_rep_for_location
+        drep, dname = resolve_rep_for_location(lead.location)
+        recipients.add((drep, dname))
+    for email, name in _get_notification_recipients(lead.client_id, db) or []:
+        recipients.add((email, name))
+
+    sent = 0
+    for email, name in recipients:
         try:
-            _s.add(lead)
-            _s.commit()
-        finally:
-            _s.close()
-        log.info("SLA alert to %s for %s (%s)", rep, co, rule)
-    except Exception as e:
-        log.error("SLA alert fail to %s: %s", rep, e)
+            _brevo_send(email, subject, body, to_name=name,
+                        sender_email=SENDER, sender_name="RankBuilder CRM")
+            sent += 1
+        except Exception as e:
+            log.error("SLA alert fail to %s: %s", email, e)
+    if sent:
+        lead.last_sla_alert_at = datetime.utcnow()
+        db.commit()
+        log.info("SLA alerts sent to %d recipients for %s (%s)", sent, co, rule)
+
 
 def main():
     db = SessionLocal()
@@ -101,7 +110,7 @@ def main():
         v = check_sla(db)
         log.info("SLA violations: %d", len(v))
         for lead, rule, detail in v:
-            if should_alert(lead): notify(lead, rule, detail)
+            if should_alert(lead): notify(db, lead, rule, detail)
     finally:
         db.close()
 
