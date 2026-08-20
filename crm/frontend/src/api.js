@@ -108,6 +108,11 @@ export const api = {
   deleteScoringRule: (id) => request('DELETE', `/scoring/rules/${id}`, null, true),
   getScoringTiers: () => request('GET', '/scoring/tiers', null, true),
 
+  // Reports
+  agentSalesReport: (clientId) => request('GET', `/reports/agent${clientId ? '?client_id=' + clientId : ''}`, null, true),
+  pipelineReport: (clientId) => request('GET', `/reports/pipeline${clientId ? '?client_id=' + clientId : ''}`, null, true),
+  funnelReport: (clientId) => request('GET', `/reports/funnel${clientId ? '?client_id=' + clientId : ''}`, null, true),
+
   // Documents (attachments)
   listDocuments: (id) => request('GET', `/leads/${id}/documents`, null, true),
   uploadDocument: (id, file, category) => {

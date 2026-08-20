@@ -61,6 +61,8 @@ class LeadCreate(BaseModel):
     quality_score: Optional[int] = Field(None, ge=1, le=5)
     lead_type: Optional[str] = None  # VALID / INVALID / FOLLOW_UP
     notes: Optional[str] = None
+    quote_amount: Optional[float] = Field(None, ge=0, description="Value of the quote sent (R)")
+    estimated_deal_value: Optional[float] = Field(None, ge=0, description="Estimated deal value (R)")
     # Marketing attribution
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
@@ -80,6 +82,8 @@ class LeadUpdate(BaseModel):
     client_response: Optional[str] = None
     notes: Optional[str] = None
     conversion_status: Optional[str] = None  # CONVERTED or LOST
+    quote_amount: Optional[float] = Field(None, ge=0)
+    estimated_deal_value: Optional[float] = Field(None, ge=0)
     source_detail: Optional[str] = None
     location: Optional[str] = None
     # ── Editable contact info (agent can update) ─────────────────────────
@@ -147,6 +151,8 @@ class LeadResponse(BaseModel):
     client_response: Optional[str]
     conversion_status: Optional[str]
     converted_at: Optional[datetime]
+    quote_amount: Optional[float]
+    estimated_deal_value: Optional[float]
     notes: Optional[str]
     # ── Sales rep assignment & follow-up ───────────────────────────────────
     assigned_to: Optional[str] = None

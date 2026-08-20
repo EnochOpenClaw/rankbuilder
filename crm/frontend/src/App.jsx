@@ -9,7 +9,7 @@ import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -869,6 +869,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   const [status, setStatus] = useState(null)
   const [leadType, setLeadType] = useState(null)
   const [qualityScore, setQualityScore] = useState(null)
+  const [quoteAmount, setQuoteAmount] = useState(null)
   const [location, setLocation] = useState('')
   const [contactName, setContactName] = useState('')
   const [contactEmail, setContactEmail] = useState('')
@@ -904,6 +905,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
     setStatus(lead.status)
     setLeadType(lead.lead_type)
     setQualityScore(lead.quality_score)
+    setQuoteAmount(lead.quote_amount || null)
     setLocation(lead.location || '')
     setContactName(lead.contact_name || '')
     setContactEmail(lead.contact_email || '')
@@ -962,6 +964,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
         location: location || undefined,
         lead_type: leadType || undefined,
         quality_score: qualityScore || undefined,
+        quote_amount: quoteAmount || undefined,
         message_excerpt: createMessage || undefined,
         notes: notes || undefined,
       })
@@ -999,6 +1002,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
         status,
         lead_type: leadType,
         quality_score: qualityScore,
+        quote_amount: quoteAmount,
         location,
         contact_name: contactName,
         contact_email: contactEmail,
@@ -1422,6 +1426,15 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
                   value={location}
                   onChange={e => setLocation(e.target.value)}
                   placeholder="e.g. Sandton, Johannesburg"
+                />
+              </Form.Item>
+              <Form.Item label="Quote Amount (R)" style={{ marginBottom: 8 }} extra="Enter once a quote is sent to the client">
+                <Input
+                  type="number"
+                  value={quoteAmount ?? ''}
+                  onChange={e => setQuoteAmount(e.target.value ? Number(e.target.value) : null)}
+                  placeholder="e.g. 25000"
+                  prefix="R"
                 />
               </Form.Item>
               <Form.Item label="Client Response" style={{ marginBottom: 8 }}>
@@ -2325,6 +2338,108 @@ function ScoringRulesTab() {
   )
 }
 
+// ── Reports Tab ─────────────────────────────────────────────────────────────────
+
+function ReportsTab({ clientId }) {
+  const [agent, setAgent] = useState(null)
+  const [pipeline, setPipeline] = useState(null)
+  const [funnel, setFunnel] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const [a, p, f] = await Promise.all([
+        api.agentSalesReport(clientId),
+        api.pipelineReport(clientId),
+        api.funnelReport(clientId),
+      ])
+      setAgent(a)
+      setPipeline(p)
+      setFunnel(f)
+    } catch (e) {
+      message.error('Failed to load reports: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [clientId])
+
+  const fmt = (n) => 'R' + (n || 0).toLocaleString('en-ZA', { maximumFractionDigits: 0 })
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+
+  const agentCols = [
+    { title: 'Agent', dataIndex: 'name', render: n => <Text strong>{n}</Text> },
+    { title: 'Leads', dataIndex: 'leads', align: 'right', width: 70 },
+    { title: 'Quoted', dataIndex: 'quoted', align: 'right', width: 70 },
+    { title: 'Won', dataIndex: 'converted', align: 'right', width: 70, render: v => <Tag color="green">{v}</Tag> },
+    { title: 'Lost', dataIndex: 'lost', align: 'right', width: 70, render: v => <Tag color="red">{v}</Tag> },
+    { title: 'Open', dataIndex: 'open', align: 'right', width: 70 },
+    { title: 'Quoted Value', dataIndex: 'quoted_value', align: 'right', render: v => <Text strong style={{ color: '#1677ff' }}>{fmt(v)}</Text> },
+    { title: 'Predicted (50%)', dataIndex: 'predicted_value', align: 'right', render: v => <Text strong style={{ color: '#722ed1' }}>{fmt(v)}</Text> },
+    { title: 'Won Value', dataIndex: 'won_value', align: 'right', render: v => <Text strong style={{ color: '#52c41a' }}>{fmt(v)}</Text> },
+  ]
+
+  return (
+    <div>
+      {/* Pipeline value summary */}
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col span={6}>
+          <Card size="small" style={{ textAlign: 'center', background: '#f0f5ff' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#1677ff' }}>{fmt(pipeline?.quoted_value)}</div>
+            <Text type="secondary" style={{ fontSize: 12 }}>Quoted Sales (all quotes)</Text>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" style={{ textAlign: 'center', background: '#f9f0ff' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#722ed1' }}>{fmt(pipeline?.predicted_value)}</div>
+            <Text type="secondary" style={{ fontSize: 12 }}>Predicted Sales ({Math.round((pipeline?.conversion_probability || 0) * 100)}%)</Text>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" style={{ textAlign: 'center', background: '#f6ffed' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#52c41a' }}>{fmt(pipeline?.won_value)}</div>
+            <Text type="secondary" style={{ fontSize: 12 }}>Won Value</Text>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>{pipeline?.total_leads || 0}</div>
+            <Text type="secondary" style={{ fontSize: 12 }}>Total Leads</Text>
+          </Card>
+        </Col>
+      </Row>
+
+      <Title level={5} style={{ margin: '8px 0 12px' }}>Agent Sales Report</Title>
+      <Table
+        dataSource={agent?.agents || []}
+        columns={agentCols}
+        rowKey="email"
+        size="small"
+        pagination={false}
+        style={{ marginBottom: 24 }}
+      />
+
+      <Title level={5} style={{ margin: '8px 0 12px' }}>Pipeline Funnel</Title>
+      <Row gutter={16}>
+        {(funnel?.funnel || []).map(f => (
+          <Col span={4} key={f.stage}>
+            <Card size="small" style={{ textAlign: 'center', marginBottom: 8 }}>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{f.count}</div>
+              <Tag color={f.stage === 'CONVERTED' ? 'green' : f.stage === 'NEW' ? 'blue' : 'default'}>{f.stage}</Tag>
+              {f.dropoff_pct != null && f.dropoff_pct > 0 && (
+                <div style={{ fontSize: 11, color: '#ff4d4f' }}>▼ {f.dropoff_pct}% drop</div>
+              )}
+            </Card>
+          </Col>
+        ))}
+      </Row>
+    </div>
+  )
+}
+
 // ── Main App ───────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -2493,6 +2608,14 @@ export default function App() {
               <TabPane tab={<span><ThunderboltOutlined /> Scoring</span>} key="scoring">
                 <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
                   <ScoringRulesTab />
+                </div>
+              </TabPane>
+            )}
+
+            {isAdmin && (
+              <TabPane tab={<span><BarChartOutlined /> Reports</span>} key="reports">
+                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                  <ReportsTab clientId={selectedClientId} />
                 </div>
               </TabPane>
             )}

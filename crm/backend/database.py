@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     Text,
     Integer,
+    Float,
     DateTime,
     Boolean,
     ForeignKey,
@@ -198,6 +199,9 @@ class Lead(Base):
     # Outcome
     conversion_status = Column(String(50), nullable=True)  # CONVERTED or LOST
     converted_at = Column(DateTime, nullable=True)
+    # ── Sales value ──────────────────────────────────────────────────────
+    quote_amount = Column(Float, nullable=True)      # value of the quote sent (R)
+    estimated_deal_value = Column(Float, nullable=True)  # est. value before quote (R)
 
     # Internal
     notes = Column(Text, nullable=True)

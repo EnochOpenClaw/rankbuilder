@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from backend.database import seed_lead_sources, SessionLocal, engine, Base
 from backend.scoring import seed_default_rules
-from backend.routes import leads, clients, dashboard, auth, notifications, public, facebook, campaigns, whatsapp, documents, sources, scoring
+from backend.routes import leads, clients, dashboard, auth, notifications, public, facebook, campaigns, whatsapp, documents, sources, scoring, reports
 
 # Build artifact path — served as static files in production
 BACKEND_DIR   = Path(__file__).parent   # .../crm/backend/
@@ -89,6 +89,7 @@ app.include_router(documents.router, prefix="/api/leads", tags=["Documents"])  #
 app.include_router(campaigns.router, prefix="/api/campaigns", tags=["Campaigns"])
 app.include_router(sources.router, prefix="/api/sources", tags=["Sources"])
 app.include_router(scoring.router, prefix="/api/scoring", tags=["Scoring"])
+app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 
 
 @app.on_event("startup")
