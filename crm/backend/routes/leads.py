@@ -40,7 +40,7 @@ from backend.schemas import (
     EmailLogItem,
     EmailLogResponse,
 )
-from backend.notifications import notify_new_lead, notify_lead_sent, notify_lead_allocated
+from backend.notifications import notify_new_lead, notify_lead_sent, notify_lead_allocated, notify_hot_lead
 from backend.dedupe import find_duplicate, merge_duplicate
 from backend.assignment import (
     resolve_rep_for_location,
@@ -104,6 +104,8 @@ def _notify_async(trigger: str, lead_id: str, db: Session):
                     allocated_by=lead_dict.get("allocated_by") or "system",
                     db=session,
                 )
+            elif trigger == "hot_lead":
+                notify_hot_lead(lead_dict, db=session)
         finally:
             session.close()
     except Exception:
@@ -260,6 +262,9 @@ def create_lead(
     if lead.assigned_to:
         # Tell the rep this lead is now theirs (region auto-routing)
         _executor.submit(_notify_async, "lead_allocated", lead.id, db)
+    if (lead.quality_score or 0) >= 70:
+        # High-intent lead — fire urgent hot-lead alert
+        _executor.submit(_notify_async, "hot_lead", lead.id, db)
 
     return _lead_to_response(lead)
 

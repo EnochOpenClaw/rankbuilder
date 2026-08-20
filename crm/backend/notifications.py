@@ -394,3 +394,78 @@ def notify_lead_allocated(lead: dict, rep_email: str, rep_name: str,
     _brevo_send(rep_email, subject, html_body, to_name=rep_name,
                 sender_email=sender_email, sender_name=sender_name)
     log.info(f"Allocated notification sent to {rep_email} for lead {company} ({lead.get('id')})")
+
+
+def notify_hot_lead(lead: dict, db=None) -> None:
+    """
+    Send an urgent HOT-lead alert when a lead scores >= 70 (high intent).
+    Routes to the assigned rep + the client notification group, with a
+    distinct 'act fast' tone so hot leads aren't lost in the inbox.
+    """
+    client_id = lead.get("client_id")
+    if not client_id:
+        return
+
+    source = (lead.get("source") or "UNKNOWN").upper()
+    score = lead.get("quality_score") or 0
+    company = lead.get("company_name") or "Unknown company"
+    contact = lead.get("contact_name") or "—"
+    phone = lead.get("contact_phone") or "—"
+    location = lead.get("location") or "—"
+    source_detail = lead.get("source_detail") or ""
+
+    # Sales sources use the sales sender; outreach uses the default
+    if source in SALES_SOURCES:
+        sender_email = SALES_SENDER_EMAIL
+        sender_name = SALES_SENDER_NAME
+    else:
+        sender_email = SENDER_EMAIL
+        sender_name = SENDER_NAME
+
+    # Recipients: assigned rep (primary) + the client's notification group
+    recipients = set()
+    if lead.get("assigned_to"):
+        recipients.add((lead["assigned_to"], lead.get("assigned_to_name") or "Rep"))
+    for email, name in _get_notification_recipients(client_id, db) or []:
+        recipients.add((email, name))
+
+    subject = f"🔥 [RankBuilder] HOT LEAD ({score}/100): {company}"
+    badge = _lead_source_badge(source)
+
+    html_body = f"""
+<!DOCTYPE html>
+<html>
+<body style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#fff1f0;'>
+  <div style='background:white;border-radius:12px;padding:24px;box-shadow:0 2px 12px rgba(245,34,45,0.15);border:2px solid #f5222d;'>
+    <div style='background:#f5222d;border-radius:8px;padding:12px 16px;margin-bottom:16px;text-align:center;'>
+      <h1 style='margin:0;font-size:22px;color:white;'>🔥 HOT LEAD — Act Fast</h1>
+      <p style='margin:6px 0 0;color:#ffd6d6;font-size:13px;'>Auto-scored {score}/100 · High intent</p>
+    </div>
+
+    {badge}
+
+    <h2 style='margin:16px 0;font-size:20px;color:#111;'>{company}</h2>
+    <table style='width:100%;border-collapse:collapse;font-size:14px;color:#444;'>
+      <tr><td style='padding:4px 0;width:110px;color:#888;'>Contact</td><td>{contact}</td></tr>
+      <tr><td style='padding:4px 0;color:#888;'>Phone</td><td><a href='tel:{phone}'>{phone}</a></td></tr>
+      <tr><td style='padding:4px 0;color:#888;'>Area</td><td>{location}</td></tr>
+      <tr><td style='padding:4px 0;color:#888;'>Source</td><td>{source}{' · ' + source_detail if source_detail else ''}</td></tr>
+      <tr><td style='padding:4px 0;color:#888;'>Assigned</td><td>{lead.get('assigned_to_name') or '—'}</td></tr>
+    </table>
+
+    <div style='margin-top:20px;padding:16px;background:#fff7e6;border-radius:8px;text-align:center;'>
+      <p style='margin:0 0 8px;color:#ad4e00;font-size:14px;'><strong>Priority action:</strong></p>
+      <p style='margin:0;color:#873800;font-size:13px;'>Contact this lead ASAP — high-intent leads convert fastest when reached first. Log your follow-up in the CRM.</p>
+    </div>
+
+    <p style='margin:20px 0 0;color:#aaa;font-size:11px;text-align:center;'>
+      RankBuilder CRM · Powered by AgenticFlows
+    </p>
+  </div>
+</body>
+</html>"""
+
+    for email, name in recipients:
+        _brevo_send(email, subject, html_body, to_name=name,
+                    sender_email=sender_email, sender_name=sender_name)
+    log.info(f"Hot-lead alert sent for {company} ({lead.get('id')}) score={score}")
