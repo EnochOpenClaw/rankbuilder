@@ -21,9 +21,29 @@ router = APIRouter()
 CONVERSION_PROBABILITY = 0.5  # 50% — quoted leads are more likely to close
 
 
+def _apply_date_range(q, date_from: Optional[str], date_to: Optional[str]):
+    """Filter leads by created_at date range (ISO dates YYYY-MM-DD)."""
+    if date_from:
+        try:
+            d = datetime.strptime(date_from, "%Y-%m-%d")
+            q = q.filter(Lead.created_at >= d)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            # Inclusive of the end date
+            d = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            q = q.filter(Lead.created_at < d)
+        except ValueError:
+            pass
+    return q
+
+
 @router.get("/agent")
 def agent_sales_report(
     client_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, description="Start date YYYY-MM-DD (lead created)"),
+    date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD (lead created)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -32,6 +52,7 @@ def agent_sales_report(
     q = db.query(Lead)
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
+    q = _apply_date_range(q, date_from, date_to)
 
     leads = q.all()
     agents = {}
@@ -85,6 +106,8 @@ def agent_sales_report(
 @router.get("/pipeline")
 def pipeline_report(
     client_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -93,6 +116,7 @@ def pipeline_report(
     q = db.query(Lead)
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
+    q = _apply_date_range(q, date_from, date_to)
 
     leads = q.all()
     total_leads = len(leads)
@@ -114,6 +138,8 @@ def pipeline_report(
 @router.get("/funnel")
 def funnel_report(
     client_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -122,6 +148,7 @@ def funnel_report(
     q = db.query(Lead)
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
+    q = _apply_date_range(q, date_from, date_to)
 
     leads = q.all()
     stages = ["NEW", "REVIEWED", "QUALIFIED", "SENT", "CONTACTED", "CONVERTED"]

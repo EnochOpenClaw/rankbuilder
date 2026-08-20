@@ -3,7 +3,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import {
   Layout, Typography, Card, Row, Col, Statistic, Table, Tag, Button,
   Drawer, Descriptions, Timeline, Select, Input, Space, message, Tabs,
-  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, Checkbox
+  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, Checkbox, DatePicker
 } from 'antd'
 import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
@@ -2345,14 +2345,51 @@ function ReportsTab({ clientId }) {
   const [pipeline, setPipeline] = useState(null)
   const [funnel, setFunnel] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [preset, setPreset] = useState('commission')
+  const [dateFrom, setDateFrom] = useState(null)
+  const [dateTo, setDateTo] = useState(null)
+
+  // Default: commission window (1st-21st of current month) — cut-off 21st, payouts 25th
+  useEffect(() => {
+    const now = new Date()
+    const first = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const c21 = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-21`
+    setDateFrom(first)
+    setDateTo(c21)
+  }, [])
+
+  const applyPreset = (p) => {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = now.getMonth()
+    const pad = (n) => String(n).padStart(2, '0')
+    if (p === 'commission') {
+      setDateFrom(`${y}-${pad(m + 1)}-01`)
+      setDateTo(`${y}-${pad(m + 1)}-21`)
+    } else if (p === 'lastMonth') {
+      const ly = m === 0 ? y - 1 : y
+      const lm = m === 0 ? 12 : m
+      setDateFrom(`${ly}-${pad(lm)}-01`)
+      setDateTo(`${ly}-${pad(lm)}-28`)
+    } else if (p === 'all') {
+      setDateFrom(null)
+      setDateTo(null)
+    }
+    setPreset(p)
+  }
 
   const load = async () => {
     setLoading(true)
     try {
+      const qs = new URLSearchParams()
+      if (clientId) qs.set('client_id', clientId)
+      if (dateFrom) qs.set('date_from', dateFrom)
+      if (dateTo) qs.set('date_to', dateTo)
+      const q = qs.toString()
       const [a, p, f] = await Promise.all([
-        api.agentSalesReport(clientId),
-        api.pipelineReport(clientId),
-        api.funnelReport(clientId),
+        api.agentSalesReport(clientId, dateFrom, dateTo),
+        api.pipelineReport(clientId, dateFrom, dateTo),
+        api.funnelReport(clientId, dateFrom, dateTo),
       ])
       setAgent(a)
       setPipeline(p)
@@ -2364,7 +2401,7 @@ function ReportsTab({ clientId }) {
     }
   }
 
-  useEffect(() => { load() }, [clientId])
+  useEffect(() => { load() }, [clientId, dateFrom, dateTo])
 
   const fmt = (n) => 'R' + (n || 0).toLocaleString('en-ZA', { maximumFractionDigits: 0 })
 
@@ -2384,6 +2421,33 @@ function ReportsTab({ clientId }) {
 
   return (
     <div>
+      {/* Date-range filter */}
+      <Space wrap style={{ marginBottom: 16 }}>
+        <Segmented
+          value={preset}
+          onChange={applyPreset}
+          options={[
+            { label: 'Commission (1-21)', value: 'commission' },
+            { label: 'Last Month', value: 'lastMonth' },
+            { label: 'All Time', value: 'all' },
+          ]}
+          size="small"
+        />
+        <DatePicker.RangePicker
+          value={dateFrom && dateTo ? [dayjs(dateFrom), dayjs(dateTo)] : null}
+          onChange={(dates) => {
+            if (dates && dates[0] && dates[1]) {
+              setDateFrom(dates[0].format('YYYY-MM-DD'))
+              setDateTo(dates[1].format('YYYY-MM-DD'))
+            }
+          }}
+          size="small"
+        />
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          Commission cut-off: 21st · Payouts: 25th
+        </Text>
+      </Space>
+
       {/* Pipeline value summary */}
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col span={6}>

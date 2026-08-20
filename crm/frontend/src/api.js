@@ -109,9 +109,9 @@ export const api = {
   getScoringTiers: () => request('GET', '/scoring/tiers', null, true),
 
   // Reports
-  agentSalesReport: (clientId) => request('GET', `/reports/agent${clientId ? '?client_id=' + clientId : ''}`, null, true),
-  pipelineReport: (clientId) => request('GET', `/reports/pipeline${clientId ? '?client_id=' + clientId : ''}`, null, true),
-  funnelReport: (clientId) => request('GET', `/reports/funnel${clientId ? '?client_id=' + clientId : ''}`, null, true),
+  agentSalesReport: (clientId, df, dt) => request('GET', `/reports/agent?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
+  pipelineReport: (clientId, df, dt) => request('GET', `/reports/pipeline?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
+  funnelReport: (clientId, df, dt) => request('GET', `/reports/funnel?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
 
   // Documents (attachments)
   listDocuments: (id) => request('GET', `/leads/${id}/documents`, null, true),
