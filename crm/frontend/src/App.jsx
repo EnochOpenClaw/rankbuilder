@@ -9,7 +9,7 @@ import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -2622,6 +2622,7 @@ export default function App() {
   const [campaignFilter, setCampaignFilter] = useState(null)
   const [campaignName, setCampaignName] = useState(null)
   const [sources, setSources] = useState([])
+  const [helpOpen, setHelpOpen] = useState(false)
 
   // Listen for auth:logout events from api.js
   useEffect(() => {
@@ -2699,6 +2700,10 @@ export default function App() {
             <span style={{ color: '#fff', fontSize: 13, lineHeight: 1.2 }}>{user.full_name}</span>
             <span style={{ color: '#fff5', fontSize: 11 }}>{user.role}</span>
           </div>
+          <Button icon={<QuestionCircleOutlined />} onClick={() => setHelpOpen(true)}
+            style={{ color: '#fff', borderColor: '#fff5' }} ghost size="small">
+            Help
+          </Button>
           <Button icon={<LogoutOutlined />} onClick={handleLogout}
             style={{ color: '#fff', borderColor: '#fff5' }} ghost size="small">
             Logout
@@ -2800,6 +2805,27 @@ export default function App() {
           </Empty>
         )}
       </Layout.Content>
+
+      {/* Help modal */}
+      <Modal
+        title="📚 RankBuilder CRM Help"
+        open={helpOpen}
+        onCancel={() => setHelpOpen(false)}
+        footer={<Button onClick={() => setHelpOpen(false)}>Close</Button>}
+        width={520}
+      >
+        <p style={{ color: '#555' }}>Choose a guide to get started:</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Card size="small" hoverable onClick={() => window.open('/help/agent', '_blank')}>
+            <Text strong>👤 Agent Guide</Text>
+            <div style={{ color: '#888', fontSize: 12 }}>For sales reps — working leads, quotes, AI drafts, scoring, commissions</div>
+          </Card>
+          <Card size="small" hoverable onClick={() => window.open('/help/admin', '_blank')}>
+            <Text strong>🛠️ Admin Guide</Text>
+            <div style={{ color: '#888', fontSize: 12 }}>For managers — roles, users, sources, scoring rules, SLA, reports</div>
+          </Card>
+        </div>
+      </Modal>
     </Layout>
   )
 }
