@@ -8,7 +8,7 @@ import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined, TagsOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -195,7 +195,18 @@ function LeadTypeTag({ type }) {
 }
 
 function ScoreBadge({ score }) {
-  if (!score) return <Text type="secondary">—</Text>
+  if (!score && score !== 0) return <Text type="secondary">—</Text>
+  // Auto-scored leads use 0-100 scale; legacy manual scores use 1-5
+  if (score > 5) {
+    const color = score >= 70 ? '#f5222d' : score >= 40 ? '#fa8c16' : '#8c8c8c'
+    const label = score >= 70 ? 'HOT' : score >= 40 ? 'WARM' : 'COLD'
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <Progress percent={score} size="small" strokeColor={color} style={{ width: 50 }} />
+        <Tag color={color} style={{ fontSize: 10, margin: 0 }}>{label}</Tag>
+      </div>
+    )
+  }
   const pct = score * 20
   const color = score >= 4 ? '#52c41a' : score >= 3 ? '#faad14' : '#ff4d4f'
   return <Progress percent={pct} size="small" steps={5} strokeColor={color} style={{ width: 70 }} />
@@ -2034,6 +2045,149 @@ function SourcesTab({ sources, onSourcesChange }) {
   )
 }
 
+// ── Scoring Rules Tab (SYSTEM_ADMIN only) ──────────────────────────────────────
+
+const SCORE_FIELDS = [
+  { value: 'source', label: 'Source' },
+  { value: 'has_phone', label: 'Has Phone' },
+  { value: 'has_website', label: 'Has Website' },
+  { value: 'has_email', label: 'Has Email' },
+  { value: 'no_email', label: 'No Email' },
+  { value: 'lead_type', label: 'Lead Type' },
+  { value: 'location', label: 'Location' },
+  { value: 'message_keyword', label: 'Message Keyword' },
+  { value: 'age_days', label: 'Age (days)' },
+]
+
+const SCORE_OPERATORS = [
+  { value: 'eq', label: 'equals' },
+  { value: 'ne', label: 'not equals' },
+  { value: 'contains', label: 'contains' },
+  { value: 'is_true', label: 'is true' },
+  { value: 'is_false', label: 'is false' },
+  { value: 'gt', label: 'greater than' },
+  { value: 'lt', label: 'less than' },
+]
+
+function ScoringRulesTab() {
+  const [rules, setRules] = useState([])
+  const [tiers, setTiers] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form] = Form.useForm()
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const [r, t] = await Promise.all([api.listScoringRules(), api.getScoringTiers()])
+      setRules(r || [])
+      setTiers(t)
+    } catch (e) {
+      message.error('Failed to load scoring rules: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleCreate = async (values) => {
+    try {
+      await api.createScoringRule({
+        field: values.field,
+        operator: values.operator,
+        value: values.value || null,
+        points: values.points,
+        client_id: null,
+      })
+      message.success('Rule added')
+      setModalOpen(false)
+      form.resetFields()
+      load()
+    } catch (e) {
+      message.error('Failed to add rule: ' + e.message)
+    }
+  }
+
+  const handleToggle = async (rule) => {
+    try {
+      await api.updateScoringRule(rule.id, { is_active: rule.is_active === 1 ? 0 : 1 })
+      message.success(rule.is_active === 1 ? 'Rule deactivated' : 'Rule activated')
+      load()
+    } catch (e) {
+      message.error('Failed: ' + e.message)
+    }
+  }
+
+  const fieldLabel = (f) => (SCORE_FIELDS.find(x => x.value === f) || {}).label || f
+  const opLabel = (o) => (SCORE_OPERATORS.find(x => x.value === o) || {}).label || o
+
+  const columns = [
+    { title: 'Field', dataIndex: 'field', width: 150, render: f => <Text strong>{fieldLabel(f)}</Text> },
+    { title: 'Condition', dataIndex: 'operator', width: 130, render: (o, r) => <Text>{opLabel(o)}{r.value ? ` "${r.value}"` : ''}</Text> },
+    { title: 'Points', dataIndex: 'points', width: 80, align: 'center', render: p => <Tag color={p >= 0 ? 'green' : 'red'}>{p >= 0 ? `+${p}` : p}</Tag> },
+    { title: 'Scope', dataIndex: 'client_id', width: 90, render: c => c ? 'Client' : 'Global' },
+    { title: 'Status', width: 90, align: 'center', render: (_, r) => <Tag color={r.is_active === 1 ? 'green' : 'default'}>{r.is_active === 1 ? 'Active' : 'Off'}</Tag> },
+    { title: '', width: 120, render: (_, r) => <Button size="small" onClick={() => handleToggle(r)}>{r.is_active === 1 ? 'Deactivate' : 'Activate'}</Button> },
+  ]
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Auto-score leads (0-100) from rules. Scores recalculate on every lead create/update.
+          </Text>
+          {tiers && (
+            <div style={{ marginTop: 8 }}>
+              <Tag color="red">🔥 Hot: {tiers.hot}</Tag>
+              <Tag color="orange">Warm: {tiers.warm}</Tag>
+              <Tag color="default">Cold: {tiers.cold}</Tag>
+              <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>Hot ≥ 70 · Warm 40-69 · Cold &lt; 40</Text>
+            </div>
+          )}
+        </div>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+          Add Rule
+        </Button>
+      </div>
+
+      <Table
+        dataSource={rules}
+        columns={columns}
+        rowKey="id"
+        loading={loading}
+        size="small"
+        pagination={false}
+      />
+
+      <Modal title="Add Scoring Rule" open={modalOpen} onCancel={() => setModalOpen(false)} footer={null}>
+        <Form form={form} layout="vertical" onFinish={handleCreate} style={{ marginTop: 16 }}>
+          <Form.Item name="field" label="Field" rules={[{ required: true }]}>
+            <Select placeholder="Select field">
+              {SCORE_FIELDS.map(f => <Select.Option key={f.value} value={f.value}>{f.label}</Select.Option>)}
+            </Select>
+          </Form.Item>
+          <Form.Item name="operator" label="Condition" rules={[{ required: true }]} initialValue="eq">
+            <Select>
+              {SCORE_OPERATORS.map(o => <Select.Option key={o.value} value={o.value}>{o.label}</Select.Option>)}
+            </Select>
+          </Form.Item>
+          <Form.Item name="value" label="Value (for equals/contains/greater-than)">
+            <Input placeholder="e.g. HARO, quote, 7" />
+          </Form.Item>
+          <Form.Item name="points" label="Points (positive adds, negative subtracts)" rules={[{ required: true }]}>
+            <Input type="number" placeholder="e.g. 10 or -5" />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block>Add Rule</Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  )
+}
+
 // ── Main App ───────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -2194,6 +2348,14 @@ export default function App() {
               <TabPane tab={<span><TagsOutlined /> Sources</span>} key="sources">
                 <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
                   <SourcesTab sources={sources} onSourcesChange={setSources} />
+                </div>
+              </TabPane>
+            )}
+
+            {isMultiClientAdmin && (
+              <TabPane tab={<span><ThunderboltOutlined /> Scoring</span>} key="scoring">
+                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                  <ScoringRulesTab />
                 </div>
               </TabPane>
             )}

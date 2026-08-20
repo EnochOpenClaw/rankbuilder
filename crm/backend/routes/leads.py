@@ -18,6 +18,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from backend.scoring import compute_score
 
 from backend.database import (
     get_db, Lead, LeadHistory, LeadSource, LeadStatus, LeadType,
@@ -232,6 +233,11 @@ def create_lead(
         status=LeadStatus.NEW,
     )
     db.add(lead)
+    db.commit()
+    db.refresh(lead)
+
+    # Auto-compute quality score from scoring rules
+    lead.quality_score = compute_score(lead, db)
     db.commit()
     db.refresh(lead)
 
@@ -715,6 +721,9 @@ def update_lead(
                 changed_by="system",
             )
             db.add(hist)
+
+    # Recompute quality score from scoring rules (fields may have changed)
+    lead.quality_score = compute_score(lead, db)
 
     db.commit()
     db.refresh(lead)

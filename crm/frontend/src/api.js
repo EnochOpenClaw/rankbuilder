@@ -101,6 +101,13 @@ export const api = {
   updateSource: (id, data) => request('PATCH', `/sources/${id}`, data, true),
   deleteSource: (id) => request('DELETE', `/sources/${id}`, null, true),
 
+  // Scoring rules
+  listScoringRules: () => request('GET', '/scoring/rules', null, true),
+  createScoringRule: (data) => request('POST', '/scoring/rules', data, true),
+  updateScoringRule: (id, data) => request('PATCH', `/scoring/rules/${id}`, data, true),
+  deleteScoringRule: (id) => request('DELETE', `/scoring/rules/${id}`, null, true),
+  getScoringTiers: () => request('GET', '/scoring/tiers', null, true),
+
   // Documents (attachments)
   listDocuments: (id) => request('GET', `/leads/${id}/documents`, null, true),
   uploadDocument: (id, file, category) => {

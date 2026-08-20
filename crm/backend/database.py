@@ -115,6 +115,29 @@ class LeadSourceModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ScoringRule(Base):
+    """Configurable lead-scoring rule (SYSTEM_ADMIN managed).
+
+    field: which lead attribute to evaluate (source, has_phone, has_website,
+           lead_type, location, message_keyword, no_email, age_days)
+    operator: eq / ne / contains / gt / lt / is_true / is_false
+    value: the comparison value (string or number)
+    points: points to add (positive) or subtract (negative)
+    """
+
+    __tablename__ = "scoring_rules"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    client_id = Column(String(36), ForeignKey("clients.id"), nullable=True)  # NULL = global rule
+    field = Column(String(50), nullable=False)  # source, has_phone, has_website, lead_type, location, message_keyword, no_email, age_days
+    operator = Column(String(20), nullable=False, default="eq")  # eq, ne, contains, gt, lt, is_true, is_false
+    value = Column(String(255), nullable=True)
+    points = Column(Integer, nullable=False, default=0)
+    is_active = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Campaign(Base):
     __tablename__ = "campaigns"
 
