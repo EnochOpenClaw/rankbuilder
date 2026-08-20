@@ -924,7 +924,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
 
   // ── Computed fields ────────────────────────────────────────────────────────
 
-  const responseTime = lead.sent_to_client_at
+  const responseTime = lead && lead.sent_to_client_at
     ? `${Math.round((new Date(lead.sent_to_client_at) - new Date(lead.created_at)) / 3600000)}h`
     : null
 
