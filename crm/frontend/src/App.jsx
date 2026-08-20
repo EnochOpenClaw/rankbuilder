@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import {
   Layout, Typography, Card, Row, Col, Statistic, Table, Tag, Button,
   Drawer, Descriptions, Timeline, Select, Input, Space, message, Tabs,
@@ -8,7 +9,7 @@ import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -493,6 +494,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [createMode, setCreateMode] = useState(false)
   const [repOptions, setRepOptions] = useState([])
+  const [viewMode, setViewMode] = useState('table')
 
   // Load assignable sales reps (AGENT + CLIENT_ADMIN) for this client — drives the
   // assignment dropdown dynamically instead of a hardcoded list (2026-08-19).
@@ -694,6 +696,26 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         <Text type="secondary" style={{ fontSize: 12 }}>{total} leads</Text>
       </Space>
 
+      <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end' }}>
+        <Segmented
+          value={viewMode}
+          onChange={setViewMode}
+          options={[
+            { label: 'Table', value: 'table', icon: <DatabaseOutlined /> },
+            { label: 'Board', value: 'board', icon: <AppstoreOutlined /> },
+          ]}
+          size="small"
+        />
+      </div>
+
+      {viewMode === 'board' ? (
+        <KanbanBoard
+          clientId={clientId}
+          canWrite={canWrite}
+          onUpdate={loadLeads}
+          onOpenLead={(lead) => { setSelectedRow(lead); setDrawerOpen(true) }}
+        />
+      ) : (
       <Table
         dataSource={leads}
         columns={columns}
@@ -708,6 +730,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         size="small"
         scroll={{ x: 1200 }}
       />
+      )}
 
       <LeadDrawer
         lead={selectedRow}
@@ -721,6 +744,120 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         onUpdate={loadLeads}
       />
     </div>
+  )
+}
+
+// ── Kanban Pipeline Board ──────────────────────────────────────────────────────
+
+const KANBAN_COLUMNS = ['NEW', 'REVIEWED', 'QUALIFIED', 'SENT', 'CONTACTED', 'CONVERTED', 'LOST']
+
+function KanbanBoard({ clientId, canWrite = true, onUpdate, onOpenLead }) {
+  const [leads, setLeads] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const res = await api.listLeads({ client_id: clientId, limit: 200 })
+      setLeads(res.leads || [])
+    } catch (e) {
+      message.error('Failed to load board: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [clientId])
+
+  const moveLead = async (leadId, newStatus) => {
+    // Optimistic update
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: newStatus } : l))
+    try {
+      await api.updateLead(leadId, { status: newStatus })
+      onUpdate && onUpdate()
+    } catch (e) {
+      message.error('Move failed: ' + e.message)
+      load() // revert
+    }
+  }
+
+  const onDragEnd = (result) => {
+    if (!result.destination) return
+    const { draggableId, destination } = result
+    const newStatus = destination.droppableId
+    if (result.source.droppableId === newStatus) return
+    moveLead(draggableId, newStatus)
+  }
+
+  const daysInStage = (lead) => {
+    const base = lead.updated_at || lead.created_at
+    if (!base) return 0
+    return Math.max(0, Math.round((Date.now() - new Date(base).getTime()) / 86400000))
+  }
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+
+  return (
+    <DragDropContext onDragEnd={onDragEnd}>
+      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 12 }}>
+        {KANBAN_COLUMNS.map(status => {
+          const colLeads = leads.filter(l => l.status === status)
+          return (
+            <Droppable key={status} droppableId={status}>
+              {(provided, snapshot) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  style={{
+                    background: snapshot.isDraggingOver ? '#f0f5ff' : '#fafafa',
+                    borderRadius: 8, padding: 8, width: 220, minHeight: 200, flexShrink: 0,
+                    border: '1px solid #f0f0f0',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <Tag color={status === 'CONVERTED' ? 'green' : status === 'LOST' ? 'red' : status === 'NEW' ? 'blue' : 'default'}>{status}</Tag>
+                    <Text type="secondary" style={{ fontSize: 11 }}>{colLeads.length}</Text>
+                  </div>
+                  {colLeads.map((lead, idx) => (
+                    <Draggable key={lead.id} draggableId={lead.id} index={idx} isDragDisabled={!canWrite}>
+                      {(p2) => (
+                        <div
+                          ref={p2.innerRef}
+                          {...p2.draggableProps}
+                          {...p2.dragHandleProps}
+                          onClick={() => onOpenLead && onOpenLead(lead)}
+                          style={{
+                            ...p2.draggableProps.style,
+                            background: '#fff', borderRadius: 6, padding: 8, marginBottom: 8,
+                            border: '1px solid #e8e8e8', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                            cursor: canWrite ? 'grab' : 'default',
+                          }}
+                        >
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{lead.company_name || lead.contact_name || 'Lead'}</div>
+                          {lead.contact_name && lead.company_name && (
+                            <div style={{ color: '#888', fontSize: 12 }}>{lead.contact_name}</div>
+                          )}
+                          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                            <Tag style={{ fontSize: 10, margin: 0 }}>{lead.source?.replace('_', ' ')}</Tag>
+                            {lead.quality_score ? (
+                              <Tag color={lead.quality_score >= 70 ? 'red' : lead.quality_score >= 40 ? 'orange' : 'default'} style={{ fontSize: 10, margin: 0 }}>
+                                {lead.quality_score}
+                              </Tag>
+                            ) : null}
+                          </div>
+                          <div style={{ marginTop: 6, fontSize: 11, color: '#aaa' }}>{daysInStage(lead)}d</div>
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          )
+        })}
+      </div>
+    </DragDropContext>
   )
 }
 
