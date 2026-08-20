@@ -202,6 +202,8 @@ class Lead(Base):
     # ── Sales value ──────────────────────────────────────────────────────
     quote_amount = Column(Float, nullable=True)      # value of the quote sent (R)
     estimated_deal_value = Column(Float, nullable=True)  # est. value before quote (R)
+    created_by = Column(String(255), nullable=True)  # email of user who created the lead
+    payment_status = Column(String(20), nullable=True)  # PENDING / RECEIVED
 
     # Internal
     notes = Column(Text, nullable=True)

@@ -63,6 +63,7 @@ class LeadCreate(BaseModel):
     notes: Optional[str] = None
     quote_amount: Optional[float] = Field(None, ge=0, description="Value of the quote sent (R)")
     estimated_deal_value: Optional[float] = Field(None, ge=0, description="Estimated deal value (R)")
+    payment_status: Optional[str] = None  # PENDING / RECEIVED
     # Marketing attribution
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
@@ -84,6 +85,7 @@ class LeadUpdate(BaseModel):
     conversion_status: Optional[str] = None  # CONVERTED or LOST
     quote_amount: Optional[float] = Field(None, ge=0)
     estimated_deal_value: Optional[float] = Field(None, ge=0)
+    payment_status: Optional[str] = None  # PENDING / RECEIVED
     source_detail: Optional[str] = None
     location: Optional[str] = None
     # ── Editable contact info (agent can update) ─────────────────────────
@@ -153,6 +155,8 @@ class LeadResponse(BaseModel):
     converted_at: Optional[datetime]
     quote_amount: Optional[float]
     estimated_deal_value: Optional[float]
+    created_by: Optional[str]
+    payment_status: Optional[str]
     notes: Optional[str]
     # ── Sales rep assignment & follow-up ───────────────────────────────────
     assigned_to: Optional[str] = None

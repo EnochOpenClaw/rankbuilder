@@ -143,6 +143,8 @@ def _lead_to_response(lead: Lead) -> LeadResponse:
         converted_at=lead.converted_at,
         quote_amount=lead.quote_amount,
         estimated_deal_value=lead.estimated_deal_value,
+        created_by=lead.created_by,
+        payment_status=lead.payment_status,
         notes=lead.notes,
         assigned_to=lead.assigned_to,
         assigned_to_name=lead.assigned_to_name,
@@ -234,6 +236,8 @@ def create_lead(
         quality_score=payload.quality_score,
         quote_amount=payload.quote_amount,
         estimated_deal_value=payload.estimated_deal_value,
+        payment_status=payload.payment_status,
+        created_by=current_user.email if current_user else None,
         lead_type=lead_type_val,
         notes=payload.notes,
         status=LeadStatus.NEW,
@@ -295,8 +299,9 @@ def list_leads(
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     if current_user.role == UserRole.AGENT:
-        # Sales agents only see leads assigned to them
-        q = q.filter(Lead.assigned_to == current_user.email)
+        # Sales agents see leads assigned to them OR leads they created
+        from sqlalchemy import or_
+        q = q.filter(or_(Lead.assigned_to == current_user.email, Lead.created_by == current_user.email))
     if campaign_id:
         q = q.filter(Lead.campaign_id == campaign_id)
     if status:
@@ -354,8 +359,9 @@ def export_leads(
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     if current_user.role == UserRole.AGENT:
-        # Sales agents only see leads assigned to them
-        q = q.filter(Lead.assigned_to == current_user.email)
+        # Sales agents see leads assigned to them OR leads they created
+        from sqlalchemy import or_
+        q = q.filter(or_(Lead.assigned_to == current_user.email, Lead.created_by == current_user.email))
     if campaign_id:
         q = q.filter(Lead.campaign_id == campaign_id)
     if status:

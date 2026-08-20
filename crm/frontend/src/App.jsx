@@ -616,6 +616,12 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
       width: 100,
     },
     {
+      title: 'Payment',
+      dataIndex: 'payment_status',
+      render: p => p === 'RECEIVED' ? <Tag color="green">Paid ✓</Tag> : p === 'PENDING' ? <Tag color="orange">Pending</Tag> : '—',
+      width: 90,
+    },
+    {
       title: 'Score',
       dataIndex: 'quality_score',
       render: s => <ScoreBadge score={s} />,
@@ -866,6 +872,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   const [leadType, setLeadType] = useState(null)
   const [qualityScore, setQualityScore] = useState(null)
   const [quoteAmount, setQuoteAmount] = useState(null)
+  const [paymentStatus, setPaymentStatus] = useState(null)
   const [location, setLocation] = useState('')
   const [contactName, setContactName] = useState('')
   const [contactEmail, setContactEmail] = useState('')
@@ -906,6 +913,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
     setLeadType(lead.lead_type)
     setQualityScore(lead.quality_score)
     setQuoteAmount(lead.quote_amount || null)
+    setPaymentStatus(lead.payment_status || null)
     setLocation(lead.location || '')
     setContactName(lead.contact_name || '')
     setContactEmail(lead.contact_email || '')
@@ -1003,6 +1011,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
         lead_type: leadType,
         quality_score: qualityScore,
         quote_amount: quoteAmount,
+        payment_status: paymentStatus,
         location,
         contact_name: contactName,
         contact_email: contactEmail,
@@ -1464,6 +1473,18 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
                   placeholder="e.g. 25000"
                   prefix="R"
                 />
+              </Form.Item>
+              <Form.Item label="Payment Status" style={{ marginBottom: 8 }} extra="Confirm payment received to proceed with production">
+                <Select
+                  allowClear
+                  placeholder="Select payment status"
+                  value={paymentStatus}
+                  onChange={setPaymentStatus}
+                  style={{ width: '100%' }}
+                >
+                  <Select.Option value="PENDING"><Tag color="orange">Pending</Tag></Select.Option>
+                  <Select.Option value="RECEIVED"><Tag color="green">Received — Proceed to Production</Tag></Select.Option>
+                </Select>
               </Form.Item>
               <Form.Item label="Client Response" style={{ marginBottom: 8 }}>
                 <Input.TextArea
