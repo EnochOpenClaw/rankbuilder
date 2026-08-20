@@ -52,7 +52,7 @@ class LeadCreate(BaseModel):
     source_query: Optional[str] = None
     source_detail: Optional[str] = None  # e.g. "Homepage Quote Form", "Facebook Lead Ad"
     contact_name: Optional[str] = None
-    contact_email: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
     company_name: Optional[str] = None
     company_website: Optional[str] = None
@@ -84,7 +84,7 @@ class LeadUpdate(BaseModel):
     location: Optional[str] = None
     # ── Editable contact info (agent can update) ─────────────────────────
     contact_name: Optional[str] = None
-    contact_email: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
     company_name: Optional[str] = None
     company_website: Optional[str] = None
@@ -98,7 +98,7 @@ class LeadUpdate(BaseModel):
 class LeadPublicCreate(BaseModel):
     """Public lead capture — no auth required, uses a client API token."""
     contact_name: str
-    contact_email: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
     company_name: Optional[str] = None
     product_interest: Optional[str] = None  # what they enquired about

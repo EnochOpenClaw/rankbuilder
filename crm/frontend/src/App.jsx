@@ -462,6 +462,14 @@ const STATUS_OPTIONS = ['NEW','REVIEWED','QUALIFIED','SENT','CONTACTED','CONVERT
 const SOURCE_OPTIONS  = ['HARO','CONNECTIVELY','GUEST_OUTREACH','WEBSITE','FACEBOOK','DIRECT_MAIL','CALL_IN','WEB_SEARCH','MANUAL']
 const TYPE_OPTIONS    = ['VALID','INVALID','FOLLOW_UP']
 
+// Format a phone number as ### ### #### (digits only, max 10)
+function formatPhone(v) {
+  const digits = (v || '').replace(/[^0-9]/g, '').slice(0, 10)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `${digits.slice(0,3)} ${digits.slice(3)}`
+  return `${digits.slice(0,3)} ${digits.slice(3,6)} ${digits.slice(6)}`
+}
+
 export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign, canWrite = true }) {
   const [leads, setLeads] = useState([])
   const [total, setTotal] = useState(0)
@@ -719,6 +727,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   const [createSource, setCreateSource] = useState('MANUAL')
   const [createSourceDetail, setCreateSourceDetail] = useState('')
   const [createMessage, setCreateMessage] = useState('')
+  const [countryCode, setCountryCode] = useState('+27')
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -770,6 +779,22 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
       message.warning('Please enter at least a name, company or contact detail')
       return
     }
+    // Validate email format if provided: name@company.tld
+    if (contactEmail) {
+      const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(contactEmail.trim())
+      if (!emailOk) {
+        message.error('Please enter a valid email address (e.g. name@company.co.za)')
+        return
+      }
+    }
+    // Validate phone if provided: digits only (country code handled separately)
+    if (contactPhone) {
+      const digits = contactPhone.replace(/[^0-9]/g, '')
+      if (digits.length < 9 || digits.length > 10) {
+        message.error('Please enter a valid phone number (e.g. 082 555 1234)')
+        return
+      }
+    }
     setSaving(true)
     try {
       await api.createLead({
@@ -777,8 +802,8 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
         source: createSource,
         source_detail: createSourceDetail || undefined,
         contact_name: contactName || undefined,
-        contact_email: contactEmail || undefined,
-        contact_phone: contactPhone || undefined,
+        contact_email: contactEmail ? contactEmail.trim() : undefined,
+        contact_phone: contactPhone ? `${countryCode} ${contactPhone.trim()}` : undefined,
         company_name: companyName || undefined,
         company_website: companyWebsite || undefined,
         location: location || undefined,
@@ -799,6 +824,14 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
 
   const handleSave = async () => {
     if (!lead) return
+    // Validate email format if provided
+    if (contactEmail) {
+      const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(contactEmail.trim())
+      if (!emailOk) {
+        message.error('Please enter a valid email address (e.g. name@company.co.za)')
+        return
+      }
+    }
     setSaving(true)
     try {
       await api.updateLead(lead.id, {
@@ -988,9 +1021,32 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
           <Input value={contactName} onChange={e => setContactName(e.target.value)}
             placeholder="Contact person" style={{ marginBottom: 8 }} />
           <Input value={contactEmail} onChange={e => setContactEmail(e.target.value)}
-            placeholder="Email" style={{ marginBottom: 8 }} />
-          <Input value={contactPhone} onChange={e => setContactPhone(e.target.value)}
-            placeholder="Phone" style={{ marginBottom: 8 }} />
+            placeholder="Email (e.g. name@company.co.za)" style={{ marginBottom: 8 }} />
+          <Input.Group compact style={{ marginBottom: 8, display: 'flex' }}>
+            <Select
+              value={countryCode}
+              onChange={setCountryCode}
+              style={{ width: 90 }}
+              placeholder="Code"
+            >
+              <Select.Option value="+27">🇿🇦 +27</Select.Option>
+              <Select.Option value="+1">🇺🇸 +1</Select.Option>
+              <Select.Option value="+44">🇬🇧 +44</Select.Option>
+              <Select.Option value="+61">🇦🇺 +61</Select.Option>
+              <Select.Option value="+64">🇳🇿 +64</Select.Option>
+              <Select.Option value="+353">🇮🇪 +353</Select.Option>
+              <Select.Option value="+971">🇦🇪 +971</Select.Option>
+              <Select.Option value="+91">🇮🇳 +91</Select.Option>
+              <Select.Option value="+234">🇳🇬 +234</Select.Option>
+              <Select.Option value="+254">🇰🇪 +254</Select.Option>
+            </Select>
+            <Input
+              value={contactPhone}
+              onChange={e => setContactPhone(formatPhone(e.target.value))}
+              placeholder="082 555 1234"
+              style={{ flex: 1 }}
+            />
+          </Input.Group>
           <Input value={companyWebsite} onChange={e => setCompanyWebsite(e.target.value)}
             placeholder="Company website" style={{ marginBottom: 8 }} />
           <Input value={location} onChange={e => setLocation(e.target.value)}
@@ -1069,7 +1125,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
               />
               <Input
                 value={contactPhone}
-                onChange={e => setContactPhone(e.target.value)}
+                onChange={e => setContactPhone(formatPhone(e.target.value))}
                 placeholder="Phone number"
                 style={{ marginBottom: 8 }}
               />
