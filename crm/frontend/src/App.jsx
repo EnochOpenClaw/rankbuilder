@@ -8,7 +8,7 @@ import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -470,7 +470,7 @@ function formatPhone(v) {
   return `${digits.slice(0,3)} ${digits.slice(3,6)} ${digits.slice(6)}`
 }
 
-export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign, canWrite = true }) {
+export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign, canWrite = true, sources = [], onSourcesChange }) {
   const [leads, setLeads] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -658,11 +658,15 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         </Select>
         <Select allowClear placeholder="Source" style={{ width: 150 }}
           onChange={v => { setFilters(f => ({ ...f, source: v })); setPage(1) }}>
-          {SOURCE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s.replace('_',' ')}</Select.Option>)}
+          {(sources.length ? sources : SOURCE_OPTIONS.map(c => ({ code: c, name: c }))).map(s => <Select.Option key={s.code} value={s.code}>{s.name}</Select.Option>)}
         </Select>
         <Select allowClear placeholder="Type" style={{ width: 120 }}
           onChange={v => { setFilters(f => ({ ...f, lead_type: v })); setPage(1) }}>
           {TYPE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+        </Select>
+        <Select allowClear placeholder="Score" style={{ width: 100 }}
+          onChange={v => { setFilters(f => ({ ...f, quality_score: v })); setPage(1) }}>
+          {[1,2,3,4,5].map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
         </Select>
         <Button onClick={() => setFilters({})} size="small">
           <FilterOutlined /> Clear
@@ -701,6 +705,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         clientId={clientId}
         createMode={createMode}
         repOptions={repOptions}
+        sources={sources}
         onClose={() => { setDrawerOpen(false); setSelectedRow(null); setCreateMode(false) }}
         onUpdate={loadLeads}
       />
@@ -710,7 +715,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
 
 // ── Lead Drawer ────────────────────────────────────────────────────────────────
 
-function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions = [], clientId = null, createMode = false }) {
+function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions = [], clientId = null, createMode = false, sources = [] }) {
   const [notes, setNotes] = useState('')
   const [clientResponse, setClientResponse] = useState('')
   const [status, setStatus] = useState(null)
@@ -831,6 +836,12 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
         message.error('Please enter a valid email address (e.g. name@company.co.za)')
         return
       }
+    }
+    // Quality score required when qualifying or converting
+    if ((status === 'QUALIFIED' || status === 'CONVERTED') && !qualityScore) {
+      message.warning('Please set a Quality Score (1-5) before marking this lead as ' + status)
+      setActiveTab('details')
+      return
     }
     setSaving(true)
     try {
@@ -1004,7 +1015,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
             value={createSource}
             onChange={v => setCreateSource(v)}
           >
-            {SOURCE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s.replace('_', ' ')}</Select.Option>)}
+            {(sources.length ? sources : SOURCE_OPTIONS.map(c => ({ code: c, name: c }))).map(s => <Select.Option key={s.code} value={s.code}>{s.name}</Select.Option>)}
           </Select>
           <Input
             value={createSourceDetail}
@@ -1917,6 +1928,112 @@ function ClientsTab({ onClientAdded }) {
   )
 }
 
+// ── Sources Tab (SYSTEM_ADMIN only) ───────────────────────────────────────────
+
+function SourcesTab({ sources, onSourcesChange }) {
+  const [allSources, setAllSources] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form] = Form.useForm()
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const res = await api.listAllSources()
+      setAllSources(res || [])
+      onSourcesChange && onSourcesChange((res || []).filter(s => s.is_active === 1))
+    } catch (e) {
+      message.error('Failed to load sources: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleCreate = async (values) => {
+    try {
+      await api.createSource({ code: values.code, name: values.name, sort_order: 0 })
+      message.success('Source added')
+      setModalOpen(false)
+      form.resetFields()
+      load()
+    } catch (e) {
+      message.error('Failed to add source: ' + e.message)
+    }
+  }
+
+  const handleToggle = async (src) => {
+    try {
+      await api.updateSource(src.id, { is_active: src.is_active === 1 ? 0 : 1 })
+      message.success(src.is_active === 1 ? 'Source deactivated' : 'Source activated')
+      load()
+    } catch (e) {
+      message.error('Failed: ' + e.message)
+    }
+  }
+
+  const columns = [
+    { title: 'Code', dataIndex: 'code', width: 180, render: c => <Text code>{c}</Text> },
+    { title: 'Name', dataIndex: 'name' },
+    { title: 'Order', dataIndex: 'sort_order', width: 80, align: 'center' },
+    {
+      title: 'Status',
+      width: 100,
+      align: 'center',
+      render: (_, r) => <Tag color={r.is_active === 1 ? 'green' : 'default'}>{r.is_active === 1 ? 'Active' : 'Inactive'}</Tag>,
+    },
+    {
+      title: '',
+      width: 160,
+      render: (_, r) => (
+        <Space size="small">
+          <Button size="small" onClick={() => handleToggle(r)}>
+            {r.is_active === 1 ? 'Deactivate' : 'Activate'}
+          </Button>
+        </Space>
+      ),
+    },
+  ]
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          Manage lead source values. Sources are tracked for reporting — deactivating hides them from dropdowns but keeps existing leads intact.
+        </Text>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+          Add Source
+        </Button>
+      </div>
+
+      <Table
+        dataSource={allSources}
+        columns={columns}
+        rowKey="id"
+        loading={loading}
+        size="small"
+        pagination={false}
+      />
+
+      <Modal title="Add Source" open={modalOpen} onCancel={() => setModalOpen(false)} footer={null}>
+        <Form form={form} layout="vertical" onFinish={handleCreate} style={{ marginTop: 16 }}>
+          <Form.Item name="code" label="Code" rules={[{ required: true, message: 'Code is required' }]}
+            extra="Uppercase short code, e.g. LINKEDIN, EXPO, REFERRAL">
+            <Input placeholder="e.g. LINKEDIN" />
+          </Form.Item>
+          <Form.Item name="name" label="Display name" rules={[{ required: true, message: 'Name is required' }]}>
+            <Input placeholder="e.g. LinkedIn" />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block>Add Source</Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  )
+}
+
 // ── Main App ───────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -1927,6 +2044,7 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [campaignFilter, setCampaignFilter] = useState(null)
   const [campaignName, setCampaignName] = useState(null)
+  const [sources, setSources] = useState([])
 
   // Listen for auth:logout events from api.js
   useEffect(() => {
@@ -1946,6 +2064,11 @@ export default function App() {
     }).catch(() => {
       message.error('Cannot connect to CRM backend. Is it running?')
     })
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
+    api.listSources().then(setSources).catch(() => { /* non-fatal */ })
   }, [user])
 
   const handleLogin = (userData) => {
@@ -2024,6 +2147,8 @@ export default function App() {
                   campaignFilter={campaignFilter}
                   campaignName={campaignName}
                   canWrite={canWrite}
+                  sources={sources}
+                  onSourcesChange={setSources}
                   onClearCampaign={() => {
                     setCampaignFilter(null)
                     setCampaignName(null)
@@ -2061,6 +2186,14 @@ export default function App() {
               <TabPane tab={<span><GlobalOutlined /> Clients</span>} key="clients">
                 <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
                   <ClientsTab onClientAdded={() => setRefreshKey(k => k + 1)} />
+                </div>
+              </TabPane>
+            )}
+
+            {isMultiClientAdmin && (
+              <TabPane tab={<span><TagsOutlined /> Sources</span>} key="sources">
+                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                  <SourcesTab sources={sources} onSourcesChange={setSources} />
                 </div>
               </TabPane>
             )}

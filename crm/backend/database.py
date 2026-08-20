@@ -101,6 +101,20 @@ class Client(Base):
     campaigns = relationship("Campaign", back_populates="client", cascade="all, delete-orphan")
 
 
+class LeadSourceModel(Base):
+    """Admin-managed lead source values (trackable for reporting)."""
+
+    __tablename__ = "lead_sources"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    code = Column(String(50), unique=True, nullable=False, index=True)  # e.g. "HARO", "MANUAL"
+    name = Column(String(100), nullable=False)  # display label e.g. "HARO"
+    is_active = Column(Integer, default=1)  # 1 = shown in dropdown/reports
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Campaign(Base):
     __tablename__ = "campaigns"
 
@@ -344,3 +358,18 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def seed_lead_sources(db):
+    """Populate lead_sources table from the enum defaults if empty."""
+    existing = db.query(LeadSourceModel).count()
+    if existing > 0:
+        return
+    defaults = [
+        "HARO", "CONNECTIVELY", "GUEST_OUTREACH", "WEBSITE", "FACEBOOK",
+        "DIRECT_MAIL", "CALL_IN", "WEB_SEARCH", "MANUAL", "WHATSAPP",
+        "PPC", "WORD_OF_MOUTH",
+    ]
+    for i, code in enumerate(defaults):
+        db.add(LeadSourceModel(code=code, name=code, sort_order=i))
+    db.commit()

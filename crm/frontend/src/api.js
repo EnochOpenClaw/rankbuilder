@@ -94,6 +94,13 @@ export const api = {
   assignLead: (id, data) => request('POST', `/leads/${id}/assign`, data, true),
   logFollowUp: (id, data) => request('POST', `/leads/${id}/follow-up`, data, true),
 
+  // Sources (admin-managed)
+  listSources: () => request('GET', '/sources', null, true),
+  listAllSources: () => request('GET', '/sources/all', null, true),
+  createSource: (data) => request('POST', '/sources', data, true),
+  updateSource: (id, data) => request('PATCH', `/sources/${id}`, data, true),
+  deleteSource: (id) => request('DELETE', `/sources/${id}`, null, true),
+
   // Documents (attachments)
   listDocuments: (id) => request('GET', `/leads/${id}/documents`, null, true),
   uploadDocument: (id, file, category) => {

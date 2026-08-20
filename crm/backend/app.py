@@ -17,8 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
-from backend.database import engine, Base
-from backend.routes import leads, clients, dashboard, auth, notifications, public, facebook, campaigns, whatsapp, documents
+from backend.database import seed_lead_sources, SessionLocal, engine, Base
+from backend.routes import leads, clients, dashboard, auth, notifications, public, facebook, campaigns, whatsapp, documents, sources
 
 # Build artifact path — served as static files in production
 BACKEND_DIR   = Path(__file__).parent   # .../crm/backend/
@@ -86,12 +86,14 @@ app.include_router(facebook.router, prefix="/api", tags=["Facebook"])  # /api/fa
 app.include_router(whatsapp.router, prefix="/api", tags=["WhatsApp"])  # /api/whatsapp/webhook
 app.include_router(documents.router, prefix="/api/leads", tags=["Documents"])  # /api/leads/{id}/documents
 app.include_router(campaigns.router, prefix="/api/campaigns", tags=["Campaigns"])
+app.include_router(sources.router, prefix="/api/sources", tags=["Sources"])
 
 
 @app.on_event("startup")
 def startup():
     """Create all tables on startup."""
     Base.metadata.create_all(bind=engine)
+    seed_lead_sources(SessionLocal())
 
 
 @app.get("/health")
