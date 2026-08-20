@@ -114,6 +114,9 @@ export const api = {
   funnelReport: (clientId, df, dt) => request('GET', `/reports/funnel?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
   sourceRoiReport: (clientId, df, dt) => request('GET', `/reports/source-roi?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
 
+  // AI
+  draftReply: (leadId) => request('POST', '/ai/draft-reply', { lead_id: leadId }, true),
+
   // Documents (attachments)
   listDocuments: (id) => request('GET', `/leads/${id}/documents`, null, true),
   uploadDocument: (id, file, category) => {

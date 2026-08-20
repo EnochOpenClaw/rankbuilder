@@ -3,13 +3,13 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import {
   Layout, Typography, Card, Row, Col, Statistic, Table, Tag, Button,
   Drawer, Descriptions, Timeline, Select, Input, Space, message, Tabs,
-  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, Checkbox, DatePicker
+  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, Checkbox, DatePicker, Alert
 } from 'antd'
 import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -883,6 +883,10 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   const [createMessage, setCreateMessage] = useState('')
   const [countryCode, setCountryCode] = useState('+27')
   const [saving, setSaving] = useState(false)
+  const [draftLoading, setDraftLoading] = useState(false)
+  const [draft, setDraft] = useState(null)
+  const [draftError, setDraftError] = useState(null)
+  const [draftModalOpen, setDraftModalOpen] = useState(false)
   const [history, setHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [activeTab, setActiveTab] = useState('details')
@@ -1024,6 +1028,28 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
     }
   }
 
+  const handleDraftReply = async () => {
+    if (!lead) return
+    setDraftLoading(true)
+    setDraftError(null)
+    setDraft(null)
+    try {
+      const res = await api.draftReply(lead.id)
+      if (res.draft) {
+        setDraft(res.draft)
+        setDraftModalOpen(true)
+      } else {
+        setDraftError(res.error || 'Failed to generate draft')
+        message.error(res.error || 'Failed to generate draft')
+      }
+    } catch (e) {
+      setDraftError(e.message)
+      message.error('AI draft failed: ' + e.message)
+    } finally {
+      setDraftLoading(false)
+    }
+  }
+
   if (!lead && !createMode) return null
 
   // ── Follow-up & assignment handlers ───────────────────────────────────────
@@ -1125,6 +1151,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
     : null
 
   return (
+    <>
     <Drawer
       title={
         createMode ? (
@@ -1147,6 +1174,11 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
       extra={
         canWrite ? (
           <Space>
+            {!createMode && lead && (
+              <Button size="small" icon={<RobotOutlined />} loading={draftLoading} onClick={handleDraftReply}>
+                AI Draft
+              </Button>
+            )}
             <Button onClick={onClose}>Cancel</Button>
             {createMode
               ? <Button type="primary" loading={saving} onClick={handleCreate}>Create Lead</Button>
@@ -1633,6 +1665,41 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
       </Tabs>
       )}
     </Drawer>
+
+    {/* AI Draft modal */}
+    <Modal
+      title="🤖 AI Draft Reply"
+      open={draftModalOpen}
+      onCancel={() => setDraftModalOpen(false)}
+      footer={
+        <Space>
+          <Button onClick={() => setDraftModalOpen(false)}>Close</Button>
+          <Button
+            type="primary"
+            icon={<CopyOutlined />}
+            onClick={() => {
+              navigator.clipboard.writeText(draft || '')
+              message.success('Draft copied — paste into your email/WhatsApp')
+            }}
+          >
+            Copy Draft
+          </Button>
+        </Space>
+      }
+      width={560}
+    >
+      {draftError && <Alert type="warning" showIcon message={draftError} style={{ marginBottom: 12 }} />}
+      <Input.TextArea
+        value={draft || ''}
+        onChange={e => setDraft(e.target.value)}
+        rows={12}
+        placeholder="AI draft will appear here. Review and edit before sending."
+      />
+      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+        AI-generated draft — always review before sending. You can edit this text freely.
+      </Text>
+    </Modal>
+    </>
   )
 }
 
