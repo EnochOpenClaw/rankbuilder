@@ -472,6 +472,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
   const [search, setSearch] = useState('')
   const [selectedRow, setSelectedRow] = useState(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [createMode, setCreateMode] = useState(false)
   const [repOptions, setRepOptions] = useState([])
 
   // Load assignable sales reps (AGENT + CLIENT_ADMIN) for this client — drives the
@@ -661,6 +662,12 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         <Button onClick={handleExport} size="small" icon={<DownloadOutlined />}>
           Export
         </Button>
+        {canWrite && (
+          <Button type="primary" icon={<PlusOutlined />}
+            onClick={() => { setCreateMode(true); setDrawerOpen(true) }}>
+            Add Lead
+          </Button>
+        )}
         <Text type="secondary" style={{ fontSize: 12 }}>{total} leads</Text>
       </Space>
 
@@ -683,8 +690,10 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         lead={selectedRow}
         open={drawerOpen}
         canWrite={canWrite}
+        clientId={clientId}
+        createMode={createMode}
         repOptions={repOptions}
-        onClose={() => { setDrawerOpen(false); setSelectedRow(null) }}
+        onClose={() => { setDrawerOpen(false); setSelectedRow(null); setCreateMode(false) }}
         onUpdate={loadLeads}
       />
     </div>
@@ -693,7 +702,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
 
 // ── Lead Drawer ────────────────────────────────────────────────────────────────
 
-function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions = [] }) {
+function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions = [], clientId = null, createMode = false }) {
   const [notes, setNotes] = useState('')
   const [clientResponse, setClientResponse] = useState('')
   const [status, setStatus] = useState(null)
@@ -706,6 +715,10 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   const [companyName, setCompanyName] = useState('')
   const [companyWebsite, setCompanyWebsite] = useState('')
   const [address, setAddress] = useState('')
+  // Create-mode fields (new lead form)
+  const [createSource, setCreateSource] = useState('MANUAL')
+  const [createSourceDetail, setCreateSourceDetail] = useState('')
+  const [createMessage, setCreateMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -752,6 +765,38 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
       .finally(() => setLoadingDocs(false))
   }, [lead, open])
 
+  const handleCreate = async () => {
+    if (!contactName && !companyName && !contactEmail && !contactPhone) {
+      message.warning('Please enter at least a name, company or contact detail')
+      return
+    }
+    setSaving(true)
+    try {
+      await api.createLead({
+        client_id: clientId,
+        source: createSource,
+        source_detail: createSourceDetail || undefined,
+        contact_name: contactName || undefined,
+        contact_email: contactEmail || undefined,
+        contact_phone: contactPhone || undefined,
+        company_name: companyName || undefined,
+        company_website: companyWebsite || undefined,
+        location: location || undefined,
+        lead_type: leadType || undefined,
+        quality_score: qualityScore || undefined,
+        message_excerpt: createMessage || undefined,
+        notes: notes || undefined,
+      })
+      message.success('Lead created')
+      onUpdate()
+      onClose()
+    } catch (e) {
+      message.error('Create failed: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!lead) return
     setSaving(true)
@@ -783,7 +828,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
     }
   }
 
-  if (!lead) return null
+  if (!lead && !createMode) return null
 
   // ── Follow-up & assignment handlers ───────────────────────────────────────
 
@@ -886,6 +931,9 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   return (
     <Drawer
       title={
+        createMode ? (
+          <Text strong style={{ fontSize: 15 }}>Add New Lead</Text>
+        ) : (
         <div>
           <Text strong style={{ fontSize: 15 }}>
             {lead.company_name || lead.contact_name || 'Lead Details'}
@@ -896,6 +944,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
             {lead.lead_type && <LeadTypeTag type={lead.lead_type} />}
           </div>
         </div>
+        )
       }
       placement="right" width={560}
       open={open} onClose={onClose}
@@ -903,14 +952,67 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
         canWrite ? (
           <Space>
             <Button onClick={onClose}>Cancel</Button>
-            <Button type="primary" loading={saving} onClick={handleSave}>Save Changes</Button>
+            {createMode
+              ? <Button type="primary" loading={saving} onClick={handleCreate}>Create Lead</Button>
+              : <Button type="primary" loading={saving} onClick={handleSave}>Save Changes</Button>}
           </Space>
         ) : (
           <Button onClick={onClose}>Close</Button>
         )
       }
     >
-      {/* Tabs: Details | Activity */}
+      {createMode ? (
+        <div>
+          <Title level={5} style={{ margin: '12px 0 8px', fontSize: 13, color: '#555' }}>
+            Source
+          </Title>
+          <Select
+            style={{ width: '100%', marginBottom: 8 }}
+            value={createSource}
+            onChange={v => setCreateSource(v)}
+          >
+            {SOURCE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s.replace('_', ' ')}</Select.Option>)}
+          </Select>
+          <Input
+            value={createSourceDetail}
+            onChange={e => setCreateSourceDetail(e.target.value)}
+            placeholder="Source detail (e.g. Homepage Quote Form, Facebook Ad, Phone call)"
+            style={{ marginBottom: 16 }}
+          />
+
+          <Title level={5} style={{ margin: '12px 0 8px', fontSize: 13, color: '#555' }}>
+            Contact Information
+          </Title>
+          <Input value={companyName} onChange={e => setCompanyName(e.target.value)}
+            placeholder="Company name" style={{ marginBottom: 8 }} />
+          <Input value={contactName} onChange={e => setContactName(e.target.value)}
+            placeholder="Contact person" style={{ marginBottom: 8 }} />
+          <Input value={contactEmail} onChange={e => setContactEmail(e.target.value)}
+            placeholder="Email" style={{ marginBottom: 8 }} />
+          <Input value={contactPhone} onChange={e => setContactPhone(e.target.value)}
+            placeholder="Phone" style={{ marginBottom: 8 }} />
+          <Input value={companyWebsite} onChange={e => setCompanyWebsite(e.target.value)}
+            placeholder="Company website" style={{ marginBottom: 8 }} />
+          <Input value={location} onChange={e => setLocation(e.target.value)}
+            placeholder="Location (suburb / city)" style={{ marginBottom: 16 }} />
+
+          <Title level={5} style={{ margin: '12px 0 8px', fontSize: 13, color: '#555' }}>
+            Details
+          </Title>
+          <Select allowClear placeholder="Lead type" style={{ width: '100%', marginBottom: 8 }}
+            value={leadType} onChange={setLeadType}>
+            {TYPE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+          </Select>
+          <Select allowClear placeholder="Quality score" style={{ width: '100%', marginBottom: 8 }}
+            value={qualityScore} onChange={setQualityScore}>
+            {[1,2,3,4,5].map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+          </Select>
+          <Input.TextArea value={createMessage} onChange={e => setCreateMessage(e.target.value)}
+            placeholder="Message / excerpt from the enquiry" rows={2} style={{ marginBottom: 8 }} />
+          <Input.TextArea value={notes} onChange={e => setNotes(e.target.value)}
+            placeholder="Notes" rows={2} />
+        </div>
+      ) : (
       <Tabs activeKey={activeTab} onChange={setActiveTab} style={{ marginTop: -8 }}>
         <TabPane tab="Details" key="details">
           {/* Key metrics strip */}
@@ -1301,6 +1403,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
           )}
         </TabPane>
       </Tabs>
+      )}
     </Drawer>
   )
 }
