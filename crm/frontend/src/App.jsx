@@ -112,12 +112,8 @@ function LoginPage({ onLogin }) {
         </form>
 
         <Divider style={{ margin: '20px 0 16px' }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>DEMO ACCOUNTS</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>Login</Text>
         </Divider>
-        <div style={{ textAlign: 'left', fontSize: 12, color: '#888' }}>
-          <div><Text code>craig@houseofsupreme.co.za</Text> — SYSTEM_ADMIN</div>
-          <div><Text code>tiaan@houseofsupreme.co.za</Text> — CLIENT_ADMIN (HOS)</div>
-        </div>
       </Card>
     </div>
   )
