@@ -112,6 +112,7 @@ export const api = {
   agentSalesReport: (clientId, df, dt) => request('GET', `/reports/agent?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
   pipelineReport: (clientId, df, dt) => request('GET', `/reports/pipeline?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
   funnelReport: (clientId, df, dt) => request('GET', `/reports/funnel?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
+  sourceRoiReport: (clientId, df, dt) => request('GET', `/reports/source-roi?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
 
   // Documents (attachments)
   listDocuments: (id) => request('GET', `/leads/${id}/documents`, null, true),

@@ -2344,6 +2344,7 @@ function ReportsTab({ clientId }) {
   const [agent, setAgent] = useState(null)
   const [pipeline, setPipeline] = useState(null)
   const [funnel, setFunnel] = useState(null)
+  const [roi, setRoi] = useState(null)
   const [loading, setLoading] = useState(true)
   const [preset, setPreset] = useState('commission')
   const [dateFrom, setDateFrom] = useState(null)
@@ -2386,14 +2387,16 @@ function ReportsTab({ clientId }) {
       if (dateFrom) qs.set('date_from', dateFrom)
       if (dateTo) qs.set('date_to', dateTo)
       const q = qs.toString()
-      const [a, p, f] = await Promise.all([
+      const [a, p, f, r] = await Promise.all([
         api.agentSalesReport(clientId, dateFrom, dateTo),
         api.pipelineReport(clientId, dateFrom, dateTo),
         api.funnelReport(clientId, dateFrom, dateTo),
+        api.sourceRoiReport(clientId, dateFrom, dateTo),
       ])
       setAgent(a)
       setPipeline(p)
       setFunnel(f)
+      setRoi(r)
     } catch (e) {
       message.error('Failed to load reports: ' + e.message)
     } finally {
@@ -2417,6 +2420,16 @@ function ReportsTab({ clientId }) {
     { title: 'Quoted Value', dataIndex: 'quoted_value', align: 'right', render: v => <Text strong style={{ color: '#1677ff' }}>{fmt(v)}</Text> },
     { title: 'Predicted (50%)', dataIndex: 'predicted_value', align: 'right', render: v => <Text strong style={{ color: '#722ed1' }}>{fmt(v)}</Text> },
     { title: 'Won Value', dataIndex: 'won_value', align: 'right', render: v => <Text strong style={{ color: '#52c41a' }}>{fmt(v)}</Text> },
+  ]
+
+  const roiCols = [
+    { title: 'Source', dataIndex: 'source', render: s => <Text strong>{s?.replace('_', ' ')}</Text> },
+    { title: 'Leads', dataIndex: 'leads', align: 'right', width: 70 },
+    { title: 'Quoted', dataIndex: 'quoted', align: 'right', width: 70 },
+    { title: 'Conv. Rate', dataIndex: 'conversion_rate', align: 'right', width: 90, render: v => <Tag color={v >= 20 ? 'green' : v >= 10 ? 'orange' : 'default'}>{v}%</Tag> },
+    { title: 'Quoted Value', dataIndex: 'quoted_value', align: 'right', render: v => <Text strong style={{ color: '#1677ff' }}>{fmt(v)}</Text> },
+    { title: 'Won Value', dataIndex: 'won_value', align: 'right', render: v => <Text strong style={{ color: '#52c41a' }}>{fmt(v)}</Text> },
+    { title: 'Avg Deal', dataIndex: 'avg_deal_value', align: 'right', render: v => <Text>{fmt(v)}</Text> },
   ]
 
   return (
@@ -2481,6 +2494,16 @@ function ReportsTab({ clientId }) {
         dataSource={agent?.agents || []}
         columns={agentCols}
         rowKey="email"
+        size="small"
+        pagination={false}
+        style={{ marginBottom: 24 }}
+      />
+
+      <Title level={5} style={{ margin: '8px 0 12px' }}>Source ROI</Title>
+      <Table
+        dataSource={roi?.sources || []}
+        columns={roiCols}
+        rowKey="source"
         size="small"
         pagination={false}
         style={{ marginBottom: 24 }}

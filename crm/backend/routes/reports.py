@@ -169,3 +169,55 @@ def funnel_report(
         prev = c
 
     return {"funnel": funnel}
+
+
+@router.get("/source-roi")
+def source_roi_report(
+    client_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Source ROI — per source: leads, quoted, converted, conv rate, quoted value, won value."""
+    effective_client_id = enforce_client_scope(client_id, current_user)
+    q = db.query(Lead)
+    if effective_client_id:
+        q = q.filter(Lead.client_id == effective_client_id)
+    q = _apply_date_range(q, date_from, date_to)
+
+    leads = q.all()
+    sources = {}
+
+    for lead in leads:
+        src = lead.source.value if hasattr(lead.source, "value") else str(lead.source or "UNKNOWN")
+        if src not in sources:
+            sources[src] = {"source": src, "leads": 0, "quoted": 0, "converted": 0, "lost": 0, "quoted_value": 0.0, "won_value": 0.0}
+        s = sources[src]
+        s["leads"] += 1
+        qa = lead.quote_amount or 0
+
+        if lead.conversion_status == "CONVERTED":
+            s["converted"] += 1
+            if qa > 0:
+                s["quoted"] += 1
+                s["quoted_value"] += qa
+            s["won_value"] += qa
+        elif lead.conversion_status == "LOST":
+            s["lost"] += 1
+            if qa > 0:
+                s["quoted"] += 1
+                s["quoted_value"] += qa
+        else:
+            if qa > 0:
+                s["quoted"] += 1
+                s["quoted_value"] += qa
+
+    result = list(sources.values())
+    for s in result:
+        s["conversion_rate"] = round(s["converted"] / s["leads"] * 100, 1) if s["leads"] else 0.0
+        s["avg_deal_value"] = round(s["won_value"] / s["converted"], 2) if s["converted"] else 0.0
+
+    # Sort by won_value desc
+    result.sort(key=lambda x: x["won_value"], reverse=True)
+    return {"sources": result}
