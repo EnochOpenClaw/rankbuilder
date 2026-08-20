@@ -209,6 +209,7 @@ class Lead(Base):
     last_follow_up_at = Column(DateTime, nullable=True)
     follow_up_count = Column(Integer, default=0)
     reminder_stage = Column(Integer, default=0)  # follow-up escalation: 0=none,1=24h,2=48h,3=72h-manager
+    last_sla_alert_at = Column(DateTime, nullable=True)  # last SLA breach alert time (dedup)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
