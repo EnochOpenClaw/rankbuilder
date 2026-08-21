@@ -3,7 +3,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import {
   Layout, Typography, Card, Row, Col, Statistic, Table, Tag, Button,
   Drawer, Descriptions, Timeline, Select, Input, Space, message, Tabs,
-  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, Checkbox, DatePicker, Alert
+  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, InputNumber, Checkbox, DatePicker, Alert
 } from 'antd'
 import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
@@ -738,7 +738,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         </Select>
         <Select allowClear placeholder="Score" style={{ width: 100 }}
           onChange={v => { setFilters(f => ({ ...f, quality_score: v })); setPage(1) }}>
-          {[1,2,3,4,5].map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
+          {[0,10,20,30,40,50,60,70,80,90,100].map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
         </Select>
         <Button
           size="small"
@@ -1061,9 +1061,9 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
         return
       }
     }
-    // Quality score required when qualifying or converting
-    if ((status === 'QUALIFIED' || status === 'CONVERTED') && !qualityScore) {
-      message.warning('Please set a Quality Score (1-5) before marking this lead as ' + status)
+    // Quality score required when qualifying or converting (0-100 scale; 0 is valid)
+    if ((status === 'QUALIFIED' || status === 'CONVERTED') && (qualityScore === null || qualityScore === undefined || qualityScore === '')) {
+      message.warning('Please set a Quality Score (0-100) before marking this lead as ' + status)
       setActiveTab('details')
       return
     }
@@ -1324,10 +1324,8 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
             value={leadType} onChange={setLeadType}>
             {TYPE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
           </Select>
-          <Select allowClear placeholder="Quality score" style={{ width: '100%', marginBottom: 8 }}
-            value={qualityScore} onChange={setQualityScore}>
-            {[1,2,3,4,5].map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
-          </Select>
+          <InputNumber min={0} max={100} placeholder="Quality score (0-100)" style={{ width: '100%', marginBottom: 8 }}
+            value={qualityScore} onChange={setQualityScore} />
           <Input.TextArea value={createMessage} onChange={e => setCreateMessage(e.target.value)}
             placeholder="Message / excerpt from the enquiry" rows={2} style={{ marginBottom: 8 }} />
           <Input.TextArea value={notes} onChange={e => setNotes(e.target.value)}
@@ -1519,9 +1517,9 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
                   </Form.Item>
                 </Col>
               </Row>
-              <Form.Item label="Quality Score" style={{ marginBottom: 8 }}>
-                <Rate value={qualityScore} onChange={setQualityScore} character={({ index = 0 }) => index + 1} style={{ fontSize: 18 }} />
-                <Text type="secondary" style={{ marginLeft: 8 }}>{qualityScore ? `${qualityScore}/5` : ''}</Text>
+              <Form.Item label="Quality Score (0-100)" style={{ marginBottom: 8 }}>
+                <InputNumber min={0} max={100} value={qualityScore} onChange={setQualityScore} style={{ width: '100%' }} placeholder="0-100" />
+                <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>0=cold · 40+=warm · 70+=hot</Text>
               </Form.Item>
               <Form.Item label="Location" style={{ marginBottom: 8 }}>
                 <Input
