@@ -289,7 +289,7 @@ def list_leads(
     campaign_id: Optional[str] = Query(None, description="Filter by campaign"),
     status: Optional[str] = Query(None, description="Filter by status"),
     lead_type: Optional[str] = Query(None, description="Filter by lead type: VALID/INVALID/FOLLOW_UP"),
-    quality_score: Optional[int] = Query(None, ge=1, le=5, description="Filter by quality score (1-5)"),
+    quality_score: Optional[int] = Query(None, ge=0, le=100, description="Filter by quality score (0-100)"),
     source: Optional[str] = Query(None, description="Filter by source"),
     search: Optional[str] = Query(None, description="Search by company name or email"),
     contact_email: Optional[str] = Query(None, description="Lookup by exact email"),

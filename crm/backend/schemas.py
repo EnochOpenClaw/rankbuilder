@@ -58,7 +58,7 @@ class LeadCreate(BaseModel):
     company_website: Optional[str] = None
     message_excerpt: Optional[str] = None
     pitch_sent: Optional[str] = None
-    quality_score: Optional[int] = Field(None, ge=1, le=5)
+    quality_score: Optional[int] = Field(None, ge=0, le=100)
     lead_type: Optional[str] = None  # VALID / INVALID / FOLLOW_UP
     notes: Optional[str] = None
     quote_amount: Optional[float] = Field(None, ge=0, description="Value of the quote sent (R)")
@@ -79,7 +79,7 @@ class LeadUpdate(BaseModel):
     """API payload for updating lead fields."""
     status: Optional[str] = None
     lead_type: Optional[str] = None
-    quality_score: Optional[int] = Field(None, ge=1, le=5)
+    quality_score: Optional[int] = Field(None, ge=0, le=100)
     client_response: Optional[str] = None
     notes: Optional[str] = None
     conversion_status: Optional[str] = None  # CONVERTED or LOST

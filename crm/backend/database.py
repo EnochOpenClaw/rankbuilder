@@ -179,7 +179,7 @@ class Lead(Base):
     # Classification
     status = Column(SAEnum(LeadStatus), default=LeadStatus.NEW)
     lead_type = Column(SAEnum(LeadType), nullable=True)
-    quality_score = Column(Integer, nullable=True)  # 1-5
+    quality_score = Column(Integer, nullable=True)  # 0-100
 
     # Contact info
     contact_name = Column(String(255), nullable=True)
