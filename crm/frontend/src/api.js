@@ -124,7 +124,6 @@ export const api = {
   uploadDocument: (id, file, category) => {
     const fd = new FormData();
     fd.append('file', file);
-    if (category) fd.append('category', category);
     const token = getToken();
     return fetch(`${BASE}/leads/${id}/documents${category ? '?category=' + category : ''}`, {
       method: 'POST',
