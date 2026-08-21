@@ -138,6 +138,19 @@ export const api = {
     });
   },
   downloadDocumentUrl: (id, docId) => `/api/leads/${id}/documents/${docId}/download`,
+  downloadDocument: async (id, docId) => {
+    // Fetch the file WITH the auth header (a plain <a href> new-tab navigation
+    // does NOT send the Authorization header, so the backend rejects it).
+    const token = getToken();
+    const res = await fetch(`${BASE}/leads/${id}/documents/${docId}/download`, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const raw = await res.text();
+      throw new Error(`Download failed: ${res.status} ${raw.slice(0, 120)}`);
+    }
+    return res.blob();
+  },
   deleteDocument: (id, docId) => request('DELETE', `/leads/${id}/documents/${docId}`, null, true),
 
   // Reminders (scheduled notifications)

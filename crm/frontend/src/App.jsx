@@ -1136,6 +1136,22 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
     }
   }
 
+  const handleDownloadDoc = async (doc) => {
+    try {
+      const blob = await api.downloadDocument(lead.id, doc.id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = doc.filename || 'document'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      message.error(e.message || 'Download failed')
+    }
+  }
+
   const handleDismissReminder = async (rid) => {
     try {
       await api.dismissReminder(lead.id, rid)
@@ -1800,7 +1816,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
                   <Space>
                     <Button
                       size="small" type="link" icon={<DownloadOutlined />}
-                      href={api.downloadDocumentUrl(lead.id, doc.id)} target="_blank"
+                      onClick={() => handleDownloadDoc(doc)}
                     >Open</Button>
                     {canWrite && (
                       <Button
