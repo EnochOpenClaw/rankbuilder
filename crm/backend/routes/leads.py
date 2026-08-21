@@ -263,8 +263,12 @@ def create_lead(
     )
     db.add(history)
 
-    # ── Auto-assign to sales rep based on region ──────────────────────────
-    assign_lead(db, lead, changed_by="system")
+    # ── Manual UI create → assign to the person who created it ─────────────
+    # (Automatic incoming leads are region-routed in the public endpoint.)
+    if current_user:
+        lead.assigned_to = current_user.email
+        lead.assigned_to_name = current_user.full_name or current_user.email
+        lead.assigned_at = datetime.utcnow()
     db.commit()
 
     # ── Email notifications (background) ─────────────────────────────────────

@@ -11,6 +11,7 @@ from backend.database import get_db, Client, Lead, LeadHistory, LeadSource, Lead
 from backend.schemas import LeadPublicCreate, LeadPublicResponse
 from backend.routes.leads import _executor, _notify_async
 from backend.dedupe import find_duplicate, merge_duplicate
+from backend.assignment import assign_lead
 
 router = APIRouter()
 
@@ -100,6 +101,11 @@ def capture_lead(
     )
     db.add(history)
     db.commit()
+
+    # ── Auto-assign to sales rep based on region (automatic incoming lead) ──
+    assign_lead(db, lead, changed_by="system")
+    db.commit()
+    db.refresh(lead)
 
     # ── Email notification: new lead alert ──────────────────────────────────
     # Match the authenticated route: fire notification in background thread
