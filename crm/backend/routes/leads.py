@@ -146,6 +146,8 @@ def _lead_to_response(lead: Lead) -> LeadResponse:
         created_by=lead.created_by,
         payment_status=lead.payment_status,
         notes=lead.notes,
+        archived=lead.archived,
+        archived_at=lead.archived_at,
         assigned_to=lead.assigned_to,
         assigned_to_name=lead.assigned_to_name,
         assigned_at=lead.assigned_at,
@@ -287,6 +289,7 @@ def list_leads(
     source: Optional[str] = Query(None, description="Filter by source"),
     search: Optional[str] = Query(None, description="Search by company name or email"),
     contact_email: Optional[str] = Query(None, description="Lookup by exact email"),
+    include_archived: bool = Query(False, description="Include archived leads"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -331,6 +334,9 @@ def list_leads(
             (Lead.contact_email.ilike(search_term)) |
             (Lead.contact_name.ilike(search_term))
         )
+
+    if not include_archived:
+        q = q.filter(Lead.archived == 0)
 
     total = q.count()
     leads = q.order_by(Lead.created_at.desc()).offset(offset).limit(limit).all()
@@ -740,6 +746,46 @@ def update_lead(
     # Recompute quality score from scoring rules (fields may have changed)
     lead.quality_score = compute_score(lead, db)
 
+    db.commit()
+    db.refresh(lead)
+    return _lead_to_response(lead)
+
+
+@router.post("/{lead_id}/archive", response_model=LeadResponse)
+def archive_lead(
+    lead_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner()),
+):
+    """Archive a lead (soft delete — hides it but keeps data for reporting)."""
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    enforce_client_scope(lead.client_id, current_user)
+    lead.archived = 1
+    lead.archived_at = datetime.utcnow()
+    db.add(LeadHistory(lead_id=lead.id, field_changed="archived",
+                       new_value="1", changed_by=current_user.email))
+    db.commit()
+    db.refresh(lead)
+    return _lead_to_response(lead)
+
+
+@router.post("/{lead_id}/restore", response_model=LeadResponse)
+def restore_lead(
+    lead_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_owner()),
+):
+    """Restore an archived lead back to the active list."""
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    enforce_client_scope(lead.client_id, current_user)
+    lead.archived = 0
+    lead.archived_at = None
+    db.add(LeadHistory(lead_id=lead.id, field_changed="archived",
+                       old_value="1", new_value="0", changed_by=current_user.email))
     db.commit()
     db.refresh(lead)
     return _lead_to_response(lead)

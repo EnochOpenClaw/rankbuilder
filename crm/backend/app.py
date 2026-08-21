@@ -95,8 +95,21 @@ app.include_router(ai.router, prefix="/api/ai", tags=["AI"])
 
 @app.on_event("startup")
 def startup():
-    """Create all tables on startup."""
+    """Create all tables + lightweight migrations on startup."""
     Base.metadata.create_all(bind=engine)
+    # ── Migrations (additive ALTER TABLE, idempotent) ──────────────────────
+    try:
+        from sqlalchemy import text, inspect
+        insp = inspect(engine)
+        cols = {c["name"] for c in insp.get_columns("leads")}
+        with engine.begin() as conn:
+            if "archived" not in cols:
+                conn.execute(text("ALTER TABLE leads ADD COLUMN archived INTEGER DEFAULT 0"))
+            if "archived_at" not in cols:
+                conn.execute(text("ALTER TABLE leads ADD COLUMN archived_at DATETIME"))
+        print("[migrate] leads.archived / leads.archived_at ensured")
+    except Exception as e:
+        print(f"[migrate] warning: {e}")
     seed_lead_sources(SessionLocal())
     seed_default_rules(SessionLocal())
 

@@ -158,6 +158,8 @@ class LeadResponse(BaseModel):
     created_by: Optional[str]
     payment_status: Optional[str]
     notes: Optional[str]
+    archived: Optional[int] = 0
+    archived_at: Optional[datetime] = None
     # ── Sales rep assignment & follow-up ───────────────────────────────────
     assigned_to: Optional[str] = None
     assigned_to_name: Optional[str] = None

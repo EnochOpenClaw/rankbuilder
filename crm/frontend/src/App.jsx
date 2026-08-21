@@ -9,7 +9,7 @@ import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined, FolderOpenOutlined, RollbackOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -517,6 +517,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
       if (filters.status) params.status = filters.status
       if (filters.source) params.source = filters.source
       if (filters.lead_type) params.lead_type = filters.lead_type
+      if (filters.archived) params.include_archived = true
       if (search) params.search = search
       const res = await api.listLeads(params)
       setLeads(res.leads)
@@ -529,6 +530,44 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
   }
 
   useEffect(() => { loadLeads() }, [page, pageSize, filters, search, refreshKey, clientId, campaignFilter])
+
+  const handleArchive = async (r) => {
+    try {
+      await api.archiveLead(r.id)
+      message.success("Lead archived")
+      loadLeads()
+    } catch (e) {
+      message.error("Archive failed: " + e.message)
+    }
+  }
+
+  const handleRestore = async (r) => {
+    try {
+      await api.restoreLead(r.id)
+      message.success("Lead restored")
+      loadLeads()
+    } catch (e) {
+      message.error("Restore failed: " + e.message)
+    }
+  }
+
+  const handleDelete = async (r) => {
+    Modal.confirm({
+      title: 'Permanently delete lead "' + (r.company_name || r.contact_email || r.id) + '"?',
+      content: "This permanently removes the lead and all its history/activity. This cannot be undone.",
+      okText: "Delete forever",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await api.deleteLead(r.id)
+          message.success("Lead deleted")
+          loadLeads()
+        } catch (e) {
+          message.error("Delete failed: " + e.message)
+        }
+      },
+    })
+  }
 
   const handleExport = async () => {
     try {
@@ -645,11 +684,25 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
     {
       title: '',
       render: (_, r) => (
-        <Button size="small" onClick={() => { setSelectedRow(r); setDrawerOpen(true) }}>
-          View
-        </Button>
+        <Space size={4}>
+          <Button size="small" onClick={() => { setSelectedRow(r); setDrawerOpen(true) }}>
+            View
+          </Button>
+          {r.archived ? (
+            <Button size="small" icon={<RollbackOutlined />} onClick={() => handleRestore(r)}>
+              Restore
+            </Button>
+          ) : (
+            <Button size="small" icon={<FolderOpenOutlined />} onClick={() => handleArchive(r)}>
+              Archive
+            </Button>
+          )}
+          {canWrite && (
+            <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(r)} />
+          )}
+        </Space>
       ),
-      width: 70,
+      width: 210,
     },
   ]
 
@@ -683,6 +736,14 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
           onChange={v => { setFilters(f => ({ ...f, quality_score: v })); setPage(1) }}>
           {[1,2,3,4,5].map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
         </Select>
+        <Button
+          size="small"
+          type={filters.archived ? 'primary' : 'default'}
+          icon={<FolderOpenOutlined />}
+          onClick={() => { setFilters(f => ({ ...f, archived: f.archived ? undefined : true })); setPage(1) }}
+        >
+          {filters.archived ? 'Show Active' : 'Show Archived'}
+        </Button>
         <Button onClick={() => setFilters({})} size="small">
           <FilterOutlined /> Clear
         </Button>
