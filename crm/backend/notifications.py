@@ -10,6 +10,7 @@ import urllib.error
 from datetime import datetime
 from typing import Optional
 import os
+from backend.assignment import _contains_keywords, CAPE_TOWN_KEYWORDS
 
 log = logging.getLogger("crm.notifications")
 
@@ -36,6 +37,25 @@ SALES_SENDER_NAME = "Fortress Blinds Sales"
 SALES_SOURCES = {"WEBSITE", "CALL_IN", "DIRECT_MAIL", "FACEBOOK", "MANUAL"}
 # Lead sources that are BACKLINK/BLOG/OUTREACH (need Craig follow-up)
 OUTREACH_SOURCES = {"HARO", "CONNECTIVELY", "GUEST_OUTREACH", "WEB_SEARCH"}
+
+# ── New-lead notification groups (House of Supreme) ───────────────────
+# Management — Robin, Vanessa, Lee-Ann: notified on EVERY new sales lead
+# Cape Town  — Richard, Irene: notified only for Cape Town region leads
+# Tiaan      — standalone: own 'allocated to you' email, no broadcast
+# Freedom    — AGENT: removed from broadcast
+MGMT_EMAILS = [
+    ("robin@houseofsupreme.co.za", "Robin Bras"),
+    ("vanessa@houseofsupreme.co.za", "Vanessa Bras"),
+    ("lee-ann@houseofsupreme.co.za", "Lee-Ann Van Zyl"),
+]
+CAPE_TOWN_GROUP = [
+    ("richard@houseofsupreme.co.za", "Richard Turner"),
+    ("irene@houseofsupreme.co.za", "Irene Basson"),
+]
+
+def _is_cape_town(location) -> bool:
+    return bool(location) and _contains_keywords(str(location), CAPE_TOWN_KEYWORDS)
+
 
 
 # ── Low-level Brevo send ───────────────────────────────────────────────────────
@@ -167,9 +187,18 @@ def notify_new_lead(lead: dict, db=None) -> None:
     if is_sales:
         sender_email = SALES_SENDER_EMAIL
         sender_name = SALES_SENDER_NAME
-        recipients = _get_notification_recipients(client_id, db)
+        # Group routing:
+        #   - Management always
+        #   - Cape Town group only for Cape Town region leads
+        #   - Tiaan gets his own personal allocation email (no broadcast here)
+        #   - Freedom excluded (AGENT)
+        recipients = list(MGMT_EMAILS)
+        if _is_cape_town(lead.get("location")):
+            recipients += CAPE_TOWN_GROUP
+        seen = set()
+        recipients = [r for r in recipients if not (r[0] in seen or seen.add(r[0]))]
         if not recipients:
-            recipients = [("tiaan@houseofsupreme.co.za", "Tiaan")]
+            recipients = list(MGMT_EMAILS)
     else:
         sender_email = SENDER_EMAIL
         sender_name = SENDER_NAME

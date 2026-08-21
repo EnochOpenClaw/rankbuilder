@@ -59,6 +59,7 @@ STAGE_3_HOURS = int(os.environ.get("FOLLOW_UP_STAGE3_HOURS", "72"))     # manage
 MANAGER_EMAILS = [
     ("robin@houseofsupreme.co.za", "Robin Bras"),
     ("vanessa@houseofsupreme.co.za", "Vanessa Bras"),
+    ("lee-ann@houseofsupreme.co.za", "Lee-Ann Van Zyl"),
 ]
 
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
