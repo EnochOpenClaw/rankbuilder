@@ -8,7 +8,7 @@ GET    /api/leads/{lead_id}/reminders            — List reminders for a lead
 POST   /api/leads/{lead_id}/reminders/{rid}/dismiss — Dismiss a reminder
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -80,7 +80,11 @@ def create_reminder(
 ):
     """Schedule a reminder on a lead."""
     lead = _get_lead(lead_id, db, current_user)
-    if payload.remind_at <= datetime.utcnow():
+    # Normalize aware datetime (frontend sends ISO with Z/timezone) to naive UTC
+    remind = payload.remind_at
+    if remind.tzinfo is not None:
+        remind = remind.astimezone(timezone.utc).replace(tzinfo=None)
+    if remind <= datetime.utcnow():
         raise HTTPException(status_code=400, detail="Reminder time must be in the future.")
     r = LeadReminder(
         lead_id=lead.id,
