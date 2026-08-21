@@ -9,7 +9,7 @@ import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined, FolderOpenOutlined, RollbackOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined, FolderOpenOutlined, RollbackOutlined, FieldTimeOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -471,7 +471,7 @@ function Dashboard({ clientId }) {
 // ── Leads ──────────────────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS = ['NEW','REVIEWED','QUALIFIED','SENT','CONTACTED','CONVERTED','LOST']
-const SOURCE_OPTIONS  = ['HARO','CONNECTIVELY','GUEST_OUTREACH','WEBSITE','FACEBOOK','DIRECT_MAIL','CALL_IN','WEB_SEARCH','MANUAL']
+const SOURCE_OPTIONS  = ['HARO','CONNECTIVELY','GUEST_OUTREACH','WEBSITE','FACEBOOK','DIRECT_MAIL','CALL_IN','WEB_SEARCH','MANUAL','ROADSIDE']
 const TYPE_OPTIONS    = ['VALID','INVALID','FOLLOW_UP']
 
 // Format a phone number as ### ### #### (digits only, max 10)
@@ -605,6 +605,44 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
     if (prevFilters.current && prevFilters.current !== sig && page !== 1) setPage(1)
     prevFilters.current = sig
   }, [filters, search, campaignFilter, clientId])
+
+  const openTally = (camp) => {
+    setTallyCampaign(camp)
+    tallyForm.resetFields()
+    tallyForm.setFieldsValue({ log_date: dayjs(), cards_given: 0, people_stopped: 0 })
+    setTallyOpen(true)
+  }
+
+  const handleLogTally = async (values) => {
+    setSavingTally(true)
+    try {
+      await api.logDailyTally(tallyCampaign.id, {
+        log_date: values.log_date ? values.log_date.toISOString() : undefined,
+        cards_given: values.cards_given || 0,
+        people_stopped: values.people_stopped || 0,
+      })
+      message.success('Daily tally logged')
+      setTallyOpen(false)
+      load()
+    } catch (e) {
+      message.error('Failed to log tally: ' + e.message)
+    } finally {
+      setSavingTally(false)
+    }
+  }
+
+  const openComparison = async () => {
+    setCompOpen(true)
+    setCompLoading(true)
+    try {
+      const res = await api.roadsideComparison(clientId)
+      setCompData(res.campaigns || [])
+    } catch (e) {
+      message.error('Failed to load comparison: ' + e.message)
+    } finally {
+      setCompLoading(false)
+    }
+  }
 
   const columns = [
     {
@@ -1936,6 +1974,13 @@ function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads, canWrite = tr
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)   // campaign being edited, or null for create
   const [saving, setSaving] = useState(false)
+  const [tallyOpen, setTallyOpen] = useState(false)
+  const [tallyCampaign, setTallyCampaign] = useState(null)
+  const [savingTally, setSavingTally] = useState(false)
+  const [compOpen, setCompOpen] = useState(false)
+  const [compData, setCompData] = useState([])
+  const [compLoading, setCompLoading] = useState(false)
+  const [tallyForm] = Form.useForm()
   const [form] = Form.useForm()
 
   const load = async () => {
@@ -1969,6 +2014,7 @@ function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads, canWrite = tr
       name: camp.name,
       channel: camp.channel,
       status: camp.status,
+      location: camp.location || '',
     })
     setModalOpen(true)
   }
@@ -2028,6 +2074,8 @@ function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads, canWrite = tr
     { title: 'Leads', dataIndex: 'lead_count', align: 'right', width: 80 },
     { title: 'Qualified', dataIndex: 'qualified_count', align: 'right', width: 90 },
     { title: 'Converted', dataIndex: 'converted_count', align: 'right', width: 100 },
+    { title: 'Cards', dataIndex: 'total_cards', align: 'right', width: 80, render: v => v || 0 },
+    { title: 'Stopped', dataIndex: 'total_people', align: 'right', width: 80, render: v => v || 0 },
     {
       title: 'Qual Rate',
       width: 100,
@@ -2042,6 +2090,9 @@ function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads, canWrite = tr
       render: (_, r) => (
         <Space size="small">
           <Button size="small" onClick={() => onViewCampaignLeads(r)}>View Leads</Button>
+          {canWrite && r.channel === 'ROADSIDE' && (
+            <Button size="small" icon={<FieldTimeOutlined />} onClick={() => openTally(r)}>Log Tally</Button>
+          )}
           {canWrite && <Button size="small" onClick={() => openEdit(r)}>Edit</Button>}
           {canWrite && (
             <Button size="small" danger onClick={() => handleDelete(r)}>
@@ -2072,11 +2123,18 @@ function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads, canWrite = tr
           )}
           <Text type="secondary" style={{ fontSize: 12 }}>{total} campaign(s)</Text>
         </Space>
-        {canWrite && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            New Campaign
-          </Button>
-        )}
+        <Space>
+          {canWrite && (
+            <Button icon={<BarChartOutlined />} onClick={openComparison}>
+              Roadside Comparison
+            </Button>
+          )}
+          {canWrite && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              New Campaign
+            </Button>
+          )}
+        </Space>
       </div>
 
       <Table
@@ -2106,12 +2164,77 @@ function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads, canWrite = tr
               {SOURCE_OPTIONS.map(s => <Select.Option key={s} value={s}>{s.replace('_',' ')}</Select.Option>)}
             </Select>
           </Form.Item>
+          <Form.Item name="location" label="Location / Area">
+            <Input placeholder="e.g. Sandton, Fourways (for roadside activations)" />
+          </Form.Item>
           <Form.Item name="status" label="Status">
             <Select>
               {CAMPAIGN_STATUS_OPTIONS.map(s => <Select.Option key={s} value={s}>{s}</Select.Option>)}
             </Select>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Daily Tally Modal */}
+      <Modal
+        title={`Log Daily Tally — ${tallyCampaign ? tallyCampaign.name : ''}`}
+        open={tallyOpen}
+        onCancel={() => setTallyOpen(false)}
+        onOk={() => tallyForm.submit()}
+        confirmLoading={savingTally}
+        okText="Log Tally"
+        destroyOnClose
+      >
+        <Form form={tallyForm} layout="vertical" onFinish={handleLogTally} style={{ marginTop: 16 }}>
+          <Form.Item name="log_date" label="Date" rules={[{ required: true, message: 'Date is required' }]}>
+            <DatePicker style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="cards_given" label="Business Cards Handed Out" rules={[{ required: true, message: 'Enter cards given' }]}>
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="people_stopped" label="People Who Stopped to View" rules={[{ required: true, message: 'Enter people stopped' }]}>
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Roadside Comparison Modal */}
+      <Modal
+        title="📊 Roadside Marketing Comparison"
+        open={compOpen}
+        onCancel={() => setCompOpen(false)}
+        footer={<Button onClick={() => setCompOpen(false)}>Close</Button>}
+        width={820}
+      >
+        {compLoading ? (
+          <Spin style={{ display: 'block', margin: 40 }} />
+        ) : compData.length === 0 ? (
+          <Empty description="No roadside campaigns yet. Create ROADSIDE campaigns and log daily tallies to compare sites." />
+        ) : (
+          <Table
+            dataSource={compData}
+            rowKey="id"
+            size="small"
+            pagination={false}
+            columns={[
+              { title: 'Site / Area', dataIndex: 'location', render: (v, r) => <Text strong>{v || r.name}</Text> },
+              { title: 'Campaign', dataIndex: 'name' },
+              { title: 'Status', dataIndex: 'status', render: s => <CampaignStatusTag status={s} /> },
+              { title: 'Cards', dataIndex: 'total_cards', align: 'right', render: v => <Text strong>{v || 0}</Text> },
+              { title: 'Stopped', dataIndex: 'total_people', align: 'right', render: v => <Text strong>{v || 0}</Text> },
+              { title: 'Leads', dataIndex: 'lead_count', align: 'right' },
+              { title: 'Qualified', dataIndex: 'qualified_count', align: 'right' },
+              { title: 'Converted', dataIndex: 'converted_count', align: 'right' },
+              {
+                title: 'Conv Rate',
+                align: 'right',
+                render: (_, r) => r.lead_count > 0
+                  ? <Text strong>{Math.round(r.converted_count / r.lead_count * 100)}%</Text>
+                  : <Text type="secondary">—</Text>,
+              },
+            ]}
+          />
+        )}
       </Modal>
     </div>
   )

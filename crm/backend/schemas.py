@@ -306,6 +306,7 @@ class CampaignCreate(BaseModel):
     name: str
     channel: str  # LeadSource enum value
     status: str = "ACTIVE"
+    location: Optional[str] = None  # roadside area / site
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
 
@@ -314,6 +315,7 @@ class CampaignUpdate(BaseModel):
     name: Optional[str] = None
     channel: Optional[str] = None
     status: Optional[str] = None
+    location: Optional[str] = None
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
 
@@ -324,11 +326,15 @@ class CampaignResponse(BaseModel):
     name: str
     channel: str
     status: str
+    location: Optional[str] = None
     started_at: Optional[datetime]
     ended_at: Optional[datetime]
     lead_count: int = 0
     qualified_count: int = 0
     converted_count: int = 0
+    total_cards: int = 0
+    total_people: int = 0
+    daily_logs: list[dict] = []
     created_at: datetime
 
     class Config:

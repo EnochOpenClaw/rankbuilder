@@ -109,6 +109,12 @@ def startup():
             if "archived_at" not in cols:
                 conn.execute(text("ALTER TABLE leads ADD COLUMN archived_at DATETIME"))
         print("[migrate] leads.archived / leads.archived_at ensured")
+        # Campaign.location column (roadside marketing area) — fresh connection
+        ccols = {c["name"] for c in insp.get_columns("campaigns")}
+        if "location" not in ccols:
+            with engine.begin() as conn2:
+                conn2.execute(text("ALTER TABLE campaigns ADD COLUMN location VARCHAR(255)"))
+        print("[migrate] campaigns.location ensured")
     except Exception as e:
         print(f"[migrate] warning: {e}")
     seed_lead_sources(SessionLocal())

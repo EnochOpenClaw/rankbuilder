@@ -165,4 +165,6 @@ export const api = {
   createCampaign: (data) => request('POST', '/campaigns', data, true),
   updateCampaign: (id, data) => request('PATCH', `/campaigns/${id}`, data, true),
   deleteCampaign: (id) => request('DELETE', `/campaigns/${id}`, null, true),
+  logDailyTally: (id, data) => request('POST', `/campaigns/${id}/daily-logs`, data, true),
+  roadsideComparison: (clientId) => request('GET', `/campaigns/roadside-comparison?client_id=${clientId || ''}`, null, true),
 };

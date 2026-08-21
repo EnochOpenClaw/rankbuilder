@@ -40,6 +40,7 @@ class LeadSource(str, enum.Enum):
     WHATSAPP = "WHATSAPP"
     PPC = "PPC"
     WORD_OF_MOUTH = "WORD_OF_MOUTH"
+    ROADSIDE = "ROADSIDE"
 
 
 class LeadStatus(str, enum.Enum):
@@ -147,12 +148,31 @@ class Campaign(Base):
     name = Column(String(255), nullable=False)
     channel = Column(SAEnum(LeadSource), nullable=False)
     status = Column(SAEnum(CampaignStatus), default=CampaignStatus.ACTIVE)
+    location = Column(String(255), nullable=True)   # roadside area / site (e.g. "Sandton")
     started_at = Column(DateTime, default=datetime.utcnow)
     ended_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     client = relationship("Client", back_populates="campaigns")
     leads = relationship("Lead", back_populates="campaign")
+    daily_logs = relationship("CampaignDailyLog", back_populates="campaign", cascade="all, delete-orphan")
+
+
+class CampaignDailyLog(Base):
+    """End-of-day tally for a campaign (roadside marketing): cards handed out
+    and people who stopped to view the products."""
+
+    __tablename__ = "campaign_daily_logs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    campaign_id = Column(String(36), ForeignKey("campaigns.id"), nullable=False)
+    log_date = Column(DateTime, nullable=False)        # the day this tally is for
+    cards_given = Column(Integer, default=0)          # business cards handed out
+    people_stopped = Column(Integer, default=0)       # people who stopped to view
+    created_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    campaign = relationship("Campaign", back_populates="daily_logs")
 
 
 class Lead(Base):
@@ -423,7 +443,7 @@ def seed_lead_sources(db):
     defaults = [
         "HARO", "CONNECTIVELY", "GUEST_OUTREACH", "WEBSITE", "FACEBOOK",
         "DIRECT_MAIL", "CALL_IN", "WEB_SEARCH", "MANUAL", "WHATSAPP",
-        "PPC", "WORD_OF_MOUTH",
+        "PPC", "WORD_OF_MOUTH", "ROADSIDE",
     ]
     for i, code in enumerate(defaults):
         db.add(LeadSourceModel(code=code, name=code, sort_order=i))
