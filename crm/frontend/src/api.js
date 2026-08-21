@@ -140,6 +140,11 @@ export const api = {
   downloadDocumentUrl: (id, docId) => `/api/leads/${id}/documents/${docId}/download`,
   deleteDocument: (id, docId) => request('DELETE', `/leads/${id}/documents/${docId}`, null, true),
 
+  // Reminders (scheduled notifications)
+  createReminder: (id, data) => request('POST', `/leads/${id}/reminders`, data, true),
+  listReminders: (id) => request('GET', `/leads/${id}/reminders`, null, true),
+  dismissReminder: (id, rid) => request('POST', `/leads/${id}/reminders/${rid}/dismiss`, null, true),
+
   // Users
   createUser: (data) => request('POST', '/auth/users', data, true),
   listUsers: () => request('GET', '/auth/users', null, true),

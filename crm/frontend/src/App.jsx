@@ -3,7 +3,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import {
   Layout, Typography, Card, Row, Col, Statistic, Table, Tag, Button,
   Drawer, Descriptions, Timeline, Select, Input, Space, message, Tabs,
-  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, InputNumber, Checkbox, DatePicker, Alert
+  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, InputNumber, Checkbox, DatePicker, TimePicker, Alert
 } from 'antd'
 import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
@@ -967,6 +967,12 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [docCategory, setDocCategory] = useState('OTHER')
+  const [reminders, setReminders] = useState([])
+  const [loadingReminders, setLoadingReminders] = useState(false)
+  const [remindDate, setRemindDate] = useState(null)
+  const [remindTime, setRemindTime] = useState(null)
+  const [remindNote, setRemindNote] = useState('')
+  const [savingReminder, setSavingReminder] = useState(false)
   const [form] = Form.useForm()
 
   // Reset + fetch history when a lead is opened
@@ -1000,6 +1006,14 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
       .then(res => setDocuments(res.documents || []))
       .catch(() => setDocuments([]))
       .finally(() => setLoadingDocs(false))
+    setLoadingReminders(true)
+    api.listReminders(lead.id)
+      .then(res => setReminders(res.reminders || []))
+      .catch(() => setReminders([]))
+      .finally(() => setLoadingReminders(false))
+    setRemindDate(null)
+    setRemindTime(null)
+    setRemindNote('')
   }, [lead, open])
 
   const handleCreate = async () => {
@@ -1048,6 +1062,50 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
       message.error('Create failed: ' + e.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleScheduleReminder = async () => {
+    if (!lead) return
+    if (!remindDate || !remindTime) {
+      message.warning('Please pick a date and time for the reminder')
+      return
+    }
+    const dt = dayjs(remindDate)
+      .hour(dayjs(remindTime).hour())
+      .minute(dayjs(remindTime).minute())
+      .second(0)
+    if (dt.isBefore(dayjs())) {
+      message.warning('Reminder time must be in the future')
+      return
+    }
+    setSavingReminder(true)
+    try {
+      await api.createReminder(lead.id, {
+        remind_at: dt.toISOString(),
+        note: remindNote || undefined,
+      })
+      message.success('Reminder scheduled')
+      setRemindDate(null)
+      setRemindTime(null)
+      setRemindNote('')
+      const res = await api.listReminders(lead.id)
+      setReminders(res.reminders || [])
+    } catch (e) {
+      message.error('Failed to schedule reminder: ' + e.message)
+    } finally {
+      setSavingReminder(false)
+    }
+  }
+
+  const handleDismissReminder = async (rid) => {
+    try {
+      await api.dismissReminder(lead.id, rid)
+      message.success('Reminder dismissed')
+      const res = await api.listReminders(lead.id)
+      setReminders(res.reminders || [])
+    } catch (e) {
+      message.error('Failed to dismiss reminder: ' + e.message)
     }
   }
 
@@ -1740,6 +1798,83 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
               items={_historyItems}
               style={{ marginTop: 16 }}
             />
+          )}
+        </TabPane>
+
+        <TabPane tab={
+          <span><ClockCircleOutlined /> Reminders <Badge count={reminders.filter(r => r.status === 'PENDING').length} size="small" style={{ marginLeft: 6 }} /></span>
+        } key="reminders">
+          {canWrite && (
+            <div style={{ marginBottom: 16 }}>
+              <Text strong>Schedule a reminder</Text>
+              <Space.Compact style={{ width: '100%', marginTop: 8 }}>
+                <DatePicker
+                  value={remindDate}
+                  onChange={setRemindDate}
+                  style={{ width: '50%' }}
+                  placeholder="Date"
+                />
+                <TimePicker
+                  value={remindTime}
+                  onChange={setRemindTime}
+                  format="HH:mm"
+                  style={{ width: '50%' }}
+                  placeholder="Time"
+                />
+              </Space.Compact>
+              <Input.TextArea
+                value={remindNote}
+                onChange={e => setRemindNote(e.target.value)}
+                placeholder="Reminder note (e.g. Call client to confirm quote)"
+                rows={2}
+                style={{ marginTop: 8 }}
+              />
+              <Button
+                type="primary"
+                icon={<ClockCircleOutlined />}
+                loading={savingReminder}
+                onClick={handleScheduleReminder}
+                style={{ marginTop: 8, width: '100%' }}
+              >
+                Schedule Reminder
+              </Button>
+              <Text type="secondary" style={{ display: 'block', fontSize: 11, marginTop: 4 }}>
+                You'll get an email notification at the scheduled time.
+              </Text>
+            </div>
+          )}
+          {loadingReminders ? (
+            <Spin style={{ display: 'block', marginTop: 20 }} />
+          ) : reminders.length === 0 ? (
+            <Empty description="No reminders scheduled" style={{ marginTop: 20 }} />
+          ) : (
+            <div>
+              {reminders.map(r => (
+                <div key={r.id} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  border: '1px solid #f0f0f0', borderRadius: 6, padding: '8px 12px', marginBottom: 8
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>
+                      {dayjs(r.remind_at).format('MMM D, YYYY HH:mm')}
+                      {' '}
+                      <Tag color={r.status === 'PENDING' ? 'orange' : r.status === 'SENT' ? 'green' : 'default'}>
+                        {r.status}
+                      </Tag>
+                    </div>
+                    {r.note && <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{r.note}</div>}
+                    <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+                      by {r.created_by || '—'}
+                    </div>
+                  </div>
+                  {r.status === 'PENDING' && canWrite && (
+                    <Button size="small" onClick={() => handleDismissReminder(r.id)}>
+                      Dismiss
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </TabPane>
       </Tabs>

@@ -228,6 +228,7 @@ class Lead(Base):
     history = relationship("LeadHistory", back_populates="lead", cascade="all, delete-orphan")
     activities = relationship("LeadActivity", back_populates="lead", cascade="all, delete-orphan")
     emails = relationship("EmailLog", back_populates="lead", cascade="all, delete-orphan")
+    reminders = relationship("LeadReminder", back_populates="lead", cascade="all, delete-orphan")
     documents = relationship("LeadDocument", back_populates="lead", cascade="all, delete-orphan")
 
 
@@ -300,6 +301,24 @@ class LeadActivity(Base):
     created_by = Column(String(255), nullable=True)      # user email
 
     lead = relationship("Lead", back_populates="activities")
+
+
+class LeadReminder(Base):
+    """A user-scheduled reminder on a lead. When remind_at arrives, the cron
+    sends a notification to the assigned rep (or creator) and marks it SENT."""
+
+    __tablename__ = "lead_reminders"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    lead_id = Column(String(36), ForeignKey("leads.id"), nullable=False)
+    remind_at = Column(DateTime, nullable=False)          # when to fire the reminder
+    note = Column(Text, nullable=True)                    # what the reminder is about
+    status = Column(String(20), default="PENDING")       # PENDING | SENT | DISMISSED
+    created_by = Column(String(255), nullable=True)       # user email who scheduled it
+    created_at = Column(DateTime, default=datetime.utcnow)
+    sent_at = Column(DateTime, nullable=True)
+
+    lead = relationship("Lead", back_populates="reminders")
 
 
 class EmailLog(Base):
