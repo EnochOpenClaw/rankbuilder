@@ -606,44 +606,6 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
     prevFilters.current = sig
   }, [filters, search, campaignFilter, clientId])
 
-  const openTally = (camp) => {
-    setTallyCampaign(camp)
-    tallyForm.resetFields()
-    tallyForm.setFieldsValue({ log_date: dayjs(), cards_given: 0, people_stopped: 0 })
-    setTallyOpen(true)
-  }
-
-  const handleLogTally = async (values) => {
-    setSavingTally(true)
-    try {
-      await api.logDailyTally(tallyCampaign.id, {
-        log_date: values.log_date ? values.log_date.toISOString() : undefined,
-        cards_given: values.cards_given || 0,
-        people_stopped: values.people_stopped || 0,
-      })
-      message.success('Daily tally logged')
-      setTallyOpen(false)
-      load()
-    } catch (e) {
-      message.error('Failed to log tally: ' + e.message)
-    } finally {
-      setSavingTally(false)
-    }
-  }
-
-  const openComparison = async () => {
-    setCompOpen(true)
-    setCompLoading(true)
-    try {
-      const res = await api.roadsideComparison(clientId)
-      setCompData(res.campaigns || [])
-    } catch (e) {
-      message.error('Failed to load comparison: ' + e.message)
-    } finally {
-      setCompLoading(false)
-    }
-  }
-
   const columns = [
     {
       title: 'Date',
@@ -2070,6 +2032,44 @@ function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads, canWrite = tr
         }
       },
     })
+  }
+
+  const openTally = (camp) => {
+    setTallyCampaign(camp)
+    tallyForm.resetFields()
+    tallyForm.setFieldsValue({ log_date: dayjs(), cards_given: 0, people_stopped: 0 })
+    setTallyOpen(true)
+  }
+
+  const handleLogTally = async (values) => {
+    setSavingTally(true)
+    try {
+      await api.logDailyTally(tallyCampaign.id, {
+        log_date: values.log_date ? values.log_date.toISOString() : undefined,
+        cards_given: values.cards_given || 0,
+        people_stopped: values.people_stopped || 0,
+      })
+      message.success('Daily tally logged')
+      setTallyOpen(false)
+      load()
+    } catch (e) {
+      message.error('Failed to log tally: ' + e.message)
+    } finally {
+      setSavingTally(false)
+    }
+  }
+
+  const openComparison = async () => {
+    setCompOpen(true)
+    setCompLoading(true)
+    try {
+      const res = await api.roadsideComparison(clientId)
+      setCompData(res.campaigns || [])
+    } catch (e) {
+      message.error('Failed to load comparison: ' + e.message)
+    } finally {
+      setCompLoading(false)
+    }
   }
 
   const columns = [
