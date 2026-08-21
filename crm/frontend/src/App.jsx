@@ -18,6 +18,10 @@ import { api, auth } from './api'
 const { Title, Text } = Typography
 const { TabPane } = Tabs
 
+// Only these users may PERMANENTLY delete leads. Everyone else can Archive/Restore.
+const DELETE_ALLOWED_EMAILS = ['craig@houseofsupreme.co.za']
+
+
 // ── Auth helpers ───────────────────────────────────────────────────────────────
 
 function getStoredUser() {
@@ -478,7 +482,7 @@ function formatPhone(v) {
   return `${digits.slice(0,3)} ${digits.slice(3,6)} ${digits.slice(6)}`
 }
 
-export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign, canWrite = true, sources = [], onSourcesChange }) {
+export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign, canWrite = true, sources = [], onSourcesChange, currentUserEmail = '' }) {
   const [leads, setLeads] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -697,7 +701,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
               Archive
             </Button>
           )}
-          {canWrite && (
+          {canWrite && DELETE_ALLOWED_EMAILS.includes(currentUserEmail) && (
             <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(r)} />
           )}
         </Space>
@@ -2790,6 +2794,7 @@ export default function App() {
                   campaignFilter={campaignFilter}
                   campaignName={campaignName}
                   canWrite={canWrite}
+                  currentUserEmail={user.email}
                   sources={sources}
                   onSourcesChange={setSources}
                   onClearCampaign={() => {
