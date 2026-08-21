@@ -302,8 +302,9 @@ def list_leads(
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     if current_user.role == UserRole.AGENT:
-        # Sales agents see ONLY leads specifically assigned to them
-        q = q.filter(Lead.assigned_to == current_user.email)
+        # Sales agents see leads assigned to them OR leads they created
+        from sqlalchemy import or_
+        q = q.filter(or_(Lead.assigned_to == current_user.email, Lead.created_by == current_user.email))
     if campaign_id:
         q = q.filter(Lead.campaign_id == campaign_id)
     if status:
@@ -364,8 +365,9 @@ def export_leads(
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     if current_user.role == UserRole.AGENT:
-        # Sales agents see ONLY leads specifically assigned to them
-        q = q.filter(Lead.assigned_to == current_user.email)
+        # Sales agents see leads assigned to them OR leads they created
+        from sqlalchemy import or_
+        q = q.filter(or_(Lead.assigned_to == current_user.email, Lead.created_by == current_user.email))
     if campaign_id:
         q = q.filter(Lead.campaign_id == campaign_id)
     if status:
