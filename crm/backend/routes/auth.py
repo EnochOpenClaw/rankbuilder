@@ -6,6 +6,7 @@ GET  /api/auth/me         — Current user info
 POST /api/auth/users      — Create user (SYSTEM_ADMIN only)
 GET  /api/auth/users      — List users (SYSTEM_ADMIN / CLIENT_ADMIN)
 DELETE /api/auth/users/{id} — Disable user (SYSTEM_ADMIN only)
+POST  /api/auth/users/{id}/reset-password — Reset a user's password (SYSTEM_ADMIN only)
 """
 
 import uuid
@@ -249,6 +250,10 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class PasswordResetRequest(BaseModel):
+    new_password: str  # SYSTEM_ADMIN sets a new password for another user
+
+
 @router.post("/change-password", response_model=UserResponse)
 def change_password(
     payload: ChangePasswordRequest,
@@ -371,6 +376,40 @@ def delete_user(
     user.is_active = 0
     user.updated_at = datetime.utcnow()
     db.commit()
+
+
+@router.post("/users/{user_id}/reset-password", response_model=UserResponse)
+def reset_password(
+    user_id: str,
+    payload: PasswordResetRequest,
+    db=Depends(get_db),
+    current_user: User = Depends(require_role("SYSTEM_ADMIN")),
+):
+    """SYSTEM_ADMIN resets another user's password. Sets must_change_password flag
+    so the user is prompted to set their own password on next login."""
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.hashed_password = hash_password(payload.new_password)
+    user.must_change_password = 1
+    user.is_active = 1  # resetting re-enables the account if it was disabled
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(user)
+
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        client_id=user.client_id,
+        role=user.role.value,
+        created_at=user.created_at,
+        must_change_password=1,
+    )
 
 
 # ── Welcome email (login details) ──────────────────────────────────────────────
