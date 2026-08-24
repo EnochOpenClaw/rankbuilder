@@ -3,13 +3,13 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import {
   Layout, Typography, Card, Row, Col, Statistic, Table, Tag, Button,
   Drawer, Descriptions, Timeline, Select, Input, Space, message, Tabs,
-  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, InputNumber, Checkbox, DatePicker, TimePicker, Alert
+  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, InputNumber, Checkbox, DatePicker, TimePicker, Alert, Grid, Menu, Dropdown
 } from 'antd'
 import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined, FolderOpenOutlined, RollbackOutlined, FieldTimeOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined, FolderOpenOutlined, RollbackOutlined, FieldTimeOutlined, MenuOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -90,8 +90,9 @@ function LoginPage({ onLogin }) {
     <div style={{
       minHeight: '100vh', background: '#001529',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '24px 16px',
     }}>
-      <Card style={{ width: 380, textAlign: 'center' }} styles={{ body: { padding: 32 } }}>
+      <Card style={{ width: '100%', maxWidth: 380, textAlign: 'center' }} styles={{ body: { padding: 32 } }}>
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 48, marginBottom: 8 }}>📊</div>
           <Title level={4} style={{ margin: 0 }}>RankBuilder CRM</Title>
@@ -2960,6 +2961,11 @@ export default function App() {
   const [campaignName, setCampaignName] = useState(null)
   const [sources, setSources] = useState([])
   const [helpOpen, setHelpOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  // Responsive: treat anything below md (768px) as mobile — catches iPhones/Android.
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
 
   // Listen for auth:logout events from api.js
   useEffect(() => {
@@ -3013,11 +3019,17 @@ export default function App() {
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-      {/* Header */}
-      <Layout.Header style={{ background: '#001529', display: 'flex', alignItems: 'center', gap: 16, padding: '0 24px' }}>
-        <Title level={4} style={{ color: '#fff', margin: 0 }}>RankBuilder CRM</Title>
+      {/* Header — compact drawer menu on mobile, full bar on desktop */}
+      <Layout.Header style={{
+        background: '#001529', display: 'flex', alignItems: 'center', gap: 12,
+        padding: isMobile ? '0 12px' : '0 24px', height: isMobile ? 52 : 64, lineHeight: isMobile ? '52px' : '64px',
+        position: 'sticky', top: 0, zIndex: 100,
+      }}>
+        <Title level={4} style={{ color: '#fff', margin: 0, fontSize: isMobile ? 16 : 20, whiteSpace: 'nowrap' }}>
+          RankBuilder CRM
+        </Title>
 
-        {clients.length > 0 && isMultiClientAdmin && (
+        {!isMobile && clients.length > 0 && isMultiClientAdmin && (
           <Select
             value={selectedClientId}
             onChange={id => { setSelectedClientId(id); setRefreshKey(k => k + 1) }}
@@ -3032,34 +3044,93 @@ export default function App() {
 
         <div style={{ flex: 1 }} />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, whiteSpace: 'nowrap' }}>
-            <span style={{ color: '#fff', fontSize: 13, lineHeight: 1.2 }}>{user.full_name}</span>
-            <span style={{ color: '#fff5', fontSize: 11 }}>{user.role}</span>
+        {isMobile ? (
+          <Button icon={<MenuOutlined />} onClick={() => setMenuOpen(true)}
+            style={{ color: '#fff', borderColor: '#fff5' }} ghost size="small">
+            Menu
+          </Button>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, whiteSpace: 'nowrap' }}>
+              <span style={{ color: '#fff', fontSize: 13, lineHeight: 1.2 }}>{user.full_name}</span>
+              <span style={{ color: '#fff5', fontSize: 11 }}>{user.role}</span>
+            </div>
+            <Button icon={<QuestionCircleOutlined />} onClick={() => setHelpOpen(true)}
+              style={{ color: '#fff', borderColor: '#fff5' }} ghost size="small">
+              Help
+            </Button>
+            <Button icon={<LogoutOutlined />} onClick={handleLogout}
+              style={{ color: '#fff', borderColor: '#fff5' }} ghost size="small">
+              Logout
+            </Button>
           </div>
-          <Button icon={<QuestionCircleOutlined />} onClick={() => setHelpOpen(true)}
-            style={{ color: '#fff', borderColor: '#fff5' }} ghost size="small">
-            Help
-          </Button>
-          <Button icon={<LogoutOutlined />} onClick={handleLogout}
-            style={{ color: '#fff', borderColor: '#fff5' }} ghost size="small">
-            Logout
-          </Button>
-        </div>
+        )}
       </Layout.Header>
 
+      {/* Mobile menu drawer */}
+      {isMobile && (
+        <Drawer title="Menu" placement="right" open={menuOpen} onClose={() => setMenuOpen(false)} width={260}>
+          <div style={{ marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #f0f0f0' }}>
+            <div style={{ fontWeight: 600 }}>{user.full_name}</div>
+            <div style={{ color: '#888', fontSize: 13 }}>{user.role}</div>
+          </div>
+
+          {clients.length > 0 && isMultiClientAdmin && (
+            <div style={{ marginBottom: 16 }}>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>CLIENT</Text>
+              <Select
+                value={selectedClientId}
+                onChange={id => { setSelectedClientId(id); setRefreshKey(k => k + 1) }}
+                style={{ width: '100%' }}
+                placeholder="Select client"
+              >
+                {clients.map(c => (
+                  <Select.Option key={c.id} value={c.id}>{c.company_name}</Select.Option>
+                ))}
+              </Select>
+            </div>
+          )}
+
+          <Menu
+            mode="inline"
+            selectedKeys={[tab]}
+            onClick={({ key }) => { setTab(key); setMenuOpen(false) }}
+            style={{ borderInlineEnd: 'none' }}
+            items={[
+              { key: 'dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
+              { key: 'leads', icon: <DatabaseOutlined />, label: 'Leads' },
+              ...(isAdmin ? [{ key: 'campaigns', icon: <FlagOutlined />, label: 'Campaigns' }] : []),
+              ...(isAdmin ? [{ key: 'users', icon: <UserOutlined />, label: 'Users' }] : []),
+              ...(isMultiClientAdmin ? [{ key: 'clients', icon: <GlobalOutlined />, label: 'Clients' }] : []),
+              ...(isMultiClientAdmin ? [{ key: 'sources', icon: <TagsOutlined />, label: 'Sources' }] : []),
+              ...(isMultiClientAdmin ? [{ key: 'scoring', icon: <ThunderboltOutlined />, label: 'Scoring' }] : []),
+              ...(isAdmin ? [{ key: 'reports', icon: <BarChartOutlined />, label: 'Reports' }] : []),
+            ]}
+          />
+
+          <div style={{ marginTop: 24 }}>
+            <Button icon={<QuestionCircleOutlined />} onClick={() => { setHelpOpen(true); setMenuOpen(false) }} block>
+              Help
+            </Button>
+            <Button icon={<LogoutOutlined />} onClick={handleLogout} danger block style={{ marginTop: 8 }}>
+              Logout
+            </Button>
+          </div>
+        </Drawer>
+      )}
+
       {/* Content */}
-      <Layout.Content style={{ padding: '16px 24px' }}>
+      <Layout.Content style={{ padding: isMobile ? '12px' : '16px 24px' }}>
         {selectedClientId ? (
-          <Tabs activeKey={tab} onChange={setTab}>
+          <Tabs activeKey={tab} onChange={setTab} tabBarStyle={isMobile ? { marginBottom: 8 } : undefined}>
             <TabPane tab={<span><DashboardOutlined /> Dashboard</span>} key="dashboard">
-              <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+              <div style={{ background: '#fff', borderRadius: 8, padding: isMobile ? 12 : 16 }}>
                 <Dashboard clientId={selectedClientId} key={`dash-${selectedClientId}-${refreshKey}`} />
               </div>
             </TabPane>
 
             <TabPane tab={<span><DatabaseOutlined /> Leads</span>} key="leads">
-              <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+              <div style={{ background: '#fff', borderRadius: 8, padding: isMobile ? 12 : 16 }}>
                 <LeadsTab
                   clientId={selectedClientId}
                   refreshKey={refreshKey}
@@ -3079,7 +3150,7 @@ export default function App() {
 
             {isAdmin && (
               <TabPane tab={<span><FlagOutlined /> Campaigns</span>} key="campaigns">
-                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                <div style={{ background: '#fff', borderRadius: 8, padding: isMobile ? 12 : 16 }}>
                   <CampaignsTab
                     clientId={selectedClientId}
                     refreshKey={refreshKey}
@@ -3096,7 +3167,7 @@ export default function App() {
 
             {isAdmin && (
               <TabPane tab={<span><UserOutlined /> Users</span>} key="users">
-                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                <div style={{ background: '#fff', borderRadius: 8, padding: isMobile ? 12 : 16 }}>
                   <UsersTab user={user} clients={clients} />
                 </div>
               </TabPane>
@@ -3104,7 +3175,7 @@ export default function App() {
 
             {isMultiClientAdmin && (
               <TabPane tab={<span><GlobalOutlined /> Clients</span>} key="clients">
-                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                <div style={{ background: '#fff', borderRadius: 8, padding: isMobile ? 12 : 16 }}>
                   <ClientsTab onClientAdded={() => setRefreshKey(k => k + 1)} />
                 </div>
               </TabPane>
@@ -3112,7 +3183,7 @@ export default function App() {
 
             {isMultiClientAdmin && (
               <TabPane tab={<span><TagsOutlined /> Sources</span>} key="sources">
-                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                <div style={{ background: '#fff', borderRadius: 8, padding: isMobile ? 12 : 16 }}>
                   <SourcesTab sources={sources} onSourcesChange={setSources} />
                 </div>
               </TabPane>
@@ -3120,7 +3191,7 @@ export default function App() {
 
             {isMultiClientAdmin && (
               <TabPane tab={<span><ThunderboltOutlined /> Scoring</span>} key="scoring">
-                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                <div style={{ background: '#fff', borderRadius: 8, padding: isMobile ? 12 : 16 }}>
                   <ScoringRulesTab />
                 </div>
               </TabPane>
@@ -3128,7 +3199,7 @@ export default function App() {
 
             {isAdmin && (
               <TabPane tab={<span><BarChartOutlined /> Reports</span>} key="reports">
-                <div style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
+                <div style={{ background: '#fff', borderRadius: 8, padding: isMobile ? 12 : 16 }}>
                   <ReportsTab clientId={selectedClientId} />
                 </div>
               </TabPane>

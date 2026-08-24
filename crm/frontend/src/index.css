@@ -1,2 +1,23 @@
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; }
+
+/* iPhone / mobile safe-area + app-like feel */
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Let the sticky header respect the iPhone notch when installed as a PWA */
+#root { display: flex; min-height: 100vh; width: 100%; }
+
+@media (max-width: 767px) {
+  /* Prevent horizontal scroll on phones */
+  body, #root { overflow-x: hidden; }
+  /* Account for iOS safe-area insets (notch / home bar) */
+  .ant-layout-header {
+    padding-top: env(safe-area-inset-top);
+    box-sizing: content-box;
+    height: calc(52px + env(safe-area-inset-top)) !important;
+    line-height: 52px !important;
+  }
+}
