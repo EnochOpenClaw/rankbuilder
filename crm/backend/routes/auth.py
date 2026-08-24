@@ -42,7 +42,12 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return pwd_context.verify(plain, hashed)
+    except Exception:
+        # Corrupt/unknown hash format (e.g. missing bcrypt prefix) must not crash login.
+        # Treat as invalid credentials -> clean 401 instead of a 500.
+        return False
 
 
 def create_access_token(data: dict) -> str:
