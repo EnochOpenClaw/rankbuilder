@@ -162,6 +162,8 @@ export const api = {
   createUser: (data) => request('POST', '/auth/users', data, true),
   listUsers: () => request('GET', '/auth/users', null, true),
   deleteUser: (id) => request('DELETE', `/auth/users/${id}`, null, true),
+  resetPassword: (id, newPassword) =>
+    request('POST', `/auth/users/${id}/reset-password`, { new_password: newPassword }, true),
   changePassword: (currentPassword, newPassword) =>
     request('POST', '/auth/change-password', { current_password: currentPassword, new_password: newPassword }, true),
 

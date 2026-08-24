@@ -9,7 +9,7 @@ import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined, FolderOpenOutlined, RollbackOutlined, FieldTimeOutlined, MenuOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined, FolderOpenOutlined, RollbackOutlined, FieldTimeOutlined, MenuOutlined, KeyOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -2264,6 +2264,8 @@ function UsersTab({ user: currentUser, clients }) {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [addForm] = Form.useForm()
+  const [resetTarget, setResetTarget] = useState(null)
+  const [resetForm] = Form.useForm()
 
   const load = async () => {
     setLoading(true)
@@ -2303,6 +2305,18 @@ function UsersTab({ user: currentUser, clients }) {
     }
   }
 
+  const handleResetPassword = async (values) => {
+    if (!resetTarget) return
+    try {
+      await api.resetPassword(resetTarget.id, values.new_password)
+      message.success(`Password reset — temp password emailed to ${resetTarget.email}`)
+      setResetTarget(null)
+      resetForm.resetFields()
+    } catch (e) {
+      message.error('Failed to reset password: ' + e.message)
+    }
+  }
+
   const columns = [
     { title: 'Name', dataIndex: 'full_name', render: v => <Text strong>{v}</Text> },
     { title: 'Email', dataIndex: 'email', render: v => <Text code style={{ fontSize: 12 }}>{v}</Text> },
@@ -2329,12 +2343,17 @@ function UsersTab({ user: currentUser, clients }) {
       title: '',
       render: (_, r) => (
         r.id !== currentUser?.id && (
-          <Button size="small" danger onClick={() => handleDelete(r.id, r.email)}>
-            Disable
-          </Button>
+          <Space size={4} wrap>
+            <Button size="small" icon={<KeyOutlined />} onClick={() => { setResetTarget(r); resetForm.setFieldsValue({ new_password: '' }) }}>
+              Reset PW
+            </Button>
+            <Button size="small" danger onClick={() => handleDelete(r.id, r.email)}>
+              Disable
+            </Button>
+          </Space>
         )
       ),
-      width: 80,
+      width: 170,
     },
   ]
 
@@ -2381,6 +2400,32 @@ function UsersTab({ user: currentUser, clients }) {
             <Checkbox>Email login details to this user (site, email, temporary password)</Checkbox>
           </Form.Item>
           <Button type="primary" htmlType="submit" block>Create User</Button>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={resetTarget ? `Reset Password — ${resetTarget.full_name}` : 'Reset Password'}
+        open={!!resetTarget}
+        onCancel={() => { setResetTarget(null); resetForm.resetFields() }}
+        footer={null}
+        destroyOnClose
+      >
+        <Form form={resetForm} layout="vertical" onFinish={handleResetPassword} style={{ marginTop: 16 }}>
+          {resetTarget && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={`Set a temporary password for ${resetTarget.email}`}
+              description="The user will be emailed this temporary password and must change it on next login."
+            />
+          )}
+          <Form.Item name="new_password" label="Temporary Password" rules={[{ required: true, min: 8 }]}>
+            <Input.Password placeholder="Min 8 characters" />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" block icon={<KeyOutlined />}>
+            Reset & Email Password
+          </Button>
         </Form>
       </Modal>
     </div>
