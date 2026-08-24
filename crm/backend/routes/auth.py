@@ -401,6 +401,9 @@ def reset_password(
     db.commit()
     db.refresh(user)
 
+    # Email the user their new temporary password (reset wording)
+    _send_login_details(user, payload.new_password, role=user.role.value, reset=True)
+
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -414,29 +417,38 @@ def reset_password(
 
 # ── Welcome email (login details) ──────────────────────────────────────────────
 
-def _send_login_details(user, temp_password: str, role: str = "VIEWER") -> None:
+def _send_login_details(user, temp_password: str, role: str = "VIEWER", reset: bool = False) -> None:
     """
-    Email a newly-created user their login details: site address, email, and a
-    temporary password they must change on first login.
+    Email a user their login details: site address, email, and a temporary
+    password they must change on first login. When reset=True, the message
+    is worded as a password reset instead of a new-account welcome.
     """
     brevo_key = os.environ.get("BREVO_API_KEY", "")
     if not brevo_key:
         import logging
-        logging.getLogger("crm.auth").warning("BREVO_API_KEY not set - welcome email not sent")
+        logging.getLogger("crm.auth").warning("BREVO_API_KEY not set - email not sent")
         return
 
     site_url = os.environ.get("CRM_PORTAL_URL", "https://dashboard.fortressblinds.co.za")
     sender_email = os.environ.get("SENDER_EMAIL", "ai@fortressblinds.co.za")
     sender_name = os.environ.get("SENDER_NAME", "RankBuilder CRM")
 
-    subject = "🎉 Your RankBuilder CRM Login Details"
+    if reset:
+        subject = "🔑 Your RankBuilder CRM Password Has Been Reset"
+        intro_head = f"Hi {user.full_name}, your password was reset!"
+        intro_sub = "A new temporary password has been set on your RankBuilder CRM account."
+    else:
+        subject = "🎉 Your RankBuilder CRM Login Details"
+        intro_head = f"🎉 Welcome, {user.full_name}!"
+        intro_sub = "Your RankBuilder CRM account has been created."
+
     html = f"""
 <!DOCTYPE html>
 <html><body style='font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#fafafa;'>
   <div style='background:white;border-radius:12px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.08);'>
     <div style='border-bottom:2px solid #f0f0f0;padding-bottom:16px;margin-bottom:20px;'>
-      <h1 style='margin:0;font-size:20px;color:#333;'>🎉 Welcome, {user.full_name}!</h1>
-      <p style='margin:8px 0 0;color:#888;font-size:13px;'>Your RankBuilder CRM account has been created.</p>
+      <h1 style='margin:0;font-size:20px;color:#333;'>{intro_head}</h1>
+      <p style='margin:8px 0 0;color:#888;font-size:13px;'>{intro_sub}</p>
     </div>
     <p style='color:#555;font-size:14px;'>Here are your login details:</p>
     <div style='background:#f5f5f5;border-radius:8px;padding:16px;margin:16px 0;font-size:14px;'>
