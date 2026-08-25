@@ -1154,7 +1154,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
         payment_status: paymentStatus,
         location,
         contact_name: contactName,
-        contact_email: contactEmail,
+        contact_email: contactEmail ? contactEmail.trim() : undefined,
         contact_phone: contactPhone,
         company_name: companyName,
         company_website: companyWebsite,

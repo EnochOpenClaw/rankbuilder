@@ -6,7 +6,7 @@ Phase 1 request/response models
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 # ── Enums (mirrored from database) ────────────────────────────────────────────
@@ -71,6 +71,16 @@ class LeadCreate(BaseModel):
     # Location
     location: Optional[str] = None  # suburb / city / province
 
+    @field_validator("contact_email", mode="before")
+    @classmethod
+    def _empty_email_to_none(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, str):
+            s = v.strip()
+            return s if s else None
+        return v
+
     class Config:
         use_enum_values = True
 
@@ -97,6 +107,17 @@ class LeadUpdate(BaseModel):
     # Full confirmed street address
     address: Optional[str] = None
 
+    @field_validator("contact_email", mode="before")
+    @classmethod
+    def _empty_email_to_none(cls, v):
+        """Treat empty/whitespace email as None so EmailStr doesn't reject it."""
+        if v is None:
+            return v
+        if isinstance(v, str):
+            s = v.strip()
+            return s if s else None
+        return v
+
     class Config:
         use_enum_values = True
 
@@ -115,6 +136,16 @@ class LeadPublicCreate(BaseModel):
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
     utm_campaign: Optional[str] = None
+
+    @field_validator("contact_email", mode="before")
+    @classmethod
+    def _empty_email_to_none(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, str):
+            s = v.strip()
+            return s if s else None
+        return v
 
     class Config:
         use_enum_values = True
