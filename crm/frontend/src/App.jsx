@@ -2991,6 +2991,7 @@ function ReportsTab({ clientId }) {
   const [activity, setActivity] = useState(null)
   const [funnelTrend, setFunnelTrend] = useState(null)
   const [trendBucket, setTrendBucket] = useState('week')
+  const [overdue, setOverdue] = useState(null)
   const [loading, setLoading] = useState(true)
   const [preset, setPreset] = useState('commission')
   const [dateFrom, setDateFrom] = useState(null)
@@ -3033,7 +3034,7 @@ function ReportsTab({ clientId }) {
       if (dateFrom) qs.set('date_from', dateFrom)
       if (dateTo) qs.set('date_to', dateTo)
       const q = qs.toString()
-      const [a, p, f, r, rt, act, ft] = await Promise.all([
+      const [a, p, f, r, rt, act, ft, od] = await Promise.all([
         api.agentSalesReport(clientId, dateFrom, dateTo),
         api.pipelineReport(clientId, dateFrom, dateTo),
         api.funnelReport(clientId, dateFrom, dateTo),
@@ -3041,6 +3042,7 @@ function ReportsTab({ clientId }) {
         api.responseTimeReport(clientId, dateFrom, dateTo),
         api.activityReport(clientId, dateFrom, dateTo),
         api.funnelTrendReport(clientId, dateFrom, dateTo, trendBucket),
+        api.overdueReport(clientId),
       ])
       setAgent(a)
       setPipeline(p)
@@ -3049,6 +3051,7 @@ function ReportsTab({ clientId }) {
       setResponseTime(rt)
       setActivity(act)
       setFunnelTrend(ft)
+      setOverdue(od)
     } catch (e) {
       message.error('Failed to load reports: ' + e.message)
     } finally {
@@ -3131,6 +3134,21 @@ function ReportsTab({ clientId }) {
     { title: 'Qual. Rate', dataIndex: 'qualification_rate', align: 'right', width: 85, render: v => <Text style={{ color: '#1677ff' }}>{v}%</Text> },
     { title: 'Contact Rate', dataIndex: 'contact_rate', align: 'right', width: 95, render: v => <Text style={{ color: '#722ed1' }}>{v}%</Text> },
     { title: 'Conv. Rate', dataIndex: 'conversion_rate', align: 'right', width: 90, render: v => <Tag color={v >= 20 ? 'green' : v >= 10 ? 'orange' : 'default'}>{v}%</Tag> },
+  ]
+
+  const fmtDur = (h) => {
+    if (h === null || h === undefined) return '—'
+    if (h < 24) return Math.round(h) + 'h'
+    return Math.floor(h / 24) + 'd ' + Math.round(h % 24) + 'h'
+  }
+
+  const overdueCols = [
+    { title: 'Company', dataIndex: 'company', render: c => <Text strong>{c}</Text> },
+    { title: 'Contact', dataIndex: 'contact_name', render: c => c || '—' },
+    { title: 'Phone', dataIndex: 'contact_phone', render: p => p || '—' },
+    { title: 'Agent', dataIndex: 'assigned_to' },
+    { title: 'Status', dataIndex: 'status', render: s => <Tag>{s}</Tag> },
+    { title: 'Issue', dataIndex: 'issues', render: iss => (iss || []).map(([reason, h]) => <Tag key={reason} color="red" style={{ marginBottom: 2 }}>{reason} · {fmtDur(h)}</Tag>) },
   ]
 
   return (
@@ -3281,6 +3299,24 @@ function ReportsTab({ clientId }) {
         pagination={false}
         style={{ marginBottom: 24 }}
       />
+
+      <Title level={5} style={{ margin: '16px 0 4px' }}>Overdue / Stale Leads</Title>
+      <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+        Open leads breaching their SLA — action these promptly.
+      </Text>
+      {overdue?.count > 0 ? (
+        <Table
+          dataSource={overdue?.leads || []}
+          columns={overdueCols}
+          rowKey="lead_id"
+          size="small"
+          pagination={{ pageSize: 10 }}
+          style={{ marginBottom: 24 }}
+          rowClassName={(r) => (r.worst_hours >= 72 ? 'ant-table-row-danger' : '')}
+        />
+      ) : (
+        <Empty description="No overdue or stale leads 🎉" style={{ margin: 20 }} />
+      )}
 
       <Title level={5} style={{ margin: '8px 0 12px' }}>Pipeline Funnel</Title>
       <Row gutter={16}>

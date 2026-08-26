@@ -7,6 +7,7 @@ GET /api/reports/funnel       — stage-by-stage counts + drop-off %
 
 from datetime import datetime, timedelta
 from typing import Optional
+import os
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
@@ -466,3 +467,82 @@ def funnel_trend_report(
         })
 
     return {"buckets": result, "bucket": bucket, "generated_at": datetime.utcnow().isoformat()}
+
+
+@router.get("/overdue")
+def overdue_leads_report(
+    client_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Overdue / stale leads report.
+
+    Lists every open lead breaching its SLA (same rules as the cron SLA monitor):
+      - NEW not reviewed within SLA_NEW_HOURS (default 4h)
+      - QUALIFIED not sent within 24h
+      - SENT with no follow-up within 48h
+      - Stale: no activity in SLA_STALE_DAYS (default 3d)
+    Groups by agent with the age of the breach, for fast follow-up.
+    """
+    NH = int(os.environ.get("SLA_NEW_HOURS", "4"))
+    QH = int(os.environ.get("SLA_QUALIFIED_HOURS", "24"))
+    SH = int(os.environ.get("SLA_SENT_HOURS", "48"))
+    SD = int(os.environ.get("SLA_STALE_DAYS", "3"))
+
+    effective_client_id = enforce_client_scope(client_id, current_user)
+    q = db.query(Lead).filter(Lead.conversion_status.is_(None))
+    if effective_client_id:
+        q = q.filter(Lead.client_id == effective_client_id)
+    leads = q.all()
+
+    now = datetime.utcnow()
+    cnew = now - timedelta(hours=NH)
+    cstale = now - timedelta(days=SD)
+
+    def hours_since(dt):
+        if not dt:
+            return None
+        if dt.tzinfo is not None:
+            dt = dt.replace(tzinfo=None)
+        return round((now - dt).total_seconds() / 3600.0, 1)
+
+    issues = []
+    for lead in leads:
+        st = lead.status.value if hasattr(lead.status, "value") else str(lead.status)
+        reasons = []
+        if st == "NEW":
+            if lead.created_at and lead.created_at < cnew and not lead.follow_up_count:
+                reasons.append(("NEW not reviewed", hours_since(lead.created_at)))
+        elif st == "QUALIFIED":
+            if not lead.sent_to_client_at and (hours_since(lead.updated_at) or 0) > QH:
+                reasons.append(("QUALIFIED not sent", hours_since(lead.updated_at)))
+        elif st == "SENT":
+            la = lead.last_follow_up_at or lead.sent_to_client_at or lead.updated_at
+            if (hours_since(la) or 0) > SH:
+                reasons.append(("SENT no follow-up", hours_since(la)))
+        if lead.last_follow_up_at and lead.last_follow_up_at < cstale and st != "NEW":
+            reasons.append(("Stale no activity", hours_since(lead.last_follow_up_at)))
+
+        if reasons:
+            issues.append({
+                "lead_id": lead.id,
+                "company": lead.company_name or lead.contact_name or "Untitled lead",
+                "contact_name": lead.contact_name,
+                "contact_phone": lead.contact_phone,
+                "source": lead.source.value if hasattr(lead.source, "value") else str(lead.source or ""),
+                "status": st,
+                "quality_score": lead.quality_score,
+                "assigned_to": lead.assigned_to_name or lead.assigned_to or "Unassigned",
+                "created_at": lead.created_at.isoformat() if lead.created_at else None,
+                "last_follow_up_at": lead.last_follow_up_at.isoformat() if lead.last_follow_up_at else None,
+                "issues": reasons,
+                "worst_hours": max([h for _, h in reasons if h is not None] or [0]),
+            })
+
+    issues.sort(key=lambda x: x["worst_hours"], reverse=True)
+    return {
+        "count": len(issues),
+        "leads": issues,
+        "thresholds": {"new_hours": NH, "qualified_hours": QH, "sent_hours": SH, "stale_days": SD},
+        "generated_at": now.isoformat(),
+    }
