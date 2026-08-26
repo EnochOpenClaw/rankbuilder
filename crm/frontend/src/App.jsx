@@ -2989,6 +2989,8 @@ function ReportsTab({ clientId }) {
   const [roi, setRoi] = useState(null)
   const [responseTime, setResponseTime] = useState(null)
   const [activity, setActivity] = useState(null)
+  const [funnelTrend, setFunnelTrend] = useState(null)
+  const [trendBucket, setTrendBucket] = useState('week')
   const [loading, setLoading] = useState(true)
   const [preset, setPreset] = useState('commission')
   const [dateFrom, setDateFrom] = useState(null)
@@ -3031,13 +3033,14 @@ function ReportsTab({ clientId }) {
       if (dateFrom) qs.set('date_from', dateFrom)
       if (dateTo) qs.set('date_to', dateTo)
       const q = qs.toString()
-      const [a, p, f, r, rt, act] = await Promise.all([
+      const [a, p, f, r, rt, act, ft] = await Promise.all([
         api.agentSalesReport(clientId, dateFrom, dateTo),
         api.pipelineReport(clientId, dateFrom, dateTo),
         api.funnelReport(clientId, dateFrom, dateTo),
         api.sourceRoiReport(clientId, dateFrom, dateTo),
         api.responseTimeReport(clientId, dateFrom, dateTo),
         api.activityReport(clientId, dateFrom, dateTo),
+        api.funnelTrendReport(clientId, dateFrom, dateTo, trendBucket),
       ])
       setAgent(a)
       setPipeline(p)
@@ -3045,6 +3048,7 @@ function ReportsTab({ clientId }) {
       setRoi(r)
       setResponseTime(rt)
       setActivity(act)
+      setFunnelTrend(ft)
     } catch (e) {
       message.error('Failed to load reports: ' + e.message)
     } finally {
@@ -3052,7 +3056,7 @@ function ReportsTab({ clientId }) {
     }
   }
 
-  useEffect(() => { load() }, [clientId, dateFrom, dateTo])
+  useEffect(() => { load() }, [clientId, dateFrom, dateTo, trendBucket])
 
   const fmt = (n) => 'R' + (n || 0).toLocaleString('en-ZA', { maximumFractionDigits: 0 })
 
@@ -3117,6 +3121,17 @@ function ReportsTab({ clientId }) {
   ]
 
   const actOv = activity?.overall
+
+  const trendCols = [
+    { title: trendBucket === 'month' ? 'Month' : 'Week', dataIndex: 'period', render: p => <Text strong>{p}</Text> },
+    { title: 'Leads', dataIndex: 'leads', align: 'right', width: 70 },
+    { title: 'Qualified', dataIndex: 'qualified', align: 'right', width: 80 },
+    { title: 'Contacted', dataIndex: 'contacted', align: 'right', width: 85 },
+    { title: 'Converted', dataIndex: 'converted', align: 'right', width: 85, render: v => <Tag color="green">{v}</Tag> },
+    { title: 'Qual. Rate', dataIndex: 'qualification_rate', align: 'right', width: 85, render: v => <Text style={{ color: '#1677ff' }}>{v}%</Text> },
+    { title: 'Contact Rate', dataIndex: 'contact_rate', align: 'right', width: 95, render: v => <Text style={{ color: '#722ed1' }}>{v}%</Text> },
+    { title: 'Conv. Rate', dataIndex: 'conversion_rate', align: 'right', width: 90, render: v => <Tag color={v >= 20 ? 'green' : v >= 10 ? 'orange' : 'default'}>{v}%</Tag> },
+  ]
 
   return (
     <div>
@@ -3241,6 +3256,27 @@ function ReportsTab({ clientId }) {
         dataSource={activity?.agents || []}
         columns={activityCols}
         rowKey="email"
+        size="small"
+        pagination={false}
+        style={{ marginBottom: 24 }}
+      />
+
+      <Title level={5} style={{ margin: '16px 0 4px' }}>Conversion Funnel Trend</Title>
+      <Space style={{ marginBottom: 12 }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>View by:</Text>
+        <Segmented
+          value={trendBucket}
+          onChange={setTrendBucket}
+          options={[
+            { label: 'Weekly', value: 'week' },
+            { label: 'Monthly', value: 'month' },
+          ]}
+        />
+      </Space>
+      <Table
+        dataSource={funnelTrend?.buckets || []}
+        columns={trendCols}
+        rowKey="period"
         size="small"
         pagination={false}
         style={{ marginBottom: 24 }}

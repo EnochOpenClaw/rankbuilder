@@ -401,3 +401,68 @@ def activity_report(
         },
         "generated_at": datetime.utcnow().isoformat(),
     }
+
+
+@router.get("/funnel-trend")
+def funnel_trend_report(
+    client_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    bucket: str = Query("week", description="week | month"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Conversion funnel trend over time.
+
+    Groups leads into weekly/monthly buckets (by created_at) and reports, per
+    bucket: total leads, how many reached key stages (QUALIFIED/CONTACTED), and
+    conversion rate — so you can see whether conversion is improving or slipping.
+    """
+    effective_client_id = enforce_client_scope(client_id, current_user)
+    q = db.query(Lead)
+    if effective_client_id:
+        q = q.filter(Lead.client_id == effective_client_id)
+    q = _apply_date_range(q, date_from, date_to)
+    leads = q.all()
+
+    def bucket_key(dt):
+        if not dt:
+            return None
+        if bucket == "month":
+            return dt.strftime("%Y-%m")
+        # ISO week: (year, week)
+        iso = dt.isocalendar()
+        return f"{iso[0]}-W{iso[1]:02d}"
+
+    buckets = {}
+    for lead in leads:
+        key = bucket_key(lead.created_at)
+        if not key:
+            continue
+        if key not in buckets:
+            buckets[key] = {"period": key, "leads": 0, "qualified": 0, "contacted": 0, "converted": 0}
+        b = buckets[key]
+        b["leads"] += 1
+        st = lead.status.value if hasattr(lead.status, "value") else str(lead.status)
+        if st in ("QUALIFIED", "SENT", "CONTACTED", "CONVERTED"):
+            b["qualified"] += 1
+        if st in ("CONTACTED", "CONVERTED"):
+            b["contacted"] += 1
+        if lead.conversion_status == "CONVERTED":
+            b["converted"] += 1
+
+    result = []
+    for key in sorted(buckets.keys()):
+        b = buckets[key]
+        result.append({
+            "period": key,
+            "leads": b["leads"],
+            "qualified": b["qualified"],
+            "contacted": b["contacted"],
+            "converted": b["converted"],
+            "qualification_rate": round(b["qualified"] / b["leads"] * 100, 1) if b["leads"] else 0.0,
+            "contact_rate": round(b["contacted"] / b["leads"] * 100, 1) if b["leads"] else 0.0,
+            "conversion_rate": round(b["converted"] / b["leads"] * 100, 1) if b["leads"] else 0.0,
+        })
+
+    return {"buckets": result, "bucket": bucket, "generated_at": datetime.utcnow().isoformat()}
