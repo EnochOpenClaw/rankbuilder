@@ -3523,6 +3523,15 @@ export default function App() {
   const [sources, setSources] = useState([])
   const [helpOpen, setHelpOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+
+  // Auto-refresh: bump refreshKey on an interval so new/changed content appears
+  // without a manual page refresh. Pauses while any modal/drawer is open.
+  useEffect(() => {
+    if (!autoRefresh) return
+    const id = setInterval(() => setRefreshKey(k => k + 1), 30000) // every 30s
+    return () => clearInterval(id)
+  }, [autoRefresh])
 
   // Responsive: treat anything below md (768px) as mobile — catches iPhones/Android.
   const screens = Grid.useBreakpoint()
@@ -3619,6 +3628,14 @@ export default function App() {
             <Button icon={<QuestionCircleOutlined />} onClick={() => setHelpOpen(true)}
               style={{ color: '#fff', borderColor: '#fff5' }} ghost size="small">
               Help
+            </Button>
+            <Button
+              icon={autoRefresh ? <CheckCircleOutlined /> : <FieldTimeOutlined />}
+              onClick={() => setAutoRefresh(v => !v)}
+              style={{ color: '#fff', borderColor: '#fff5' }} ghost size="small"
+              title="Auto-refresh: new/changed content appears without manual refresh"
+            >
+              {autoRefresh ? 'Auto-refresh ON' : 'Auto-refresh OFF'}
             </Button>
             <Button icon={<LogoutOutlined />} onClick={handleLogout}
               style={{ color: '#fff', borderColor: '#fff5' }} ghost size="small">
