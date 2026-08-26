@@ -520,9 +520,10 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
   const onHandoffClientChange = (cid) => {
     setHandoffClientId(cid)
     setHandoffTargetEmail(null)
-    // Load that client's active users
+    // Load that client's users (listUsers doesn't return is_active; just show the
+    // client's non-SYSTEM_ADMIN users — the partner client is curated by the admin)
     api.listUsers().then(us => {
-      const targets = (us || []).filter(u => u.client_id === cid && u.is_active && u.role !== 'SYSTEM_ADMIN')
+      const targets = (us || []).filter(u => u.client_id === cid && u.role !== 'SYSTEM_ADMIN')
       setHandoffTargets(targets)
     }).catch(() => setHandoffTargets([]))
   }
