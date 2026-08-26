@@ -701,7 +701,12 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
     {
       title: 'Status',
       dataIndex: 'status',
-      render: s => <StatusTag status={s} />,
+      render: (s, r) => (
+        <Space size={4} wrap>
+          <StatusTag status={s} />
+          {r.partner_handoff_id && <Tag color="geekblue" style={{ marginLeft: 4 }}>🤝 Handed to Partner</Tag>}
+        </Space>
+      ),
       width: 140,
     },
     {

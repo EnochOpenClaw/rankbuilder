@@ -43,7 +43,8 @@ def check_sla(db):
     now = datetime.utcnow()
     cnew = now - timedelta(hours=NH)
     cstale = now - timedelta(days=SD)
-    for lead in db.query(Lead).filter(Lead.conversion_status.is_(None)).all():
+    for lead in db.query(Lead).filter(Lead.conversion_status.is_(None), Lead.partner_handoff_id.is_(None)).all():
+        # (skip leads handed off to a partner — they're no longer this rep's to action)
         st = lead.status.value if hasattr(lead.status, "value") else str(lead.status)
         if st == "NEW":
             if lead.created_at and lead.created_at < cnew and not lead.follow_up_count:

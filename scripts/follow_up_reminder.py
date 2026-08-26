@@ -167,6 +167,7 @@ def main():
             .filter(
                 Lead.assigned_to.isnot(None),
                 Lead.status.notin_([LeadStatus.CONVERTED, LeadStatus.LOST]),
+                Lead.partner_handoff_id.is_(None),  # skip leads handed off to a partner
             )
             .all()
         )
