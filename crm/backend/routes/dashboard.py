@@ -181,20 +181,36 @@ def dashboard_summary(
 
     # ── Rep productivity breakdown ─────────────────────────────────────────
     # Group leads by assigned rep (only leads that have been assigned)
+    # Group by assigned_to (email, stable ID) so name inconsistencies in
+    # lead.assigned_to_name (e.g. 'Tiaan' vs 'Tiaan Van Der Walt') don't
+    # split one rep into multiple dashboard rows.
     rep_rows = (
-        db.query(Lead.assigned_to, Lead.assigned_to_name, func.count(Lead.id).label("count"))
+        db.query(Lead.assigned_to, func.count(Lead.id).label("count"))
         .filter(
             Lead.client_id == client_id,
             Lead.created_at >= cutoff,
             Lead.assigned_to.isnot(None),
         )
-        .group_by(Lead.assigned_to, Lead.assigned_to_name)
+        .group_by(Lead.assigned_to)
         .all()
     )
 
+    # Display name: prefer the user's full_name, else the latest lead's assigned_to_name
+    def _rep_display_name(rep_email):
+        u = db.query(User).filter(User.email == rep_email).first()
+        if u and u.full_name:
+            return u.full_name
+        row = (
+            db.query(Lead.assigned_to_name)
+            .filter(Lead.assigned_to == rep_email, Lead.assigned_to_name.isnot(None))
+            .order_by(Lead.created_at.desc())
+            .first()
+        )
+        return (row[0] if row else None) or rep_email
+
     rep_breakdown = []
-    for rep_email, rep_name, assigned_count in rep_rows:
-        rep_name = rep_name or rep_email
+    for rep_email, assigned_count in rep_rows:
+        rep_name = _rep_display_name(rep_email)
         # Follow-ups logged for this rep's leads (via LeadHistory follow_up entries)
         follow_ups = (
             db.query(func.count(LeadHistory.id))
