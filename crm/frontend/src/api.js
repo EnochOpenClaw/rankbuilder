@@ -94,6 +94,7 @@ export const api = {
   restoreLead: (id) => request('POST', `/leads/${id}/restore`, null, true),
   deleteLead: (id) => request('DELETE', `/leads/${id}`, null, true),
   assignLead: (id, data) => request('POST', `/leads/${id}/assign`, data, true),
+  handoffLead: (id, data) => request('POST', `/leads/${id}/handoff`, data, true),
   logFollowUp: (id, data) => request('POST', `/leads/${id}/follow-up`, data, true),
   listActivities: (id) => request('GET', `/leads/${id}/activities`, null, true),
 

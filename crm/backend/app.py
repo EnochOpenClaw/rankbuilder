@@ -136,6 +136,18 @@ def startup():
             if "message_id" not in ecols:
                 conn3.execute(text("ALTER TABLE email_logs ADD COLUMN message_id VARCHAR(255)"))
         print("[migrate] email_logs notification columns ensured")
+        # Lead partner hand-off columns (cross-client lead hand-off)
+        lcols = {c["name"] for c in insp.get_columns("leads")}
+        with engine.begin() as conn4:
+            if "partner_handoff_id" not in lcols:
+                conn4.execute(text("ALTER TABLE leads ADD COLUMN partner_handoff_id VARCHAR(36)"))
+            if "partner_handoff_from" not in lcols:
+                conn4.execute(text("ALTER TABLE leads ADD COLUMN partner_handoff_from VARCHAR(36)"))
+            if "partner_handoff_at" not in lcols:
+                conn4.execute(text("ALTER TABLE leads ADD COLUMN partner_handoff_at DATETIME"))
+            if "partner_handoff_by" not in lcols:
+                conn4.execute(text("ALTER TABLE leads ADD COLUMN partner_handoff_by VARCHAR(255)"))
+        print("[migrate] leads partner_handoff columns ensured")
     except Exception as e:
         print(f"[migrate] warning: {e}")
     seed_lead_sources(SessionLocal())

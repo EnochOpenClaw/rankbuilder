@@ -22,7 +22,7 @@ from backend.scoring import compute_score
 
 from backend.database import (
     get_db, Lead, LeadHistory, LeadSource, LeadStatus, LeadType,
-    LeadActivity, EmailLog,
+    LeadActivity, EmailLog, Client,
 )
 from backend.schemas import (
     LeadCreate,
@@ -814,3 +814,96 @@ def delete_lead(
     enforce_client_scope(lead.client_id, current_user)
     db.delete(lead)
     db.commit()
+
+
+@router.post("/{lead_id}/handoff", response_model=LeadResponse)
+def handoff_lead(
+    lead_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Hand a lead off to a partner client (e.g. Southern Shutters / Sian).
+
+    Creates a COPY of the lead under the partner client (assigned to the partner's
+    target user), and tags the original HOS lead with the hand-off reference so the
+    trail is visible. SYSTEM_ADMIN only.
+
+    Body: {"partner_client_id": "<id>", "target_user_email": "<email>"}
+    """
+    if current_user.role != UserRole.SYSTEM_ADMIN:
+        raise HTTPException(status_code=403, detail="Only a system admin can hand leads off")
+
+    partner_client_id = (payload or {}).get("partner_client_id")
+    target_email = (payload or {}).get("target_user_email")
+    if not partner_client_id or not target_email:
+        raise HTTPException(status_code=400, detail="partner_client_id and target_user_email are required")
+
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    if lead.partner_handoff_id:
+        raise HTTPException(status_code=400, detail="Lead already handed off")
+
+    partner = db.query(Client).filter(Client.id == partner_client_id).first()
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partner client not found")
+    target = db.query(User).filter(
+        User.email == target_email,
+        User.client_id == partner_client_id,
+        User.is_active == True,
+    ).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Target user not found in partner client")
+
+    # Create a copy of the lead under the partner client
+    copy = Lead(
+        client_id=partner.id,
+        campaign_id=None,
+        source=lead.source,
+        source_query=lead.source_query,
+        source_detail=lead.source_detail,
+        utm_source=lead.utm_source,
+        utm_medium=lead.utm_medium,
+        utm_campaign=lead.utm_campaign,
+        location=lead.location,
+        address=lead.address,
+        status=LeadStatus.NEW,
+        lead_type=lead.lead_type,
+        quality_score=lead.quality_score,
+        contact_name=lead.contact_name,
+        contact_email=lead.contact_email,
+        contact_phone=lead.contact_phone,
+        company_name=lead.company_name,
+        company_website=lead.company_website,
+        message_excerpt=lead.message_excerpt,
+        pitch_sent=lead.pitch_sent,
+        notes=lead.notes,
+        created_by=target.email,
+        assigned_to=target.email,
+        assigned_to_name=target.full_name or target.email,
+        assigned_at=datetime.utcnow(),
+        partner_handoff_id=lead.id,          # original HOS lead id
+        partner_handoff_from=lead.client_id,
+        partner_handoff_at=datetime.utcnow(),
+        partner_handoff_by=current_user.email,
+    )
+    db.add(copy)
+    db.flush()
+
+    # Tag the original lead with the hand-off reference
+    lead.partner_handoff_id = copy.id
+    lead.partner_handoff_at = datetime.utcnow()
+    lead.partner_handoff_by = current_user.email
+
+    # Record history on both
+    db.add(LeadHistory(lead_id=lead.id, field_changed="partner_handoff",
+                       old_value=None, new_value=f"Handed to {partner.company_name} ({target.email})",
+                       changed_by=current_user.email))
+    db.add(LeadHistory(lead_id=copy.id, field_changed="partner_handoff",
+                       old_value=None, new_value=f"Received from {current_user.email}",
+                       changed_by=current_user.email))
+
+    db.commit()
+    db.refresh(copy)
+    return _lead_to_response(copy)

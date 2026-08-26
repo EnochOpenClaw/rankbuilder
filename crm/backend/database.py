@@ -240,6 +240,15 @@ class Lead(Base):
     archived = Column(Integer, default=0)  # 1 = archived (soft delete)
     archived_at = Column(DateTime, nullable=True)
 
+    # ── Partner hand-off (e.g. lead sent to Southern Shutters / Sian) ────────
+    # On the ORIGINAL lead: partner_handoff_id = the new partner-client lead id.
+    # On the PARTNER lead: partner_handoff_id = the original HOS lead id, and
+    # partner_handoff_from = original client id.
+    partner_handoff_id = Column(String(36), nullable=True)
+    partner_handoff_from = Column(String(36), nullable=True)
+    partner_handoff_at = Column(DateTime, nullable=True)
+    partner_handoff_by = Column(String(255), nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -497,6 +497,54 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
   const [repOptions, setRepOptions] = useState([])
   const [viewMode, setViewMode] = useState('table')
 
+  // Partner hand-off (e.g. send a lead to Southern Shutters / Sian)
+  const [handoffLead, setHandoffLead] = useState(null)
+  const [handoffClients, setHandoffClients] = useState([])
+  const [handoffTargets, setHandoffTargets] = useState([])
+  const [handoffClientId, setHandoffClientId] = useState(null)
+  const [handoffTargetEmail, setHandoffTargetEmail] = useState(null)
+  const [handoffSaving, setHandoffSaving] = useState(false)
+
+  const openHandoff = (r) => {
+    setHandoffLead(r)
+    setHandoffClientId(null)
+    setHandoffTargetEmail(null)
+    setHandoffTargets([])
+    // Load partner clients (all clients except the current one)
+    api.listClients().then(cs => {
+      const others = (cs || []).filter(c => c.id !== clientId)
+      setHandoffClients(others)
+    }).catch(() => setHandoffClients([]))
+  }
+
+  const onHandoffClientChange = (cid) => {
+    setHandoffClientId(cid)
+    setHandoffTargetEmail(null)
+    // Load that client's active users
+    api.listUsers().then(us => {
+      const targets = (us || []).filter(u => u.client_id === cid && u.is_active && u.role !== 'SYSTEM_ADMIN')
+      setHandoffTargets(targets)
+    }).catch(() => setHandoffTargets([]))
+  }
+
+  const doHandoff = async () => {
+    if (!handoffLead || !handoffClientId || !handoffTargetEmail) {
+      message.warning('Select a partner client and target user')
+      return
+    }
+    setHandoffSaving(true)
+    try {
+      const res = await api.handoffLead(handoffLead.id, { partner_client_id: handoffClientId, target_user_email: handoffTargetEmail })
+      message.success('Lead handed to partner')
+      setHandoffLead(null)
+      loadLeads()
+    } catch (e) {
+      message.error('Handoff failed: ' + e.message)
+    } finally {
+      setHandoffSaving(false)
+    }
+  }
+
   // Load assignable sales reps (AGENT + CLIENT_ADMIN) for this client — drives the
   // assignment dropdown dynamically instead of a hardcoded list (2026-08-19).
   useEffect(() => {
@@ -702,6 +750,11 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
           ) : (
             <Button size="small" icon={<FolderOpenOutlined />} onClick={() => handleArchive(r)}>
               Archive
+            </Button>
+          )}
+          {!r.archived && DELETE_ALLOWED_EMAILS.includes(currentUserEmail) && (
+            <Button size="small" icon={<SendOutlined />} onClick={() => openHandoff(r)}>
+              Hand to Partner
             </Button>
           )}
           {canWrite && DELETE_ALLOWED_EMAILS.includes(currentUserEmail) && (
@@ -2426,6 +2479,54 @@ function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads, canWrite = tr
               },
             ]}
           />
+        )}
+      </Modal>
+
+      {/* Partner Hand-off Modal */}
+      <Modal
+        title="🤝 Hand Lead to Partner"
+        open={!!handoffLead}
+        onCancel={() => setHandoffLead(null)}
+        footer={
+          <Space>
+            <Button onClick={() => setHandoffLead(null)}>Cancel</Button>
+            <Button type="primary" loading={handoffSaving} onClick={doHandoff} icon={<SendOutlined />}>
+              Hand to Partner
+            </Button>
+          </Space>
+        }
+      >
+        {handoffLead && (
+          <div>
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={`Handing off: ${handoffLead.company_name || handoffLead.contact_name || handoffLead.contact_email || 'Untitled lead'}`}
+              description="This creates a copy of the lead under the partner client. The original stays in your records for tracking."
+            />
+            <div style={{ marginBottom: 12 }}>
+              <Text strong>Partner Client</Text>
+              <Select
+                style={{ width: '100%', marginTop: 4 }}
+                placeholder="Select partner client"
+                value={handoffClientId}
+                onChange={onHandoffClientChange}
+                options={(handoffClients || []).map(c => ({ value: c.id, label: c.company_name }))}
+              />
+            </div>
+            <div>
+              <Text strong>Assign To</Text>
+              <Select
+                style={{ width: '100%', marginTop: 4 }}
+                placeholder="Select user"
+                value={handoffTargetEmail}
+                onChange={setHandoffTargetEmail}
+                disabled={!handoffClientId}
+                options={(handoffTargets || []).map(u => ({ value: u.email, label: `${u.full_name || u.email} (${u.email})` }))}
+              />
+            </div>
+          </div>
         )}
       </Modal>
     </div>

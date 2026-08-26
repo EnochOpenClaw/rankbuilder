@@ -197,6 +197,11 @@ class LeadResponse(BaseModel):
     assigned_at: Optional[datetime] = None
     last_follow_up_at: Optional[datetime] = None
     follow_up_count: Optional[int] = 0
+    # Partner hand-off (lead sent to another client)
+    partner_handoff_id: Optional[str] = None
+    partner_handoff_from: Optional[str] = None
+    partner_handoff_at: Optional[datetime] = None
+    partner_handoff_by: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
