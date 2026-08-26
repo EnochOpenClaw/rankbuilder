@@ -231,32 +231,34 @@ def notify_new_lead(lead: dict, db=None) -> None:
 
     source = (lead.get("source") or "UNKNOWN").upper()
     is_sales = source in SALES_SOURCES
-
-    # Determine recipients:
-    #   - Sales leads → notify the full Sales Team group (all 4 HOS reps)
-    #   - Outreach leads → notify Craig
-    #   - If a specific rep is assigned, still notify the team but highlight the rep
     assigned_to = lead.get("assigned_to")
     assigned_name = lead.get("assigned_to_name") or "Assigned Rep"
-    if is_sales:
-        sender_email = SALES_SENDER_EMAIL
-        sender_name = SALES_SENDER_NAME
-        # Group routing:
-        #   - Management always
-        #   - Cape Town group only for Cape Town region leads
-        #   - Tiaan gets his own personal allocation email (no broadcast here)
-        #   - Freedom excluded (AGENT)
-        recipients = list(MGMT_EMAILS)
-        if _is_cape_town(lead.get("location")):
-            recipients += CAPE_TOWN_GROUP
-        seen = set()
-        recipients = [r for r in recipients if not (r[0] in seen or seen.add(r[0]))]
+
+    # For non-HOS clients (e.g. Southern Shutters), use that client's configured
+    # notification recipients (from notification_settings) — not the HOS team.
+    HOS_CLIENT = "514a96af-4262-4cfe-b85e-37b6af223faa"
+    if client_id != HOS_CLIENT and db is not None:
+        recipients = _get_notification_recipients(client_id, db)
         if not recipients:
-            recipients = list(MGMT_EMAILS)
+            recipients = _get_notification_recipients(client_id, None)
+        sender_email = SALES_SENDER_EMAIL if is_sales else SENDER_EMAIL
+        sender_name = SALES_SENDER_NAME if is_sales else SENDER_NAME
     else:
-        sender_email = SENDER_EMAIL
-        sender_name = SENDER_NAME
-        recipients = [("craig@fortressblinds.co.za", "Craig")]
+        # HOS: existing group routing
+        if is_sales:
+            sender_email = SALES_SENDER_EMAIL
+            sender_name = SALES_SENDER_NAME
+            recipients = list(MGMT_EMAILS)
+            if _is_cape_town(lead.get("location")):
+                recipients += CAPE_TOWN_GROUP
+            seen = set()
+            recipients = [r for r in recipients if not (r[0] in seen or seen.add(r[0]))]
+            if not recipients:
+                recipients = list(MGMT_EMAILS)
+        else:
+            sender_email = SENDER_EMAIL
+            sender_name = SENDER_NAME
+            recipients = [("craig@fortressblinds.co.za", "Craig")]
 
     company = lead.get("company_name") or "Unknown company"
     subject = f"🔔 [RankBuilder] New {source} Lead: {company}"
