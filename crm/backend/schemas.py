@@ -260,6 +260,9 @@ class EmailLogItem(BaseModel):
     id: str
     lead_id: str
     direction: str
+    notification_type: Optional[str] = None
+    status: Optional[str] = None
+    message_id: Optional[str] = None
     subject: Optional[str]
     body: Optional[str]
     from_email: Optional[str]

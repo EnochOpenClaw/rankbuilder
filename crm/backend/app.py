@@ -8,7 +8,18 @@ from pathlib import Path
 
 import json
 import re
+import logging
 from datetime import datetime, timezone
+
+# ── Logging config ─────────────────────────────────────────────────────────────
+# Make crm.* loggers (notifications, leads, etc.) visible at INFO level so email
+# sends/failures and notification dispatch are traceable in the service logs.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logging.getLogger("crm.notifications").setLevel(logging.INFO)
+logging.getLogger("crm.leads").setLevel(logging.INFO)
 
 from fastapi import FastAPI, APIRouter
 from fastapi.routing import APIRoute
@@ -115,6 +126,16 @@ def startup():
             with engine.begin() as conn2:
                 conn2.execute(text("ALTER TABLE campaigns ADD COLUMN location VARCHAR(255)"))
         print("[migrate] campaigns.location ensured")
+        # EmailLog notification-tracking columns (per-lead notification audit trail)
+        ecols = {c["name"] for c in insp.get_columns("email_logs")}
+        with engine.begin() as conn3:
+            if "notification_type" not in ecols:
+                conn3.execute(text("ALTER TABLE email_logs ADD COLUMN notification_type VARCHAR(30)"))
+            if "status" not in ecols:
+                conn3.execute(text("ALTER TABLE email_logs ADD COLUMN status VARCHAR(20)"))
+            if "message_id" not in ecols:
+                conn3.execute(text("ALTER TABLE email_logs ADD COLUMN message_id VARCHAR(255)"))
+        print("[migrate] email_logs notification columns ensured")
     except Exception as e:
         print(f"[migrate] warning: {e}")
     seed_lead_sources(SessionLocal())

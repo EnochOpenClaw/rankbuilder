@@ -342,10 +342,13 @@ class LeadReminder(Base):
 
 
 class EmailLog(Base):
-    """Short-term email log — attach sent/received emails to a lead's timeline.
+    """Email log — attach sent/received emails to a lead's timeline.
 
     Phase 1: manual entry (paste email subject/body). Phase 2: Office 365 / Outlook
-    Graph integration to auto-capture.
+    Graph integration to auto-capture. Also records automated notification sends
+    (new_lead, lead_allocated, sla_breach, follow_up, hot_lead, reminder) so each
+    lead carries an audit trail of notification emails WITHOUT touching its
+    follow-up/activity state.
     """
 
     __tablename__ = "email_logs"
@@ -353,6 +356,9 @@ class EmailLog(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     lead_id = Column(String(36), ForeignKey("leads.id"), nullable=False)
     direction = Column(String(10), nullable=False)  # INBOUND | OUTBOUND
+    notification_type = Column(String(30), nullable=True)  # new_lead|lead_allocated|sla_breach|follow_up|hot_lead|reminder|manual
+    status = Column(String(20), nullable=True)  # SENT | FAILED
+    message_id = Column(String(255), nullable=True)
     subject = Column(String(500), nullable=True)
     body = Column(Text, nullable=True)
     from_email = Column(String(255), nullable=True)

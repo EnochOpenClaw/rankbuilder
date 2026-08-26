@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Optional
 import os
 from backend.assignment import _contains_keywords, CAPE_TOWN_KEYWORDS
+from backend.database import SessionLocal, EmailLog
 
 log = logging.getLogger("crm.notifications")
 
@@ -60,9 +61,46 @@ def _is_cape_town(location) -> bool:
 
 # ── Low-level Brevo send ───────────────────────────────────────────────────────
 
+def _log_email(lead_id: str, to_email: str, subject: str, direction: str = "OUTBOUND",
+               notification_type: str = None, status: str = "SENT", message_id: str = "",
+               from_email: str = "", body: str = ""):
+    """Persist an email record against a lead WITHOUT touching its follow-up state.
+
+    Writes to email_logs only — never to lead_activities/lead_history/last_follow_up_at,
+    so "needs follow-up" status is unaffected.
+    """
+    if not lead_id:
+        return
+    try:
+        session = SessionLocal()
+        try:
+            session.add(EmailLog(
+                lead_id=lead_id,
+                direction=direction,
+                notification_type=notification_type or "manual",
+                status=status,
+                message_id=message_id,
+                subject=subject,
+                body=body,
+                from_email=from_email,
+                to_email=to_email,
+                created_by="system",
+            ))
+            session.commit()
+        finally:
+            session.close()
+    except Exception as e:
+        log.error(f"Failed to persist email log for lead {lead_id}: {e}")
+
+
 def _brevo_send(to_email: str, subject: str, html_body: str, to_name: str = "",
-                sender_email: str = None, sender_name: str = None) -> dict:
-    """Send transactional email via Brevo SMTP API."""
+                sender_email: str = None, sender_name: str = None,
+                lead_id: str = None, notification_type: str = None) -> dict:
+    """Send transactional email via Brevo SMTP API.
+
+    If lead_id is provided, the send (success or failure) is logged against the
+    lead in email_logs as an audit trail — does NOT affect follow-up status.
+    """
     sender_email = sender_email or SENDER_EMAIL
     sender_name = sender_name or SENDER_NAME
     payload = {
@@ -83,13 +121,19 @@ def _brevo_send(to_email: str, subject: str, html_body: str, to_name: str = "",
             result = json.loads(resp.read().decode("utf-8"))
             msg_id = result.get("messageId", "")
             log.info(f"Brevo sent to {to_email}, messageId={msg_id}")
+            _log_email(lead_id, to_email, subject, notification_type=notification_type,
+                       status="SENT", message_id=msg_id, from_email=sender_email, body=html_body)
             return {"success": True, "message_id": msg_id}
     except urllib.error.HTTPError as e:
         body = e.read().decode()
         log.error(f"Brevo HTTP {e.code} sending to {to_email}: {body[:200]}")
+        _log_email(lead_id, to_email, subject, notification_type=notification_type,
+                   status="FAILED", message_id="", from_email=sender_email, body=body[:500])
         return {"success": False, "error": f"HTTP {e.code}: {body[:200]}"}
     except Exception as e:
         log.error(f"Brevo error sending to {to_email}: {e}")
+        _log_email(lead_id, to_email, subject, notification_type=notification_type,
+                   status="FAILED", message_id="", from_email=sender_email, body=str(e)[:500])
         return {"success": False, "error": str(e)}
 
 
@@ -248,7 +292,8 @@ def notify_new_lead(lead: dict, db=None) -> None:
 
     for email, name in recipients:
         _brevo_send(email, subject, html_body, to_name=name,
-                    sender_email=sender_email, sender_name=sender_name)
+                    sender_email=sender_email, sender_name=sender_name,
+                    lead_id=lead.get("id"), notification_type="new_lead")
 
 
 def notify_lead_sent(lead: dict, db=None) -> None:
@@ -307,7 +352,8 @@ def notify_lead_sent(lead: dict, db=None) -> None:
 </html>"""
 
     for email, name in recipients:
-        _brevo_send(email, subject, html_body, to_name=name)
+        _brevo_send(email, subject, html_body, to_name=name,
+                    lead_id=lead.get("id"), notification_type="lead_sent")
 
 
 # ── Notification recipients lookup ────────────────────────────────────────────
@@ -421,7 +467,8 @@ def notify_lead_allocated(lead: dict, rep_email: str, rep_name: str,
 </html>"""
 
     _brevo_send(rep_email, subject, html_body, to_name=rep_name,
-                sender_email=sender_email, sender_name=sender_name)
+                sender_email=sender_email, sender_name=sender_name,
+                lead_id=lead.get("id"), notification_type="lead_allocated")
     log.info(f"Allocated notification sent to {rep_email} for lead {company} ({lead.get('id')})")
 
 
@@ -496,5 +543,6 @@ def notify_hot_lead(lead: dict, db=None) -> None:
 
     for email, name in recipients:
         _brevo_send(email, subject, html_body, to_name=name,
-                    sender_email=sender_email, sender_name=sender_name)
+                    sender_email=sender_email, sender_name=sender_name,
+                    lead_id=lead.get("id"), notification_type="hot_lead")
     log.info(f"Hot-lead alert sent for {company} ({lead.get('id')}) score={score}")

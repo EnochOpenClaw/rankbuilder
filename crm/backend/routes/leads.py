@@ -696,6 +696,9 @@ def get_lead_emails(lead_id: str, db: Session = Depends(get_db)):
                 sent_at=r.sent_at,
                 created_at=r.created_at,
                 created_by=r.created_by,
+                notification_type=r.notification_type,
+                status=r.status,
+                message_id=r.message_id,
             )
             for r in rows
         ]
