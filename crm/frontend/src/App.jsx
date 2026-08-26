@@ -2886,6 +2886,7 @@ function ReportsTab({ clientId }) {
   const [funnel, setFunnel] = useState(null)
   const [roi, setRoi] = useState(null)
   const [responseTime, setResponseTime] = useState(null)
+  const [activity, setActivity] = useState(null)
   const [loading, setLoading] = useState(true)
   const [preset, setPreset] = useState('commission')
   const [dateFrom, setDateFrom] = useState(null)
@@ -2928,18 +2929,20 @@ function ReportsTab({ clientId }) {
       if (dateFrom) qs.set('date_from', dateFrom)
       if (dateTo) qs.set('date_to', dateTo)
       const q = qs.toString()
-      const [a, p, f, r, rt] = await Promise.all([
+      const [a, p, f, r, rt, act] = await Promise.all([
         api.agentSalesReport(clientId, dateFrom, dateTo),
         api.pipelineReport(clientId, dateFrom, dateTo),
         api.funnelReport(clientId, dateFrom, dateTo),
         api.sourceRoiReport(clientId, dateFrom, dateTo),
         api.responseTimeReport(clientId, dateFrom, dateTo),
+        api.activityReport(clientId, dateFrom, dateTo),
       ])
       setAgent(a)
       setPipeline(p)
       setFunnel(f)
       setRoi(r)
       setResponseTime(rt)
+      setActivity(act)
     } catch (e) {
       message.error('Failed to load reports: ' + e.message)
     } finally {
@@ -2998,6 +3001,20 @@ function ReportsTab({ clientId }) {
   ]
 
   const ov = responseTime?.overall
+
+  const activityCols = [
+    { title: 'Agent', dataIndex: 'name', render: n => <Text strong>{n}</Text> },
+    { title: 'Activities', dataIndex: 'total', align: 'right', width: 90, render: v => <Text strong>{v}</Text> },
+    { title: 'Leads Worked', dataIndex: 'leads_worked', align: 'right', width: 100 },
+    { title: 'Calls', dataIndex: ['by_type', 'CALL'], align: 'right', width: 70, render: v => v || 0 },
+    { title: 'Emails', dataIndex: ['by_type', 'EMAIL'], align: 'right', width: 70, render: v => v || 0 },
+    { title: 'WhatsApp', dataIndex: ['by_type', 'WHATSAPP'], align: 'right', width: 80, render: v => v || 0 },
+    { title: 'SMS', dataIndex: ['by_type', 'SMS'], align: 'right', width: 60, render: v => v || 0 },
+    { title: 'Notes', dataIndex: ['by_type', 'NOTE'], align: 'right', width: 60, render: v => v || 0 },
+    { title: 'Other', dataIndex: ['by_type', 'OTHER'], align: 'right', width: 60, render: v => v || 0 },
+  ]
+
+  const actOv = activity?.overall
 
   return (
     <div>
@@ -3097,6 +3114,30 @@ function ReportsTab({ clientId }) {
       <Table
         dataSource={responseTime?.agents || []}
         columns={responseCols}
+        rowKey="email"
+        size="small"
+        pagination={false}
+        style={{ marginBottom: 24 }}
+      />
+
+      <Title level={5} style={{ margin: '16px 0 4px' }}>Activity / Follow-up Volume</Title>
+      <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+        Follow-up attempts logged per agent (calls, emails, WhatsApp, etc.) — shows effort, not just results.
+      </Text>
+      <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+        <Col span={8}>
+          <Card size="small"><div style={{ fontSize: 20, fontWeight: 700 }}>{actOv?.total_activities || 0}</div><Text type="secondary" style={{ fontSize: 11 }}>Total Activities</Text></Card>
+        </Col>
+        <Col span={8}>
+          <Card size="small"><div style={{ fontSize: 20, fontWeight: 700, color: '#1677ff' }}>{actOv?.leads_worked || 0}</div><Text type="secondary" style={{ fontSize: 11 }}>Leads Worked</Text></Card>
+        </Col>
+        <Col span={8}>
+          <Card size="small"><div style={{ fontSize: 20, fontWeight: 700, color: '#52c41a' }}>{actOv?.by_type?.CALL || 0}</div><Text type="secondary" style={{ fontSize: 11 }}>Calls Logged</Text></Card>
+        </Col>
+      </Row>
+      <Table
+        dataSource={activity?.agents || []}
+        columns={activityCols}
         rowKey="email"
         size="small"
         pagination={false}

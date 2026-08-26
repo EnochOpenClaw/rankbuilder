@@ -116,6 +116,7 @@ export const api = {
   funnelReport: (clientId, df, dt) => request('GET', `/reports/funnel?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
   sourceRoiReport: (clientId, df, dt) => request('GET', `/reports/source-roi?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
   responseTimeReport: (clientId, df, dt) => request('GET', `/reports/response-time?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
+  activityReport: (clientId, df, dt) => request('GET', `/reports/activity?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
 
   // AI
   draftReply: (leadId) => request('POST', '/ai/draft-reply', { lead_id: leadId }, true),

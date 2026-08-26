@@ -318,3 +318,86 @@ def response_time_report(
         },
         "generated_at": datetime.utcnow().isoformat(),
     }
+
+
+@router.get("/activity")
+def activity_report(
+    client_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Activity / follow-up volume report.
+
+    Per agent (by who logged the activity): total follow-up attempts, breakdown
+    by type (CALL/EMAIL/WHATSAPP/SMS/NOTE/OTHER) and by outcome, plus distinct
+    leads worked. Shows effort, not just results.
+    """
+    effective_client_id = enforce_client_scope(client_id, current_user)
+    q = db.query(Lead)
+    if effective_client_id:
+        q = q.filter(Lead.client_id == effective_client_id)
+    q = _apply_date_range(q, date_from, date_to)
+    leads = q.all()
+    lead_ids = [l.id for l in leads]
+
+    agents = {}
+    type_totals = {}
+    outcome_totals = {}
+    total_activities = 0
+    total_leads_worked = set()
+
+    if lead_ids:
+        acts = (
+            db.query(LeadActivity)
+            .filter(LeadActivity.lead_id.in_(lead_ids))
+            .all()
+        )
+        for act in acts:
+            who = act.created_by or "unknown"
+            if who not in agents:
+                agents[who] = {
+                    "email": who,
+                    "name": who,
+                    "total": 0,
+                    "leads_worked": set(),
+                    "by_type": {},
+                    "by_outcome": {},
+                }
+            a = agents[who]
+            a["total"] += 1
+            a["leads_worked"].add(act.lead_id)
+            t = act.activity_type or "OTHER"
+            a["by_type"][t] = a["by_type"].get(t, 0) + 1
+            type_totals[t] = type_totals.get(t, 0) + 1
+            o = act.outcome or "NO_OUTCOME"
+            a["by_outcome"][o] = a["by_outcome"].get(o, 0) + 1
+            outcome_totals[o] = outcome_totals.get(o, 0) + 1
+            total_activities += 1
+            total_leads_worked.add(act.lead_id)
+
+    # Resolve display names from users table where possible
+    users = {u.email: u.full_name for u in db.query(User).all() if u.email}
+    result = []
+    for email, a in agents.items():
+        result.append({
+            "email": email,
+            "name": users.get(email) or email,
+            "total": a["total"],
+            "leads_worked": len(a["leads_worked"]),
+            "by_type": a["by_type"],
+            "by_outcome": a["by_outcome"],
+        })
+    result.sort(key=lambda x: x["total"], reverse=True)
+
+    return {
+        "agents": result,
+        "overall": {
+            "total_activities": total_activities,
+            "leads_worked": len(total_leads_worked),
+            "by_type": type_totals,
+            "by_outcome": outcome_totals,
+        },
+        "generated_at": datetime.utcnow().isoformat(),
+    }
