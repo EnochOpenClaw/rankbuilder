@@ -9,7 +9,7 @@ import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined, FolderOpenOutlined, RollbackOutlined, FieldTimeOutlined, MenuOutlined, KeyOutlined, MailOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined, FolderOpenOutlined, RollbackOutlined, FieldTimeOutlined, MenuOutlined, KeyOutlined, MailOutlined, PrinterOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -1356,6 +1356,44 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
     }
   }
 
+  const handlePrintLead = () => {
+    if (!lead) return
+    const w = window.open('', '_blank', 'width=800,height=900')
+    if (!w) { message.warning('Popup blocked — allow popups to print'); return }
+    const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const rows = [
+      ['Company', lead.company_name],
+      ['Contact', lead.contact_name],
+      ['Email', lead.contact_email],
+      ['Phone', lead.contact_phone],
+      ['Website', lead.company_website],
+      ['Source', lead.source?.replace('_', ' ')],
+      ['Location', lead.location],
+      ['Address', lead.address],
+      ['Status', lead.status],
+      ['Lead Type', lead.lead_type],
+      ['Quality Score', lead.quality_score],
+      ['Assigned To', lead.assigned_to_name || lead.assigned_to],
+      ['Created', lead.created_at ? dayjs(lead.created_at).format('YYYY-MM-DD HH:mm') : '—'],
+      ['Sent to Client', lead.sent_to_client_at ? dayjs(lead.sent_to_client_at).format('YYYY-MM-DD HH:mm') : '—'],
+      ['Outcome', lead.conversion_status || '—'],
+      ['Quote Amount', lead.quote_amount ? 'R' + Number(lead.quote_amount).toLocaleString('en-ZA') : '—'],
+      ['UTM Source', lead.utm_source],
+      ['UTM Medium', lead.utm_medium],
+      ['UTM Campaign', lead.utm_campaign],
+    ].filter(([, v]) => v !== null && v !== undefined && v !== '')
+    const rowsHtml = rows.map(([k, v]) => `<tr><td style="padding:6px 12px;font-weight:600;color:#444;white-space:nowrap;vertical-align:top;">${esc(k)}</td><td style="padding:6px 12px;">${esc(v)}</td></tr>`).join('')
+    const msg = lead.message_excerpt ? `<div style="margin:12px 0;"><strong>Message / Context:</strong><div style="white-space:pre-wrap;margin-top:4px;background:#f8f9fa;padding:10px;border-radius:6px;">${esc(lead.message_excerpt)}</div></div>` : ''
+    const notes = lead.notes ? `<div style="margin:12px 0;"><strong>Notes:</strong><div style="white-space:pre-wrap;margin-top:4px;background:#f8f9fa;padding:10px;border-radius:6px;">${esc(lead.notes)}</div></div>` : ''
+    const fu = activities.length
+      ? `<div style="margin:12px 0;"><strong>Follow-ups (${activities.length}):</strong><ul style="margin-top:4px;">${activities.slice().reverse().map(a => `<li style="margin:4px 0;"><b>${esc(a.activity_type)}${a.outcome ? ' — ' + esc(a.outcome).replace(/_/g, ' ') : ''}</b> · ${dayjs(a.occurred_at || a.created_at).format('YYYY-MM-DD HH:mm')}${a.note ? ' — ' + esc(a.note) : ''}</li>`).join('')}</ul></div>`
+      : ''
+    w.document.write(`<!doctype html><html><head><title>Lead — ${esc(lead.company_name || lead.contact_name || 'Lead')}</title></head><body style="font-family:Arial,sans-serif;color:#222;padding:24px;"><h2 style="margin:0 0 4px;">${esc(lead.company_name || lead.contact_name || 'Lead Details')}</h2><div style="color:#888;font-size:12px;margin-bottom:16px;">RankBuilder CRM · ${dayjs().format('YYYY-MM-DD HH:mm')}</div><table style="border-collapse:collapse;width:100%;font-size:13px;">${rowsHtml}</table>${msg}${notes}${fu}</body></html>`)
+    w.document.close()
+    w.focus()
+    w.print()
+  }
+
   const handleAssign = async () => {
     if (!assignEmail) {
       message.warning('Select a sales rep')
@@ -1495,6 +1533,11 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
             {!createMode && lead && (
               <Button size="small" icon={<RobotOutlined />} loading={draftLoading} onClick={handleDraftReply}>
                 AI Draft
+              </Button>
+            )}
+            {!createMode && lead && (
+              <Button size="small" icon={<PrinterOutlined />} onClick={handlePrintLead}>
+                Print
               </Button>
             )}
             <Button onClick={onClose}>Cancel</Button>
