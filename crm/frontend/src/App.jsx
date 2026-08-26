@@ -9,7 +9,7 @@ import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
   SendOutlined, GlobalOutlined, FilterOutlined, PlusOutlined, FlagOutlined, DownloadOutlined,
-  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined, FolderOpenOutlined, RollbackOutlined, FieldTimeOutlined, MenuOutlined, KeyOutlined
+  PaperClipOutlined, UploadOutlined, TagsOutlined, ThunderboltOutlined, AppstoreOutlined, BarChartOutlined, RobotOutlined, CopyOutlined, QuestionCircleOutlined, FolderOpenOutlined, RollbackOutlined, FieldTimeOutlined, MenuOutlined, KeyOutlined, MailOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
@@ -974,6 +974,8 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   const [remindTime, setRemindTime] = useState(null)
   const [remindNote, setRemindNote] = useState('')
   const [savingReminder, setSavingReminder] = useState(false)
+  const [emails, setEmails] = useState([])
+  const [loadingEmails, setLoadingEmails] = useState(false)
   const [form] = Form.useForm()
 
   // Reset + fetch history when a lead is opened
@@ -1012,6 +1014,11 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
       .then(res => setReminders(res.reminders || []))
       .catch(() => setReminders([]))
       .finally(() => setLoadingReminders(false))
+    setLoadingEmails(true)
+    api.listEmails(lead.id)
+      .then(res => setEmails(res.emails || []))
+      .catch(() => setEmails([]))
+      .finally(() => setLoadingEmails(false))
     setRemindDate(null)
     setRemindTime(null)
     setRemindNote('')
@@ -1288,6 +1295,17 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
       ),
     }
   })
+
+  const _notificationTypeLabel = (t) => ({
+    new_lead: 'New Lead',
+    lead_allocated: 'Lead Allocated',
+    lead_sent: 'Pitch Sent',
+    hot_lead: 'Hot Lead',
+    sla_breach: 'SLA Breach',
+    follow_up: 'Follow-up Due',
+    reminder: 'Reminder',
+    manual: 'Manual Email',
+  }[t] || t || 'Notification')
 
   // ── Computed fields ────────────────────────────────────────────────────────
 
@@ -1893,6 +1911,54 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
               ))}
             </div>
           )}
+        </TabPane>
+        <TabPane tab={
+          <span><MailOutlined /> Notifications <Badge count={emails.length} size="small" style={{ marginLeft: 6 }} /></span>
+        } key="notifications">
+          {loadingEmails ? (
+            <Spin style={{ display: 'block', marginTop: 20 }} />
+          ) : emails.length === 0 ? (
+            <Empty description="No notifications/emails recorded for this lead" style={{ marginTop: 20 }} />
+          ) : (
+            <div>
+              {emails.map(e => (
+                <div key={e.id} style={{
+                  border: '1px solid #f0f0f0', borderRadius: 6, padding: '10px 12px', marginBottom: 8
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ fontWeight: 500, fontSize: 13, flex: 1, minWidth: 0 }}>
+                      {e.subject || '(no subject)'}
+                    </div>
+                    <Tag color={e.status === 'SENT' ? 'green' : e.status === 'FAILED' ? 'red' : 'default'}>
+                      {e.status || '—'}
+                    </Tag>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#666', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                    <span>
+                      <b>Type:</b>{' '}
+                      <Tag style={{ marginRight: 0 }}>{_notificationTypeLabel(e.notification_type)}</Tag>
+                    </span>
+                    <span><b>To:</b> {e.to_email || '—'}</span>
+                    <span><b>From:</b> {e.from_email || '—'}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+                    {e.sent_at ? dayjs(e.sent_at).format('MMM D, YYYY HH:mm') : '—'}
+                    {e.direction ? ` · ${e.direction}` : ''}
+                    {e.message_id ? ` · ID: ${e.message_id}` : ''}
+                  </div>
+                  {e.status === 'FAILED' && e.body && (
+                    <div style={{ fontSize: 11, color: '#c0392b', marginTop: 4, background: '#fdf0ef', borderRadius: 4, padding: '6px 8px' }}>
+                      <b>Error:</b> {e.body.slice(0, 300)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <Text type="secondary" style={{ display: 'block', fontSize: 11, marginTop: 8 }}>
+            Automated notification emails sent for this lead (new lead, allocation, hot-lead alerts).
+            Does not affect follow-up status.
+          </Text>
         </TabPane>
       </Tabs>
       )}

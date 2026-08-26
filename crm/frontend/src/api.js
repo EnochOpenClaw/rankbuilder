@@ -158,6 +158,9 @@ export const api = {
   listReminders: (id) => request('GET', `/leads/${id}/reminders`, null, true),
   dismissReminder: (id, rid) => request('POST', `/leads/${id}/reminders/${rid}/dismiss`, null, true),
 
+  // Email / notification log (per-lead audit trail)
+  listEmails: (id) => request('GET', `/leads/${id}/emails`, null, true),
+
   // Users
   createUser: (data) => request('POST', '/auth/users', data, true),
   listUsers: () => request('GET', '/auth/users', null, true),
