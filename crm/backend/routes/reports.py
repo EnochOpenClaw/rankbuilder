@@ -604,3 +604,90 @@ def campaign_performance_report(
 
     result.sort(key=lambda x: x["leads"], reverse=True)
     return {"campaigns": result, "generated_at": datetime.utcnow().isoformat()}
+
+
+@router.get("/win-loss")
+def win_loss_report(
+    client_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Win / loss analysis.
+
+    Won vs lost leads and value, broken down overall, by source, and by agent,
+    with win rate. (Loss reasons come from lead notes where provided.)
+    """
+    effective_client_id = enforce_client_scope(client_id, current_user)
+    q = db.query(Lead)
+    if effective_client_id:
+        q = q.filter(Lead.client_id == effective_client_id)
+    q = _apply_date_range(q, date_from, date_to)
+    leads = q.all()
+
+    won = [l for l in leads if l.conversion_status == "CONVERTED"]
+    lost = [l for l in leads if l.conversion_status == "LOST"]
+    won_value = sum(l.quote_amount or 0 for l in won)
+    lost_value = sum(l.quote_amount or 0 for l in lost)
+    decided = len(won) + len(lost)
+
+    def group_leads(items):
+        out = {}
+        for l in items:
+            key = l.source.value if hasattr(l.source, "value") else str(l.source or "UNKNOWN")
+            out.setdefault(key, {"key": key, "won": 0, "lost": 0, "won_value": 0.0})
+            out[key]["won"] += 1 if l.conversion_status == "CONVERTED" else 0
+            out[key]["lost"] += 1 if l.conversion_status == "LOST" else 0
+            out[key]["won_value"] += (l.quote_amount or 0) if l.conversion_status == "CONVERTED" else 0
+        return out
+
+    def agents_map(items):
+        out = {}
+        for l in items:
+            key = l.assigned_to or "unassigned"
+            name = l.assigned_to_name or ("Unassigned" if key == "unassigned" else key)
+            out.setdefault(key, {"key": key, "name": name, "won": 0, "lost": 0, "won_value": 0})
+            out[key]["won"] += 1 if l.conversion_status == "CONVERTED" else 0
+            out[key]["lost"] += 1 if l.conversion_status == "LOST" else 0
+            out[key]["won_value"] += (l.quote_amount or 0) if l.conversion_status == "CONVERTED" else 0
+        return out
+
+    by_source = [v for v in group_leads(leads).values()]
+    by_source.sort(key=lambda x: x["won"] + x["lost"], reverse=True)
+    for s in by_source:
+        tot = s["won"] + s["lost"]
+        s["win_rate"] = round(s["won"] / tot * 100, 1) if tot else 0.0
+
+    by_agent = [v for v in agents_map(leads).values()]
+    by_agent.sort(key=lambda x: x["won"] + x["lost"], reverse=True)
+    for a in by_agent:
+        tot = a["won"] + a["lost"]
+        a["win_rate"] = round(a["won"] / tot * 100, 1) if tot else 0.0
+
+    # Lost-lead reasons (from notes, where present)
+    loss_reasons = []
+    for l in lost:
+        note = (l.notes or "").strip()
+        loss_reasons.append({
+            "company": l.company_name or l.contact_name or "Untitled",
+            "source": l.source.value if hasattr(l.source, "value") else str(l.source or ""),
+            "agent": l.assigned_to_name or l.assigned_to or "Unassigned",
+            "quote_amount": l.quote_amount or 0,
+            "note": note,
+        })
+
+    return {
+        "summary": {
+            "won": len(won),
+            "lost": len(lost),
+            "decided": decided,
+            "win_rate": round(len(won) / decided * 100, 1) if decided else 0.0,
+            "won_value": round(won_value, 2),
+            "lost_value": round(lost_value, 2),
+        },
+        "by_source": by_source,
+        "by_agent": by_agent,
+        "loss_reasons": loss_reasons,
+        "generated_at": datetime.utcnow().isoformat(),
+    }

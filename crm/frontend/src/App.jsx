@@ -2993,6 +2993,7 @@ function ReportsTab({ clientId }) {
   const [trendBucket, setTrendBucket] = useState('week')
   const [overdue, setOverdue] = useState(null)
   const [campaigns, setCampaigns] = useState(null)
+  const [winLoss, setWinLoss] = useState(null)
   const [loading, setLoading] = useState(true)
   const [preset, setPreset] = useState('commission')
   const [dateFrom, setDateFrom] = useState(null)
@@ -3035,7 +3036,7 @@ function ReportsTab({ clientId }) {
       if (dateFrom) qs.set('date_from', dateFrom)
       if (dateTo) qs.set('date_to', dateTo)
       const q = qs.toString()
-      const [a, p, f, r, rt, act, ft, od, cg] = await Promise.all([
+      const [a, p, f, r, rt, act, ft, od, cg, wl] = await Promise.all([
         api.agentSalesReport(clientId, dateFrom, dateTo),
         api.pipelineReport(clientId, dateFrom, dateTo),
         api.funnelReport(clientId, dateFrom, dateTo),
@@ -3045,6 +3046,7 @@ function ReportsTab({ clientId }) {
         api.funnelTrendReport(clientId, dateFrom, dateTo, trendBucket),
         api.overdueReport(clientId),
         api.campaignPerformanceReport(clientId, dateFrom, dateTo),
+        api.winLossReport(clientId, dateFrom, dateTo),
       ])
       setAgent(a)
       setPipeline(p)
@@ -3055,6 +3057,7 @@ function ReportsTab({ clientId }) {
       setFunnelTrend(ft)
       setOverdue(od)
       setCampaigns(cg)
+      setWinLoss(wl)
     } catch (e) {
       message.error('Failed to load reports: ' + e.message)
     } finally {
@@ -3164,6 +3167,22 @@ function ReportsTab({ clientId }) {
     { title: 'Conv. Rate', dataIndex: 'conversion_rate', align: 'right', width: 90, render: v => <Tag color={v >= 20 ? 'green' : v >= 10 ? 'orange' : 'default'}>{v}%</Tag> },
     { title: 'Cards', dataIndex: 'cards_given', align: 'right', width: 70, render: v => v || '—' },
     { title: 'Stopped', dataIndex: 'people_stopped', align: 'right', width: 80, render: v => v || '—' },
+  ]
+
+  const wlSum = winLoss?.summary
+  const wlSourceCols = [
+    { title: 'Source', dataIndex: 'key', render: s => <Text strong>{s?.replace('_', ' ')}</Text> },
+    { title: 'Won', dataIndex: 'won', align: 'right', width: 70, render: v => <Tag color="green">{v}</Tag> },
+    { title: 'Lost', dataIndex: 'lost', align: 'right', width: 70, render: v => <Tag color="red">{v}</Tag> },
+    { title: 'Win Rate', dataIndex: 'win_rate', align: 'right', width: 90, render: v => <Text strong style={{ color: v >= 50 ? '#52c41a' : '#cf1322' }}>{v}%</Text> },
+    { title: 'Won Value', dataIndex: 'won_value', align: 'right', render: v => <Text strong style={{ color: '#52c41a' }}>{fmt(v)}</Text> },
+  ]
+  const wlAgentCols = [
+    { title: 'Agent', dataIndex: 'name', render: n => <Text strong>{n}</Text> },
+    { title: 'Won', dataIndex: 'won', align: 'right', width: 70, render: v => <Tag color="green">{v}</Tag> },
+    { title: 'Lost', dataIndex: 'lost', align: 'right', width: 70, render: v => <Tag color="red">{v}</Tag> },
+    { title: 'Win Rate', dataIndex: 'win_rate', align: 'right', width: 90, render: v => <Text strong style={{ color: v >= 50 ? '#52c41a' : '#cf1322' }}>{v}%</Text> },
+    { title: 'Won Value', dataIndex: 'won_value', align: 'right', render: v => <Text strong style={{ color: '#52c41a' }}>{fmt(v)}</Text> },
   ]
 
   return (
@@ -3345,6 +3364,32 @@ function ReportsTab({ clientId }) {
         pagination={false}
         style={{ marginBottom: 24 }}
       />
+
+      <Title level={5} style={{ margin: '16px 0 4px' }}>Win / Loss Analysis</Title>
+      <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+        <Col span={6}>
+          <Card size="small"><div style={{ fontSize: 20, fontWeight: 700, color: '#52c41a' }}>{wlSum?.won || 0}</div><Text type="secondary" style={{ fontSize: 11 }}>Won</Text></Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small"><div style={{ fontSize: 20, fontWeight: 700, color: '#cf1322' }}>{wlSum?.lost || 0}</div><Text type="secondary" style={{ fontSize: 11 }}>Lost</Text></Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small"><div style={{ fontSize: 20, fontWeight: 700, color: wlSum?.win_rate >= 50 ? '#52c41a' : '#cf1322' }}>{wlSum?.win_rate || 0}%</div><Text type="secondary" style={{ fontSize: 11 }}>Win Rate</Text></Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small"><div style={{ fontSize: 20, fontWeight: 700, color: '#52c41a' }}>{fmt(wlSum?.won_value)}</div><Text type="secondary" style={{ fontSize: 11 }}>Won Value</Text></Card>
+        </Col>
+      </Row>
+      <Row gutter={16}>
+        <Col xs={24} md={12}>
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>By Source</Text>
+          <Table dataSource={winLoss?.by_source || []} columns={wlSourceCols} rowKey="key" size="small" pagination={false} style={{ marginBottom: 24 }} />
+        </Col>
+        <Col xs={24} md={12}>
+          <Text strong style={{ display: 'block', marginBottom: 8 }}>By Agent</Text>
+          <Table dataSource={winLoss?.by_agent || []} columns={wlAgentCols} rowKey="key" size="small" pagination={false} style={{ marginBottom: 24 }} />
+        </Col>
+      </Row>
 
       <Title level={5} style={{ margin: '8px 0 12px' }}>Pipeline Funnel</Title>
       <Row gutter={16}>

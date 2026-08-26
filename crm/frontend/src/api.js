@@ -121,6 +121,7 @@ export const api = {
   funnelTrendReport: (clientId, df, dt, bucket) => request('GET', `/reports/funnel-trend?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}&bucket=${bucket || 'week'}`, null, true),
   overdueReport: (clientId) => request('GET', `/reports/overdue?client_id=${clientId || ''}`, null, true),
   campaignPerformanceReport: (clientId, df, dt) => request('GET', `/reports/campaigns?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
+  winLossReport: (clientId, df, dt) => request('GET', `/reports/win-loss?client_id=${clientId || ''}&date_from=${df || ''}&date_to=${dt || ''}`, null, true),
 
   // AI
   draftReply: (leadId) => request('POST', '/ai/draft-reply', { lead_id: leadId }, true),
