@@ -522,6 +522,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
       if (filters.status) params.status = filters.status
       if (filters.source) params.source = filters.source
       if (filters.lead_type) params.lead_type = filters.lead_type
+      if (filters.assigned_to) params.assigned_to = filters.assigned_to
       if (filters.archived) params.include_archived = true
       if (search) params.search = search
       const res = await api.listLeads(params)
@@ -581,6 +582,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
       if (filters.status) params.status = filters.status
       if (filters.source) params.source = filters.source
       if (filters.lead_type) params.lead_type = filters.lead_type
+      if (filters.assigned_to) params.assigned_to = filters.assigned_to
       if (search) params.search = search
       const csv = await api.exportLeads(params)
       // Trigger browser download
@@ -732,6 +734,11 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         <Select allowClear placeholder="Source" style={{ width: 150 }}
           onChange={v => { setFilters(f => ({ ...f, source: v })); setPage(1) }}>
           {(sources.length ? sources : SOURCE_OPTIONS.map(c => ({ code: c, name: c }))).map(s => <Select.Option key={s.code} value={s.code}>{s.name}</Select.Option>)}
+        </Select>
+        <Select allowClear placeholder="Assigned to" style={{ width: 160 }}
+          value={filters.assigned_to}
+          onChange={v => { setFilters(f => ({ ...f, assigned_to: v })); setPage(1) }}>
+          {repOptions.map(r => <Select.Option key={r.email} value={r.email}>{r.name}</Select.Option>)}
         </Select>
         <Select allowClear placeholder="Type" style={{ width: 120 }}
           onChange={v => { setFilters(f => ({ ...f, lead_type: v })); setPage(1) }}>

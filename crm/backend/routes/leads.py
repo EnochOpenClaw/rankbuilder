@@ -291,6 +291,7 @@ def list_leads(
     lead_type: Optional[str] = Query(None, description="Filter by lead type: VALID/INVALID/FOLLOW_UP"),
     quality_score: Optional[int] = Query(None, ge=0, le=100, description="Filter by quality score (0-100)"),
     source: Optional[str] = Query(None, description="Filter by source"),
+    assigned_to: Optional[str] = Query(None, description="Filter by assigned rep email"),
     search: Optional[str] = Query(None, description="Search by company name or email"),
     contact_email: Optional[str] = Query(None, description="Lookup by exact email"),
     include_archived: bool = Query(False, description="Include archived leads"),
@@ -329,6 +330,8 @@ def list_leads(
             q = q.filter(Lead.source == source_enum)
         except ValueError:
             pass
+    if assigned_to:
+        q = q.filter(Lead.assigned_to == assigned_to)
     if quality_score:
         q = q.filter(Lead.quality_score == quality_score)
     if search:
