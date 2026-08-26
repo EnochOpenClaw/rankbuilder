@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.database import get_db, Lead, User, UserRole
+from backend.database import get_db, Lead, LeadActivity, User, UserRole
 from backend.routes.auth import get_current_user, enforce_client_scope
 
 router = APIRouter()
@@ -221,3 +221,100 @@ def source_roi_report(
     # Sort by won_value desc
     result.sort(key=lambda x: x["won_value"], reverse=True)
     return {"sources": result}
+
+
+@router.get("/response-time")
+def response_time_report(
+    client_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lead response-time report.
+
+    For each lead, response time = first logged activity (follow-up call/email/etc)
+    minus lead creation time. Aggregated per agent + overall (avg + median, in hours).
+    Leads with no activity are counted as 'no response yet'.
+    """
+    effective_client_id = enforce_client_scope(client_id, current_user)
+    q = db.query(Lead)
+    if effective_client_id:
+        q = q.filter(Lead.client_id == effective_client_id)
+    q = _apply_date_range(q, date_from, date_to)
+    leads = q.all()
+
+    # First-activity time per lead (one query)
+    first_activity = {}
+    if leads:
+        ids = [l.id for l in leads]
+        acts = (
+            db.query(LeadActivity.lead_id, func.min(LeadActivity.occurred_at))
+            .filter(LeadActivity.lead_id.in_(ids))
+            .group_by(LeadActivity.lead_id)
+            .all()
+        )
+        first_activity = {aid: t for aid, t in acts}
+
+    from statistics import median
+    agents = {}
+    all_responses = []
+    no_response = 0
+
+    for lead in leads:
+        agent_email = lead.assigned_to or "unassigned"
+        agent_name = lead.assigned_to_name or ("Unassigned" if agent_email == "unassigned" else agent_email)
+        if agent_email not in agents:
+            agents[agent_email] = {
+                "email": agent_email,
+                "name": agent_name,
+                "leads": 0,
+                "responded": 0,
+                "no_response": 0,
+                "response_times_hours": [],
+            }
+        a = agents[agent_email]
+        a["leads"] += 1
+
+        created = lead.created_at
+        first = first_activity.get(lead.id)
+        if created and first:
+            hours = (first - created).total_seconds() / 3600.0
+            if hours >= 0:
+                a["responded"] += 1
+                a["response_times_hours"].append(hours)
+                all_responses.append(hours)
+                continue
+        a["no_response"] += 1
+        no_response += 1
+
+    result = []
+    for a in agents.values():
+        times = sorted(a["response_times_hours"])
+        result.append({
+            "email": a["email"],
+            "name": a["name"],
+            "leads": a["leads"],
+            "responded": a["responded"],
+            "no_response": a["no_response"],
+            "response_rate": round(a["responded"] / a["leads"] * 100, 1) if a["leads"] else 0.0,
+            "avg_response_hours": round(sum(times) / len(times), 2) if times else None,
+            "median_response_hours": round(median(times), 2) if times else None,
+            "fastest_response_hours": round(times[0], 2) if times else None,
+            "slowest_response_hours": round(times[-1], 2) if times else None,
+        })
+
+    result.sort(key=lambda x: (x["avg_response_hours"] is None, x["avg_response_hours"] or float("inf")))
+    all_times = sorted(all_responses)
+    return {
+        "agents": result,
+        "overall": {
+            "leads": len(leads),
+            "responded": len(all_responses),
+            "no_response": no_response,
+            "response_rate": round(len(all_responses) / len(leads) * 100, 1) if leads else 0.0,
+            "avg_response_hours": round(sum(all_times) / len(all_times), 2) if all_times else None,
+            "median_response_hours": round(median(all_times), 2) if all_times else None,
+        },
+        "generated_at": datetime.utcnow().isoformat(),
+    }

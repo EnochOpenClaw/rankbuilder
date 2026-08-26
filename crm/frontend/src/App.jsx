@@ -2885,6 +2885,7 @@ function ReportsTab({ clientId }) {
   const [pipeline, setPipeline] = useState(null)
   const [funnel, setFunnel] = useState(null)
   const [roi, setRoi] = useState(null)
+  const [responseTime, setResponseTime] = useState(null)
   const [loading, setLoading] = useState(true)
   const [preset, setPreset] = useState('commission')
   const [dateFrom, setDateFrom] = useState(null)
@@ -2927,16 +2928,18 @@ function ReportsTab({ clientId }) {
       if (dateFrom) qs.set('date_from', dateFrom)
       if (dateTo) qs.set('date_to', dateTo)
       const q = qs.toString()
-      const [a, p, f, r] = await Promise.all([
+      const [a, p, f, r, rt] = await Promise.all([
         api.agentSalesReport(clientId, dateFrom, dateTo),
         api.pipelineReport(clientId, dateFrom, dateTo),
         api.funnelReport(clientId, dateFrom, dateTo),
         api.sourceRoiReport(clientId, dateFrom, dateTo),
+        api.responseTimeReport(clientId, dateFrom, dateTo),
       ])
       setAgent(a)
       setPipeline(p)
       setFunnel(f)
       setRoi(r)
+      setResponseTime(rt)
     } catch (e) {
       message.error('Failed to load reports: ' + e.message)
     } finally {
@@ -2971,6 +2974,30 @@ function ReportsTab({ clientId }) {
     { title: 'Won Value', dataIndex: 'won_value', align: 'right', render: v => <Text strong style={{ color: '#52c41a' }}>{fmt(v)}</Text> },
     { title: 'Avg Deal', dataIndex: 'avg_deal_value', align: 'right', render: v => <Text>{fmt(v)}</Text> },
   ]
+
+  // Format a duration in hours into human-readable e.g. '45m', '3h', '2d 4h'
+  const fmtHours = (h) => {
+    if (h === null || h === undefined) return '—'
+    if (h < 1) return Math.round(h * 60) + 'm'
+    if (h < 24) return (Math.round(h * 10) / 10) + 'h'
+    const d = Math.floor(h / 24)
+    const rem = Math.round(h % 24)
+    return d + 'd ' + rem + 'h'
+  }
+
+  const responseCols = [
+    { title: 'Agent', dataIndex: 'name', render: n => <Text strong>{n}</Text> },
+    { title: 'Leads', dataIndex: 'leads', align: 'right', width: 70 },
+    { title: 'Responded', dataIndex: 'responded', align: 'right', width: 90, render: v => <Tag color="green">{v}</Tag> },
+    { title: 'No Response', dataIndex: 'no_response', align: 'right', width: 95, render: v => <Tag color={v > 0 ? 'red' : 'default'}>{v}</Tag> },
+    { title: 'Resp. Rate', dataIndex: 'response_rate', align: 'right', width: 85, render: v => <Text strong style={{ color: v >= 80 ? '#52c41a' : v >= 50 ? '#fa8c16' : '#cf1322' }}>{v}%</Text> },
+    { title: 'Avg Response', dataIndex: 'avg_response_hours', align: 'right', render: v => <Text strong style={{ color: v !== null && v <= 24 ? '#52c41a' : v !== null && v <= 72 ? '#fa8c16' : v !== null ? '#cf1322' : '#999' }}>{fmtHours(v)}</Text> },
+    { title: 'Median', dataIndex: 'median_response_hours', align: 'right', render: v => <Text>{fmtHours(v)}</Text> },
+    { title: 'Fastest', dataIndex: 'fastest_response_hours', align: 'right', render: v => <Text>{fmtHours(v)}</Text> },
+    { title: 'Slowest', dataIndex: 'slowest_response_hours', align: 'right', render: v => <Text>{fmtHours(v)}</Text> },
+  ]
+
+  const ov = responseTime?.overall
 
   return (
     <div>
@@ -3044,6 +3071,33 @@ function ReportsTab({ clientId }) {
         dataSource={roi?.sources || []}
         columns={roiCols}
         rowKey="source"
+        size="small"
+        pagination={false}
+        style={{ marginBottom: 24 }}
+      />
+
+      <Title level={5} style={{ margin: '16px 0 4px' }}>Lead Response Time</Title>
+      <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+        Time from lead creation to first logged contact. Fast response = higher close rate.
+      </Text>
+      <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+        <Col span={6}>
+          <Card size="small"><div style={{ fontSize: 20, fontWeight: 700 }}>{ov?.leads || 0}</div><Text type="secondary" style={{ fontSize: 11 }}>Leads</Text></Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small"><div style={{ fontSize: 20, fontWeight: 700, color: '#52c41a' }}>{fmtHours(ov?.avg_response_hours)}</div><Text type="secondary" style={{ fontSize: 11 }}>Avg Response</Text></Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small"><div style={{ fontSize: 20, fontWeight: 700, color: '#1677ff' }}>{fmtHours(ov?.median_response_hours)}</div><Text type="secondary" style={{ fontSize: 11 }}>Median Response</Text></Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small"><div style={{ fontSize: 20, fontWeight: 700, color: ov?.response_rate >= 80 ? '#52c41a' : '#cf1322' }}>{ov?.response_rate || 0}%</div><Text type="secondary" style={{ fontSize: 11 }}>Response Rate ({ov?.no_response || 0} no response)</Text></Card>
+        </Col>
+      </Row>
+      <Table
+        dataSource={responseTime?.agents || []}
+        columns={responseCols}
+        rowKey="email"
         size="small"
         pagination={false}
         style={{ marginBottom: 24 }}
