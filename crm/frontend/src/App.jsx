@@ -872,6 +872,54 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         onClose={() => { setDrawerOpen(false); setSelectedRow(null); setCreateMode(false) }}
         onUpdate={loadLeads}
       />
+
+      {/* Partner Hand-off Modal */}
+      <Modal
+        title="🤝 Hand Lead to Partner"
+        open={!!handoffLead}
+        onCancel={() => setHandoffLead(null)}
+        footer={
+          <Space>
+            <Button onClick={() => setHandoffLead(null)}>Cancel</Button>
+            <Button type="primary" loading={handoffSaving} onClick={doHandoff} icon={<SendOutlined />}>
+              Hand to Partner
+            </Button>
+          </Space>
+        }
+      >
+        {handoffLead && (
+          <div>
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={`Handing off: ${handoffLead.company_name || handoffLead.contact_name || handoffLead.contact_email || 'Untitled lead'}`}
+              description="This creates a copy of the lead under the partner client. The original stays in your records for tracking."
+            />
+            <div style={{ marginBottom: 12 }}>
+              <Text strong>Partner Client</Text>
+              <Select
+                style={{ width: '100%', marginTop: 4 }}
+                placeholder="Select partner client"
+                value={handoffClientId}
+                onChange={onHandoffClientChange}
+                options={(handoffClients || []).map(c => ({ value: c.id, label: c.company_name }))}
+              />
+            </div>
+            <div>
+              <Text strong>Assign To</Text>
+              <Select
+                style={{ width: '100%', marginTop: 4 }}
+                placeholder="Select user"
+                value={handoffTargetEmail}
+                onChange={setHandoffTargetEmail}
+                disabled={!handoffClientId}
+                options={(handoffTargets || []).map(u => ({ value: u.email, label: `${u.full_name || u.email} (${u.email})` }))}
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
@@ -2480,54 +2528,6 @@ function CampaignsTab({ clientId, refreshKey, onViewCampaignLeads, canWrite = tr
               },
             ]}
           />
-        )}
-      </Modal>
-
-      {/* Partner Hand-off Modal */}
-      <Modal
-        title="🤝 Hand Lead to Partner"
-        open={!!handoffLead}
-        onCancel={() => setHandoffLead(null)}
-        footer={
-          <Space>
-            <Button onClick={() => setHandoffLead(null)}>Cancel</Button>
-            <Button type="primary" loading={handoffSaving} onClick={doHandoff} icon={<SendOutlined />}>
-              Hand to Partner
-            </Button>
-          </Space>
-        }
-      >
-        {handoffLead && (
-          <div>
-            <Alert
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-              message={`Handing off: ${handoffLead.company_name || handoffLead.contact_name || handoffLead.contact_email || 'Untitled lead'}`}
-              description="This creates a copy of the lead under the partner client. The original stays in your records for tracking."
-            />
-            <div style={{ marginBottom: 12 }}>
-              <Text strong>Partner Client</Text>
-              <Select
-                style={{ width: '100%', marginTop: 4 }}
-                placeholder="Select partner client"
-                value={handoffClientId}
-                onChange={onHandoffClientChange}
-                options={(handoffClients || []).map(c => ({ value: c.id, label: c.company_name }))}
-              />
-            </div>
-            <div>
-              <Text strong>Assign To</Text>
-              <Select
-                style={{ width: '100%', marginTop: 4 }}
-                placeholder="Select user"
-                value={handoffTargetEmail}
-                onChange={setHandoffTargetEmail}
-                disabled={!handoffClientId}
-                options={(handoffTargets || []).map(u => ({ value: u.email, label: `${u.full_name || u.email} (${u.email})` }))}
-              />
-            </div>
-          </div>
         )}
       </Modal>
     </div>
