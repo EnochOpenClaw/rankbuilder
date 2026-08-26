@@ -67,31 +67,9 @@ BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "sales@fortressblinds.co.za")
 SENDER_NAME = "Fortress Blinds Sales"
 
-
-def _brevo_send(to_email, subject, html_body, to_name=""):
-    payload = {
-        "subject": subject,
-        "to": [{"email": to_email, "name": to_name}] if to_name else [{"email": to_email}],
-        "htmlContent": html_body,
-        "sender": {"name": SENDER_NAME, "email": SENDER_EMAIL},
-    }
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        BREVO_ENDPOINT, data=data,
-        headers={"Content-Type": "application/json", "api-key": BREVO_API_KEY},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            log.info(f"Sent to {to_email}: {result.get('messageId','')}")
-            return True
-    except urllib.error.HTTPError as e:
-        log.error(f"Brevo HTTP {e.code} to {to_email}: {e.read().decode()[:200]}")
-        return False
-    except Exception as e:
-        log.error(f"Brevo error to {to_email}: {e}")
-        return False
+# Use the shared Brevo sender from the CRM backend so every notification send is
+# also logged per-lead in email_logs (audit trail, does not affect follow-up state).
+from backend.notifications import _brevo_send
 
 
 def _lead_row(lead):
@@ -209,21 +187,27 @@ def main():
             if stage < 3 and age_hours >= STAGE_3_HOURS:
                 html, subj = _stage3_email(lead)
                 for m_email, m_name in MANAGER_EMAILS:
-                    _brevo_send(m_email, subj, html, to_name=m_name)
+                    _brevo_send(m_email, subj, html, to_name=m_name,
+                                sender_email=SENDER_EMAIL, sender_name=SENDER_NAME,
+                                lead_id=lead.id, notification_type="follow_up")
                 lead.reminder_stage = 3
                 sent["stage3"] += 1
                 db.add(lead)
             # Stage 2: firmer reminder to rep
             elif stage < 2 and age_hours >= STAGE_2_HOURS:
                 html, subj = _stage2_email(lead)
-                _brevo_send(lead.assigned_to, subj, html, to_name=lead.assigned_to_name or "")
+                _brevo_send(lead.assigned_to, subj, html, to_name=lead.assigned_to_name or "",
+                            sender_email=SENDER_EMAIL, sender_name=SENDER_NAME,
+                            lead_id=lead.id, notification_type="follow_up")
                 lead.reminder_stage = 2
                 sent["stage2"] += 1
                 db.add(lead)
             # Stage 1: first reminder to rep
             elif stage < 1 and age_hours >= STAGE_1_HOURS:
                 html, subj = _stage1_email(lead)
-                _brevo_send(lead.assigned_to, subj, html, to_name=lead.assigned_to_name or "")
+                _brevo_send(lead.assigned_to, subj, html, to_name=lead.assigned_to_name or "",
+                            sender_email=SENDER_EMAIL, sender_name=SENDER_NAME,
+                            lead_id=lead.id, notification_type="follow_up")
                 lead.reminder_stage = 1
                 sent["stage1"] += 1
                 db.add(lead)

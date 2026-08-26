@@ -94,7 +94,8 @@ def notify(db, lead, rule, detail):
     for email, name in recipients:
         try:
             _brevo_send(email, subject, body, to_name=name,
-                        sender_email=SENDER, sender_name="RankBuilder CRM")
+                        sender_email=SENDER, sender_name="RankBuilder CRM",
+                        lead_id=lead.id, notification_type="sla_breach")
             sent += 1
         except Exception as e:
             log.error("SLA alert fail to %s: %s", email, e)

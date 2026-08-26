@@ -52,33 +52,9 @@ BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "ai@fortressblinds.co.za")
 SENDER_NAME = "RankBuilder CRM"
 
-
-def _brevo_send(to_email, subject, html_body, to_name=""):
-    if not BREVO_API_KEY:
-        log.warning("BREVO_API_KEY not set — cannot send reminder email")
-        return False
-    payload = {
-        "sender": {"email": SENDER_EMAIL, "name": SENDER_NAME},
-        "to": [{"email": to_email, "name": to_name or to_email}],
-        "subject": subject,
-        "htmlContent": html_body,
-    }
-    req = urllib.request.Request(
-        BREVO_ENDPOINT,
-        data=json.dumps(payload, default=str).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "api-key": BREVO_API_KEY,
-            "Accept": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return resp.status in (200, 201, 204)
-    except urllib.error.HTTPError as e:
-        log.error("Brevo send failed: %s %s", e.code, e.read().decode()[:200])
-        return False
+# Use the shared Brevo sender from the CRM backend so every reminder send is also
+# logged per-lead in email_logs (audit trail, does not affect follow-up state).
+from backend.notifications import _brevo_send
 
 
 def _template(lead, note, remind_at):
@@ -143,7 +119,9 @@ def main():
 
             subject = f"⏰ [RankBuilder] Reminder: {lead.company_name or 'Lead'}"
             html = _template(lead, r.note, r.remind_at.strftime('%Y-%m-%d %H:%M UTC'))
-            ok = _brevo_send(to_email, subject, html, to_name=to_name)
+            ok = _brevo_send(to_email, subject, html, to_name=to_name,
+                             sender_email=SENDER_EMAIL, sender_name=SENDER_NAME,
+                             lead_id=lead.id, notification_type="reminder")
             if ok:
                 r.status = "SENT"
                 r.sent_at = datetime.utcnow()
