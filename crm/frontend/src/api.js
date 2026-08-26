@@ -85,7 +85,21 @@ export const api = {
   },
   exportLeads: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
-    return request('GET', `/leads/export${qs ? '?' + qs : ''}`, null, true);
+    // CSV response — must read as text, not JSON (the generic request() does res.json())
+    const token = getToken();
+    return fetch(`${BASE}/leads/export${qs ? '?' + qs : ''}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+    }).then(res => {
+      if (res.status === 401) {
+        localStorage.removeItem('crm_token');
+        localStorage.removeItem('crm_user');
+        window.dispatchEvent(new Event('auth:logout'));
+        throw new Error('Unauthorized');
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.text();
+    });
   },
   getLead: (id) => request('GET', `/leads/${id}`, null, true),
   getLeadHistory: (id) => request('GET', `/leads/${id}/history`, null, true),
