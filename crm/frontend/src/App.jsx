@@ -967,6 +967,8 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [activeTab, setActiveTab] = useState('details')
   const [followUpNote, setFollowUpNote] = useState('')
+  const [followUpType, setFollowUpType] = useState('CALL')
+  const [followUpOutcome, setFollowUpOutcome] = useState(null)
   const [assignEmail, setAssignEmail] = useState('')
   const [assignName, setAssignName] = useState('')
   const [savingFollowUp, setSavingFollowUp] = useState(false)
@@ -983,6 +985,8 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
   const [savingReminder, setSavingReminder] = useState(false)
   const [emails, setEmails] = useState([])
   const [loadingEmails, setLoadingEmails] = useState(false)
+  const [activities, setActivities] = useState([])
+  const [loadingActivities, setLoadingActivities] = useState(false)
   const [form] = Form.useForm()
 
   // Reset + fetch history when a lead is opened
@@ -1026,6 +1030,11 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
       .then(res => setEmails(res.emails || []))
       .catch(() => setEmails([]))
       .finally(() => setLoadingEmails(false))
+    setLoadingActivities(true)
+    api.listActivities(lead.id)
+      .then(res => setActivities(res.activities || []))
+      .catch(() => setActivities([]))
+      .finally(() => setLoadingActivities(false))
     setRemindDate(null)
     setRemindTime(null)
     setRemindNote('')
@@ -1220,12 +1229,18 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
     }
     setSavingFollowUp(true)
     try {
-      await api.logFollowUp(lead.id, { note: followUpNote })
+      await api.logFollowUp(lead.id, {
+        note: followUpNote,
+        activity_type: followUpType || 'CALL',
+        outcome: followUpOutcome || undefined,
+      })
       message.success('Follow-up logged')
       setFollowUpNote('')
+      setFollowUpOutcome(null)
       // Refresh history + lead
       const h = await api.getLeadHistory(lead.id)
       setHistory(h.history || [])
+      api.listActivities(lead.id).then(res => setActivities(res.activities || [])).catch(() => {})
       onUpdate()
     } catch (e) {
       message.error('Failed to log follow-up: ' + e.message)
@@ -1313,6 +1328,32 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
     reminder: 'Reminder',
     manual: 'Manual Email',
   }[t] || t || 'Notification')
+
+  const _activityTypeLabel = (t) => ({
+    CALL: '📞 Call',
+    EMAIL: '✉️ Email',
+    WHATSAPP: '💬 WhatsApp',
+    SMS: '📱 SMS',
+    NOTE: '📝 Note',
+    OTHER: 'Other',
+  }[t] || t || 'Activity')
+
+  const _outcomeLabel = (o) => ({
+    NO_ANSWER: 'No answer',
+    LEFT_VOICEMAIL: 'Left voicemail',
+    SPOKE: 'Spoke to client',
+    SENT: 'Sent (quote/docs)',
+    RECEIVED: 'Received reply',
+    OTHER: 'Other',
+  }[o] || o || '')
+
+  const _outcomeColor = (o) => ({
+    NO_ANSWER: 'red',
+    LEFT_VOICEMAIL: 'orange',
+    SPOKE: 'green',
+    SENT: 'blue',
+    RECEIVED: 'green',
+  }[o] || 'default')
 
   // ── Computed fields ────────────────────────────────────────────────────────
 
@@ -1719,6 +1760,36 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
                     Assign
                   </Button>
                 </Space.Compact>
+                <Space.Compact style={{ width: '100%', marginTop: 8 }}>
+                  <Select
+                    value={followUpType}
+                    onChange={setFollowUpType}
+                    style={{ width: '45%' }}
+                    options={[
+                      { value: 'CALL', label: '📞 Call' },
+                      { value: 'EMAIL', label: '✉️ Email' },
+                      { value: 'WHATSAPP', label: '💬 WhatsApp' },
+                      { value: 'SMS', label: '📱 SMS' },
+                      { value: 'NOTE', label: '📝 Note' },
+                      { value: 'OTHER', label: 'Other' },
+                    ]}
+                  />
+                  <Select
+                    value={followUpOutcome}
+                    onChange={setFollowUpOutcome}
+                    allowClear
+                    placeholder="Outcome (optional)"
+                    style={{ width: '55%' }}
+                    options={[
+                      { value: 'NO_ANSWER', label: '❌ No answer' },
+                      { value: 'LEFT_VOICEMAIL', label: '📲 Left voicemail' },
+                      { value: 'SPOKE', label: '✅ Spoke to client' },
+                      { value: 'SENT', label: '📤 Sent (quote/docs)' },
+                      { value: 'RECEIVED', label: '📥 Received reply' },
+                      { value: 'OTHER', label: 'Other' },
+                    ]}
+                  />
+                </Space.Compact>
                 <Input.TextArea
                   value={followUpNote}
                   onChange={e => setFollowUpNote(e.target.value)}
@@ -1839,6 +1910,37 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
             <Timeline
               items={_historyItems}
               style={{ marginTop: 16 }}
+            />
+          )}
+        </TabPane>
+
+        <TabPane tab={
+          <span><CheckCircleOutlined /> Follow-ups <Badge count={activities.length} size="small" style={{ marginLeft: 6 }} /></span>
+        } key="followups">
+          {loadingActivities ? (
+            <Spin style={{ display: 'block', marginTop: 40 }} />
+          ) : activities.length === 0 ? (
+            <Empty description="No follow-ups logged yet" style={{ marginTop: 40 }} />
+          ) : (
+            <Timeline
+              style={{ marginTop: 16 }}
+              items={activities.slice().reverse().map(a => ({
+                key: a.id,
+                color: a.outcome === 'SPOKE' || a.outcome === 'SENT' || a.outcome === 'RECEIVED' ? 'green' : '#1677ff',
+                children: (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <Text strong style={{ fontSize: 13 }}>{_activityTypeLabel(a.activity_type)}</Text>
+                      {a.outcome && <Tag color={_outcomeColor(a.outcome)}>{_outcomeLabel(a.outcome)}</Tag>}
+                    </div>
+                    {a.note && <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>{a.note}</div>}
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      {dayjs(a.occurred_at || a.created_at).format('MMM D, YYYY HH:mm')}
+                      {a.created_by ? ` · ${a.created_by}` : ''}
+                    </Text>
+                  </div>
+                ),
+              }))}
             />
           )}
         </TabPane>

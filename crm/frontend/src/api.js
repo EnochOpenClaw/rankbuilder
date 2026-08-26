@@ -95,6 +95,7 @@ export const api = {
   deleteLead: (id) => request('DELETE', `/leads/${id}`, null, true),
   assignLead: (id, data) => request('POST', `/leads/${id}/assign`, data, true),
   logFollowUp: (id, data) => request('POST', `/leads/${id}/follow-up`, data, true),
+  listActivities: (id) => request('GET', `/leads/${id}/activities`, null, true),
 
   // Sources (admin-managed)
   listSources: () => request('GET', '/sources', null, true),
