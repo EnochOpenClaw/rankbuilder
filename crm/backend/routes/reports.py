@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.database import get_db, Lead, LeadActivity, User, UserRole
+from backend.database import get_db, Lead, LeadActivity, Campaign, CampaignDailyLog, LeadSource, CampaignStatus, User, UserRole
 from backend.routes.auth import get_current_user, enforce_client_scope
 
 router = APIRouter()
@@ -546,3 +546,61 @@ def overdue_leads_report(
         "thresholds": {"new_hours": NH, "qualified_hours": QH, "sent_hours": SH, "stale_days": SD},
         "generated_at": now.isoformat(),
     }
+
+
+@router.get("/campaigns")
+def campaign_performance_report(
+    client_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Campaign performance report.
+
+    For every campaign: leads generated, qualified, converted, conversion rate,
+    and (for roadside) cards handed out + people stopped. Shows ROI per campaign.
+    """
+    effective_client_id = enforce_client_scope(client_id, current_user)
+    q = db.query(Campaign)
+    if effective_client_id:
+        q = q.filter(Campaign.client_id == effective_client_id)
+    campaigns = q.all()
+
+    result = []
+    for camp in campaigns:
+        cq = db.query(Lead).filter(Lead.campaign_id == camp.id)
+        if date_from:
+            cq = cq.filter(Lead.created_at >= date_from)
+        if date_to:
+            cq = cq.filter(Lead.created_at <= (date_to + " 23:59:59" if isinstance(date_to, str) else date_to))
+        leads = cq.all()
+        total = len(leads)
+        qualified = sum(1 for l in leads if (l.status.value if hasattr(l.status, "value") else str(l.status)) in ("QUALIFIED", "SENT", "CONTACTED", "CONVERTED"))
+        converted = sum(1 for l in leads if l.conversion_status == "CONVERTED")
+
+        logs = (
+            db.query(CampaignDailyLog)
+            .filter(CampaignDailyLog.campaign_id == camp.id)
+            .all()
+        )
+        total_cards = sum(l.cards_given or 0 for l in logs)
+        total_people = sum(l.people_stopped or 0 for l in logs)
+
+        result.append({
+            "id": camp.id,
+            "name": camp.name,
+            "channel": camp.channel.value if isinstance(camp.channel, LeadSource) else str(camp.channel or ""),
+            "location": camp.location,
+            "status": camp.status.value if isinstance(camp.status, CampaignStatus) else str(camp.status or ""),
+            "leads": total,
+            "qualified": qualified,
+            "converted": converted,
+            "conversion_rate": round(converted / total * 100, 1) if total else 0.0,
+            "cards_given": total_cards,
+            "people_stopped": total_people,
+            "lead_per_100_cards": round(total / total_cards * 100, 2) if total_cards else None,
+        })
+
+    result.sort(key=lambda x: x["leads"], reverse=True)
+    return {"campaigns": result, "generated_at": datetime.utcnow().isoformat()}

@@ -2992,6 +2992,7 @@ function ReportsTab({ clientId }) {
   const [funnelTrend, setFunnelTrend] = useState(null)
   const [trendBucket, setTrendBucket] = useState('week')
   const [overdue, setOverdue] = useState(null)
+  const [campaigns, setCampaigns] = useState(null)
   const [loading, setLoading] = useState(true)
   const [preset, setPreset] = useState('commission')
   const [dateFrom, setDateFrom] = useState(null)
@@ -3034,7 +3035,7 @@ function ReportsTab({ clientId }) {
       if (dateFrom) qs.set('date_from', dateFrom)
       if (dateTo) qs.set('date_to', dateTo)
       const q = qs.toString()
-      const [a, p, f, r, rt, act, ft, od] = await Promise.all([
+      const [a, p, f, r, rt, act, ft, od, cg] = await Promise.all([
         api.agentSalesReport(clientId, dateFrom, dateTo),
         api.pipelineReport(clientId, dateFrom, dateTo),
         api.funnelReport(clientId, dateFrom, dateTo),
@@ -3043,6 +3044,7 @@ function ReportsTab({ clientId }) {
         api.activityReport(clientId, dateFrom, dateTo),
         api.funnelTrendReport(clientId, dateFrom, dateTo, trendBucket),
         api.overdueReport(clientId),
+        api.campaignPerformanceReport(clientId, dateFrom, dateTo),
       ])
       setAgent(a)
       setPipeline(p)
@@ -3052,6 +3054,7 @@ function ReportsTab({ clientId }) {
       setActivity(act)
       setFunnelTrend(ft)
       setOverdue(od)
+      setCampaigns(cg)
     } catch (e) {
       message.error('Failed to load reports: ' + e.message)
     } finally {
@@ -3149,6 +3152,18 @@ function ReportsTab({ clientId }) {
     { title: 'Agent', dataIndex: 'assigned_to' },
     { title: 'Status', dataIndex: 'status', render: s => <Tag>{s}</Tag> },
     { title: 'Issue', dataIndex: 'issues', render: iss => (iss || []).map(([reason, h]) => <Tag key={reason} color="red" style={{ marginBottom: 2 }}>{reason} · {fmtDur(h)}</Tag>) },
+  ]
+
+  const campaignCols = [
+    { title: 'Campaign', dataIndex: 'name', render: n => <Text strong>{n}</Text> },
+    { title: 'Channel', dataIndex: 'channel', render: c => <Tag>{c?.replace('_', ' ') || '—'}</Tag> },
+    { title: 'Location', dataIndex: 'location', render: l => l || '—' },
+    { title: 'Leads', dataIndex: 'leads', align: 'right', width: 70 },
+    { title: 'Qualified', dataIndex: 'qualified', align: 'right', width: 85 },
+    { title: 'Converted', dataIndex: 'converted', align: 'right', width: 85, render: v => <Tag color="green">{v}</Tag> },
+    { title: 'Conv. Rate', dataIndex: 'conversion_rate', align: 'right', width: 90, render: v => <Tag color={v >= 20 ? 'green' : v >= 10 ? 'orange' : 'default'}>{v}%</Tag> },
+    { title: 'Cards', dataIndex: 'cards_given', align: 'right', width: 70, render: v => v || '—' },
+    { title: 'Stopped', dataIndex: 'people_stopped', align: 'right', width: 80, render: v => v || '—' },
   ]
 
   return (
@@ -3317,6 +3332,19 @@ function ReportsTab({ clientId }) {
       ) : (
         <Empty description="No overdue or stale leads 🎉" style={{ margin: 20 }} />
       )}
+
+      <Title level={5} style={{ margin: '16px 0 4px' }}>Campaign Performance</Title>
+      <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+        Leads, conversion and roadside engagement (cards / people stopped) per campaign.
+      </Text>
+      <Table
+        dataSource={campaigns?.campaigns || []}
+        columns={campaignCols}
+        rowKey="id"
+        size="small"
+        pagination={false}
+        style={{ marginBottom: 24 }}
+      />
 
       <Title level={5} style={{ margin: '8px 0 12px' }}>Pipeline Funnel</Title>
       <Row gutter={16}>
