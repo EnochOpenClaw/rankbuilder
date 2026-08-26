@@ -34,8 +34,11 @@ SENDER_NAME = "Craig Pauls"
 SALES_SENDER_EMAIL = os.environ.get("SALES_SENDER_EMAIL", "sales@fortressblinds.co.za")
 SALES_SENDER_NAME = "Fortress Blinds Sales"
 
-# Lead sources that are SALES leads (need fast response + Tiaan)
-SALES_SOURCES = {"WEBSITE", "CALL_IN", "DIRECT_MAIL", "FACEBOOK", "MANUAL"}
+# Lead sources that are SALES leads (need fast response + sales team)
+# ROADSIDE (gazebo form fills), PPC and WORD_OF_MOUTH are also sales prospects
+# → notify the HOS sales team, not just Craig.
+SALES_SOURCES = {"WEBSITE", "CALL_IN", "DIRECT_MAIL", "FACEBOOK", "MANUAL",
+                 "ROADSIDE", "PPC", "WORD_OF_MOUTH"}
 # Lead sources that are BACKLINK/BLOG/OUTREACH (need Craig follow-up)
 OUTREACH_SOURCES = {"HARO", "CONNECTIVELY", "GUEST_OUTREACH", "WEB_SEARCH"}
 
@@ -146,6 +149,13 @@ def _lead_source_badge(source: str) -> str:
         "GUEST_OUTREACH": "#2e7d32",
         "WEB_SEARCH": "#c85a00",
         "MANUAL": "#666666",
+        "WEBSITE": "#1677ff",
+        "FACEBOOK": "#1877f2",
+        "CALL_IN": "#52c41a",
+        "DIRECT_MAIL": "#fa8c16",
+        "ROADSIDE": "#eb2f96",
+        "PPC": "#722ed1",
+        "WORD_OF_MOUTH": "#13c2c2",
     }
     color = badges.get(source.upper(), "#333333")
     return f"<span style='background:{color};color:white;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:bold;'>{source}</span>"

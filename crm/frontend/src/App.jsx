@@ -472,7 +472,7 @@ function Dashboard({ clientId }) {
 // ── Leads ──────────────────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS = ['NEW','REVIEWED','QUALIFIED','SENT','CONTACTED','CONVERTED','LOST']
-const SOURCE_OPTIONS  = ['HARO','CONNECTIVELY','GUEST_OUTREACH','WEBSITE','FACEBOOK','DIRECT_MAIL','CALL_IN','WEB_SEARCH','MANUAL','ROADSIDE']
+const SOURCE_OPTIONS  = ['HARO','CONNECTIVELY','GUEST_OUTREACH','WEBSITE','FACEBOOK','DIRECT_MAIL','CALL_IN','WEB_SEARCH','MANUAL','ROADSIDE','PPC','WORD_OF_MOUTH']
 const TYPE_OPTIONS    = ['VALID','INVALID','FOLLOW_UP']
 
 // Format a phone number as ### ### #### (digits only, max 10)
