@@ -23,6 +23,8 @@ def run_cron():
     # Write crontab
     with open("/etc/crontab", "w") as f:
         f.write("""\
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # m h dom mon dow user  command
 */30 7-22 * * *   root  /app/run_mode.sh haro >> /app/data/logs/haro.log 2>&1
 */30 7-22 * * *   root  /app/run_mode.sh connectively >> /app/data/logs/connectively.log 2>&1
