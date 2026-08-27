@@ -103,6 +103,7 @@ export const api = {
   },
   getLead: (id) => request('GET', `/leads/${id}`, null, true),
   getLeadHistory: (id) => request('GET', `/leads/${id}/history`, null, true),
+  markRead: (id) => request('POST', `/leads/${id}/read`, null, true),
   updateLead: (id, data) => request('PATCH', `/leads/${id}`, data, true),
   archiveLead: (id) => request('POST', `/leads/${id}/archive`, null, true),
   restoreLead: (id) => request('POST', `/leads/${id}/restore`, null, true),

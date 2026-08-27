@@ -21,3 +21,18 @@ body {
     line-height: 52px !important;
   }
 }
+
+/* ── New-lead highlighting ────────────────────────────────────────────────
+   Rows for leads that are assigned but not yet opened by the viewer get a
+   soft amber tint + left accent bar + bolder text so agents/managers can
+   instantly spot unread leads. The highlight clears once the lead is opened. */
+.lead-row-unread > td.ant-table-cell {
+  background-color: #fff8e1 !important;   /* soft amber */
+  box-shadow: inset 3px 0 0 #faad14;      /* left accent bar */
+}
+.lead-row-unread:hover > td.ant-table-cell {
+  background-color: #fff3cd !important;   /* slightly stronger on hover */
+}
+.lead-row-unread .ant-table-cell {
+  font-weight: 600;                        /* bolder text for unread rows */
+}

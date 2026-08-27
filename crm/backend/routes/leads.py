@@ -151,6 +151,8 @@ def _lead_to_response(lead: Lead) -> LeadResponse:
         assigned_to=lead.assigned_to,
         assigned_to_name=lead.assigned_to_name,
         assigned_at=lead.assigned_at,
+        read_at=lead.read_at,
+        read_by=lead.read_by,
         last_follow_up_at=lead.last_follow_up_at,
         follow_up_count=lead.follow_up_count,
         created_at=lead.created_at,
@@ -466,6 +468,34 @@ def get_lead(
     return _lead_to_response(lead)
 
 
+@router.post("/{lead_id}/read", response_model=LeadResponse)
+def mark_lead_read(
+    lead_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark a lead as read/opened by the current user.
+
+    Called when a sales rep (or manager) opens a lead in the UI. Records who
+    opened it and when, so the leads list can stop highlighting it for them.
+    The read state is per-lead: we store the email + timestamp of the first
+    opener. If the lead is later (re)assigned, read state is cleared so the
+    new assignee sees it highlighted until they open it.
+    """
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    enforce_client_scope(lead.client_id, current_user)
+    enforce_agent_assignment(lead, current_user)
+
+    if lead.read_by != current_user.email:
+        lead.read_at = datetime.utcnow()
+        lead.read_by = current_user.email
+        db.commit()
+        db.refresh(lead)
+    return _lead_to_response(lead)
+
+
 @router.get("/{lead_id}/history", response_model=LeadHistoryResponse)
 def get_lead_history(
     lead_id: str,
@@ -519,6 +549,9 @@ def assign_lead_manual(
     lead.assigned_to = payload.assigned_to
     lead.assigned_to_name = payload.assigned_to_name or payload.assigned_to
     lead.assigned_at = datetime.utcnow()
+    # (Re)assignment → clear read state so the newly-assigned rep sees it highlighted
+    lead.read_at = None
+    lead.read_by = None
 
     hist = LeadHistory(
         lead_id=lead.id,

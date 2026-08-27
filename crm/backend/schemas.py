@@ -202,6 +202,9 @@ class LeadResponse(BaseModel):
     partner_handoff_from: Optional[str] = None
     partner_handoff_at: Optional[datetime] = None
     partner_handoff_by: Optional[str] = None
+    # ── Read / viewed tracking (new-lead highlighting) ────────────────────
+    read_at: Optional[datetime] = None
+    read_by: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

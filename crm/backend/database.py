@@ -237,6 +237,13 @@ class Lead(Base):
     reminder_stage = Column(Integer, default=0)  # follow-up escalation: 0=none,1=24h,2=48h,3=72h-manager
     last_sla_alert_at = Column(DateTime, nullable=True)  # last SLA breach alert time (dedup)
 
+    # ── Read / viewed tracking (new-lead highlighting) ──────────────────────
+    # A lead is "unread" for the assigned rep when read_at is NULL or read_by
+    # does not match the assigned rep's email. read_at/read_by are cleared on
+    # (re)assignment so a freshly-assigned lead always highlights until opened.
+    read_at = Column(DateTime, nullable=True)   # when the assigned rep first opened it
+    read_by = Column(String(255), nullable=True)  # email of the rep who opened it
+
     archived = Column(Integer, default=0)  # 1 = archived (soft delete)
     archived_at = Column(DateTime, nullable=True)
 

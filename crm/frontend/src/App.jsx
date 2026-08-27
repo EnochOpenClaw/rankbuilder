@@ -517,6 +517,29 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
     }).catch(() => setHandoffClients([]))
   }
 
+  // True when a lead is assigned but has NOT yet been opened by the current
+  // user. Drives the new-lead highlight (row tint + bold + NEW badge) so agents
+  // and managers can instantly spot leads that still need attention.
+  const isUnread = (r) =>
+    !!r && !!r.assigned_to && !r.archived &&
+    r.read_by !== currentUserEmail
+
+  // Open a lead in the drawer AND mark it read for the current user, then
+  // update it in the local list so the highlight clears immediately.
+  const openLead = (r) => {
+    setSelectedRow(r)
+    setDrawerOpen(true)
+    if (isUnread(r)) {
+      api.markRead(r.id)
+        .then(updated => {
+          setLeads(prev => prev.map(l =>
+            l.id === updated.id ? { ...l, read_at: updated.read_at, read_by: updated.read_by } : l
+          ))
+        })
+        .catch(() => {/* non-fatal — highlight just stays until reload */})
+    }
+  }
+
   const onHandoffClientChange = (cid) => {
     setHandoffClientId(cid)
     setHandoffTargetEmail(null)
@@ -692,11 +715,14 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
       title: 'Assigned',
       dataIndex: 'assigned_to_name',
       render: (v, r) => v ? (
-        <Tag color={r.assigned_to === 'richard@houseofsupreme.co.za' ? 'geekblue' : r.assigned_to === 'tiaan@houseofsupreme.co.za' ? 'purple' : 'green'} style={{ fontSize: 11 }}>
-          {v}
-        </Tag>
+        <Space size={4}>
+          <Tag color={r.assigned_to === 'richard@houseofsupreme.co.za' ? 'geekblue' : r.assigned_to === 'tiaan@houseofsupreme.co.za' ? 'purple' : 'green'} style={{ fontSize: 11 }}>
+            {v}
+          </Tag>
+          {isUnread(r) && <Badge color="orange" text="NEW" style={{ fontSize: 11 }} />}
+        </Space>
       ) : '—',
-      width: 110,
+      width: 130,
     },
     {
       title: 'Status',
@@ -746,7 +772,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
       title: '',
       render: (_, r) => (
         <Space size={4}>
-          <Button size="small" onClick={() => { setSelectedRow(r); setDrawerOpen(true) }}>
+          <Button size="small" onClick={() => openLead(r)}>
             View
           </Button>
           {r.archived ? (
@@ -847,7 +873,8 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
           clientId={clientId}
           canWrite={canWrite}
           onUpdate={loadLeads}
-          onOpenLead={(lead) => { setSelectedRow(lead); setDrawerOpen(true) }}
+          onOpenLead={openLead}
+          currentUserEmail={currentUserEmail}
         />
       ) : (
       <Table
@@ -855,6 +882,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         columns={columns}
         rowKey="id"
         loading={loading}
+        rowClassName={(r) => isUnread(r) ? 'lead-row-unread' : ''}
         pagination={{
           current: page, pageSize, total,
           onChange: (p, ps) => { setPage(p); setPageSize(ps) },
@@ -933,7 +961,10 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
 
 const KANBAN_COLUMNS = ['NEW', 'REVIEWED', 'QUALIFIED', 'SENT', 'CONTACTED', 'CONVERTED', 'LOST']
 
-function KanbanBoard({ clientId, canWrite = true, onUpdate, onOpenLead }) {
+function KanbanBoard({ clientId, canWrite = true, onUpdate, onOpenLead, currentUserEmail = '' }) {
+  // Unread = assigned but not yet opened by the current user (same rule as the table)
+  const isUnread = (lead) =>
+    !!lead.assigned_to && !lead.archived && lead.read_by !== currentUserEmail
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -1010,16 +1041,18 @@ function KanbanBoard({ clientId, canWrite = true, onUpdate, onOpenLead }) {
                           onClick={() => onOpenLead && onOpenLead(lead)}
                           style={{
                             ...p2.draggableProps.style,
-                            background: '#fff', borderRadius: 6, padding: 8, marginBottom: 8,
-                            border: '1px solid #e8e8e8', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                            background: isUnread(lead) ? '#fff8e1' : '#fff', borderRadius: 6, padding: 8, marginBottom: 8,
+                            border: isUnread(lead) ? '1px solid #faad14' : '1px solid #e8e8e8', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
                             cursor: canWrite ? 'grab' : 'default',
                           }}
                         >
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{lead.company_name || lead.contact_name || 'Lead'}</div>
+                          <div style={{ fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {lead.company_name || lead.contact_name || 'Lead'}
+                            {isUnread(lead) && <Badge color="orange" text="NEW" style={{ fontSize: 10 }} />}
+                          </div>
                           {lead.contact_name && lead.company_name && (
                             <div style={{ color: '#888', fontSize: 12 }}>{lead.contact_name}</div>
-                          )}
-                          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                          )}                          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                             <Tag style={{ fontSize: 10, margin: 0 }}>{lead.source?.replace('_', ' ')}</Tag>
                             {lead.quality_score ? (
                               <Tag color={lead.quality_score >= 70 ? 'red' : lead.quality_score >= 40 ? 'orange' : 'default'} style={{ fontSize: 10, margin: 0 }}>

@@ -97,6 +97,9 @@ def assign_lead(db, lead: Lead, changed_by: str = "system") -> bool:
     lead.assigned_to = rep_email
     lead.assigned_to_name = rep_name
     lead.assigned_at = datetime.utcnow()
+    # Fresh assignment → clear read state so the rep sees the new lead highlighted
+    lead.read_at = None
+    lead.read_by = None
 
     hist = LeadHistory(
         lead_id=lead.id,

@@ -148,6 +148,38 @@ def startup():
             if "partner_handoff_by" not in lcols:
                 conn4.execute(text("ALTER TABLE leads ADD COLUMN partner_handoff_by VARCHAR(255)"))
         print("[migrate] leads partner_handoff columns ensured")
+        # Lead read-tracking columns (new-lead highlighting)
+        rcols = {c["name"] for c in insp.get_columns("leads")}
+        with engine.begin() as conn5:
+            if "read_at" not in rcols:
+                conn5.execute(text("ALTER TABLE leads ADD COLUMN read_at DATETIME"))
+            if "read_by" not in rcols:
+                conn5.execute(text("ALTER TABLE leads ADD COLUMN read_by VARCHAR(255)"))
+        print("[migrate] leads read_at / read_by ensured")
+        # users.must_change_password — password-change-on-first-login flag
+        # (model expects it; older DBs lack the column entirely, which breaks login)
+        ucols = {c["name"] for c in insp.get_columns("users")}
+        with engine.begin() as conn6:
+            if "must_change_password" not in ucols:
+                conn6.execute(text("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 1"))
+        print("[migrate] users.must_change_password ensured")
+        # leads — older backups missing columns added in later code (address,
+        # sales-value, SLA-escalation fields). Additive + idempotent.
+        lcols2 = {c["name"] for c in insp.get_columns("leads")}
+        leads_add = {
+            "address": "VARCHAR(500)",
+            "created_by": "VARCHAR(255)",
+            "estimated_deal_value": "FLOAT",
+            "last_sla_alert_at": "DATETIME",
+            "payment_status": "VARCHAR(20)",
+            "quote_amount": "FLOAT",
+            "reminder_stage": "INTEGER DEFAULT 0",
+        }
+        with engine.begin() as conn7:
+            for col, ddl in leads_add.items():
+                if col not in lcols2:
+                    conn7.execute(text(f"ALTER TABLE leads ADD COLUMN {col} {ddl}"))
+        print("[migrate] leads missing columns ensured")
     except Exception as e:
         print(f"[migrate] warning: {e}")
     seed_lead_sources(SessionLocal())
