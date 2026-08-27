@@ -524,6 +524,17 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
     !!r && !!r.assigned_to && !r.archived &&
     r.read_by !== currentUserEmail
 
+  // Default sort: unread (new) leads first, then newest-first within each group.
+  // Stable sort so relative order from the backend is preserved per group.
+  const sortLeads = (rows) => {
+    if (!Array.isArray(rows)) return rows
+    return rows.slice().sort((a, b) => {
+      const ua = isUnread(a) ? 0 : 1
+      const ub = isUnread(b) ? 0 : 1
+      return ua - ub
+    })
+  }
+
   // Open a lead in the drawer AND mark it read for the current user, then
   // update it in the local list so the highlight clears immediately.
   const openLead = (r) => {
@@ -598,7 +609,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
       if (filters.archived) params.include_archived = true
       if (search) params.search = search
       const res = await api.listLeads(params)
-      setLeads(res.leads)
+      setLeads(sortLeads(res.leads))
       setTotal(res.total)
     } catch (e) {
       message.error('Failed to load leads: ' + e.message)
