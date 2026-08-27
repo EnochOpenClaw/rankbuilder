@@ -26,7 +26,11 @@ from backend.database import get_db, User, UserRole, Client
 from backend.auth import UserCreate, UserResponse, TokenResponse
 
 # ── Config ──────────────────────────────────────────────────────────────────────
-SECRET_KEY = "rankbuilder-crm-secret-change-in-production"
+# JWT signing secret — MUST come from the CRM_JWT_SECRET env var in production.
+# The fallback is a dev-only default; it is insecure and must never be used in
+# production (anyone with source access could forge tokens). Generate a strong
+# value with:  python -c "import secrets; print(secrets.token_urlsafe(64))"
+SECRET_KEY = os.environ.get("CRM_JWT_SECRET", "rankbuilder-crm-dev-only-insecure-secret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 

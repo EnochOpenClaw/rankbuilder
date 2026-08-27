@@ -12,24 +12,17 @@
 
 ## 🚨 Priority: Fix the hardcoded JWT secret
 
-**Found 2026-08-27:** `backend/routes/auth.py` has a **hardcoded default secret**:
+**FIXED 2026-08-27:** `backend/routes/auth.py` had a hardcoded default secret.
+It now reads from the `CRM_JWT_SECRET` env var (with a dev-only fallback):
 
 ```python
-SECRET_KEY = "rankbuilder-crm-secret-change-in-production"
+SECRET_KEY = os.environ.get("CRM_JWT_SECRET", "rankbuilder-crm-dev-only-insecure-secret")
 ```
 
-This is a **critical security issue** — anyone who reads the source can forge JWTs and
-impersonate any user (including SYSTEM_ADMIN). **Fix immediately:**
+**Deployed:** `CRM_JWT_SECRET` set in the VPS systemd service + local backup env.
+Generate a new value with: `python -c "import secrets; print(secrets.token_urlsafe(64))"`
 
-```python
-import os
-SECRET_KEY = os.environ.get("CRM_JWT_SECRET", "rankbuilder-crm-secret-change-in-production")
-# In production, ALWAYS set CRM_JWT_SECRET to a long random value.
-# Generate: python -c "import secrets; print(secrets.token_urlsafe(64))"
-```
-
-Then set `CRM_JWT_SECRET` in the systemd service env (like the other env vars) and rotate
-any tokens issued under the old secret.
+> ⚠️ If you ever rotate the secret, all existing JWTs become invalid (users must re-login).
 
 ---
 
