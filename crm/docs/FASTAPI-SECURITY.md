@@ -20,6 +20,7 @@ SECRET_KEY = os.environ.get("CRM_JWT_SECRET", "rankbuilder-crm-dev-only-insecure
 ```
 
 **Deployed:** `CRM_JWT_SECRET` set in the VPS systemd service + local backup env.
+**Stored in Vaultwarden:** item **"RankBuilder CRM JWT Secret"** (id `c443257c-640d-457c-859b-c41818e4946a`).
 Generate a new value with: `python -c "import secrets; print(secrets.token_urlsafe(64))"`
 
 > ⚠️ If you ever rotate the secret, all existing JWTs become invalid (users must re-login).
