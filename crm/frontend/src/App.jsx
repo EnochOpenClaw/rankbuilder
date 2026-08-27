@@ -524,17 +524,6 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
     !!r && !!r.assigned_to && !r.archived &&
     r.read_by !== currentUserEmail
 
-  // Default sort: unread (new) leads first, then newest-first within each group.
-  // Stable sort so relative order from the backend is preserved per group.
-  const sortLeads = (rows) => {
-    if (!Array.isArray(rows)) return rows
-    return rows.slice().sort((a, b) => {
-      const ua = isUnread(a) ? 0 : 1
-      const ub = isUnread(b) ? 0 : 1
-      return ua - ub
-    })
-  }
-
   // Open a lead in the drawer AND mark it read for the current user, then
   // update it in the local list so the highlight clears immediately.
   const openLead = (r) => {
@@ -609,7 +598,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
       if (filters.archived) params.include_archived = true
       if (search) params.search = search
       const res = await api.listLeads(params)
-      setLeads(sortLeads(res.leads))
+      setLeads(res.leads)
       setTotal(res.total)
     } catch (e) {
       message.error('Failed to load leads: ' + e.message)
@@ -867,7 +856,12 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         <Text type="secondary" style={{ fontSize: 12 }}>{total} leads</Text>
       </Space>
 
-      <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#8c8c8c' }}>
+          <span style={{ display: 'inline-block', width: 14, height: 14, borderRadius: 3, background: '#fff8e1', border: '1px solid #faad14', boxShadow: 'inset 2px 0 0 #faad14' }} />
+          <Badge color="orange" text="NEW" style={{ fontSize: 11 }} />
+          <span>assigned but not yet opened — clears when you open it</span>
+        </span>
         <Segmented
           value={viewMode}
           onChange={setViewMode}

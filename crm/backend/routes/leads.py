@@ -17,6 +17,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import case, or_
 from sqlalchemy.orm import Session
 from backend.scoring import compute_score
 
@@ -348,7 +349,25 @@ def list_leads(
         q = q.filter(Lead.archived == 0)
 
     total = q.count()
-    leads = q.order_by(Lead.created_at.desc()).offset(offset).limit(limit).all()
+
+    # Default sort: unread (assigned-but-not-opened-by-viewer) leads first,
+    # then newest-first. "Unread" is viewer-relative — a lead is unread for the
+    # current user when it's assigned, not archived, and not yet opened by them.
+    unread_first = case(
+        (
+            (Lead.assigned_to.isnot(None))
+            & (Lead.archived == 0)
+            & ((Lead.read_by.is_(None)) | (Lead.read_by != current_user.email)),
+            0,
+        ),
+        else_=1,
+    )
+    leads = (
+        q.order_by(unread_first.asc(), Lead.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
     return LeadListResponse(total=total, leads=[_lead_to_response(l) for l in leads])
 
