@@ -180,40 +180,51 @@ EXCLUDED_KEYWORDS = [
 # ============================================================================
 
 def get_unread_envelopes():
-    """Get list of unread envelopes from himalaya."""
+    """Get list of envelopes from himalaya (v2 --json format)."""
     result = subprocess.run(
-        ["himalaya", "envelope", "list", "-o", "plain"],
+        ["himalaya", "envelope", "list", "--json"],
         capture_output=True, text=True, cwd=Path.home()
     )
     if result.returncode != 0:
         return []
-    
+
     envelopes = []
-    for line in result.stdout.strip().split('\n'):
-        if not line or line.startswith('ID'):
+    try:
+        data = json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return envelopes
+
+    for env in data.get("envelopes", []):
+        if not isinstance(env, dict):
             continue
-        parts = line.split('|')
-        if len(parts) >= 4:
-            env_id = parts[0].strip()
-            flags = parts[1].strip()
-            subject = parts[2].strip()
-            date = parts[4].strip()
-            envelopes.append({
-                'id': env_id,
-                'flags': flags,
-                'subject': subject,
-                'date': date
-            })
+        env_id = str(env.get("id", "")).strip()
+        if not env_id.isdigit():
+            continue
+        flags = [f.get("iana", "") for f in (env.get("flags") or []) if isinstance(f, dict)]
+        envelopes.append({
+            'id': env_id,
+            'flags': ",".join(flags),
+            'subject': env.get("subject", "") or "",
+            'date': env.get("date", "") or ""
+        })
     return envelopes
 
 
 def read_email(email_id: str) -> str:
-    """Read full email body via himalaya."""
+    """Read full email body via himalaya (v2 --json, extracts text_body)."""
     result = subprocess.run(
-        ["himalaya", "message", "read", email_id],
+        ["himalaya", "message", "read", email_id, "--json"],
         capture_output=True, text=True, cwd=Path.home()
     )
-    return result.stdout if result.returncode == 0 else ""
+    if result.returncode != 0:
+        return ""
+    try:
+        data = json.loads(result.stdout)
+        body = data.get("text_body") or ""
+        return body if isinstance(body, str) else str(body)
+    except (json.JSONDecodeError, TypeError):
+        # fallback: raw stdout
+        return result.stdout
 
 
 def extract_forwarded_haro_content(email_body: str) -> Optional[dict]:

@@ -1,34 +1,35 @@
 # Himalaya email CLI config — RankBuilder container
 # Repoints the HARO monitor (default-account himalaya reads) at the Mailcow
 # inbox that actually receives HARO + Qwoted queries: info@fortressblinds.co.za.
-# (Verified 2026-09-02: info@ has 137 HARO/Qwoted msgs, latest Sep 1 — HARO
-#  Morning/Afternoon/Evening editions + Qwoted notifications.)
+# (Verified 2026-09-02: info@ has 137 HARO/Qwoted msgs, latest Sep 1 HARO
+#  Morning/Afternoon/Evening + Qwoted. Other Mailcow boxes carry CRM/internal mail.)
 #
-# Default account = info@ -> haro_monitor.py's `himalaya envelope list`
-# (no -a flag) reads this one. Copied to /root/.config/himalaya/config.toml by
-# the Dockerfile (cron + himalaya run as root).
+# This file targets himalaya v2.x (the container installs latest master via
+# install.sh -> v2.1.0). NOTE: v2 config schema differs from v1 — it uses
+# `imap.server`, `imap.sasl.plain.*`, `smtp.server`, `smtp.sasl.plain.*` (NOT the
+# old v1 `backend.type = "imap"` form). v2 `envelope list` also uses `--json`
+# (the v1 `-o plain` flag is gone) — the Python monitors were updated to match.
 #
-# Password is NOT hardcoded here — it's read from the INFO_MAIL_PASSWORD env var
-# at runtime (set in Coolify app env). auth.cmd runs in a shell so it expands
+# Password is read from the INFO_MAIL_PASSWORD env var (set in Coolify app env,
+# = info@ mailbox password). auth/command runs in a shell so it expands
 # $INFO_MAIL_PASSWORD. Keeps the secret out of git.
+#
+# Copied to /root/.config/himalaya/config.toml by the Dockerfile (cron +
+# himalaya run as root inside the container).
 
 [accounts.info]
+default = true
 email = "info@fortressblinds.co.za"
 display-name = "Info - Fortress Blinds (HARO/Qwoted inbox)"
-default = true
 
-backend.type = "imap"
-backend.host = "mail.fortressblinds.co.za"
-backend.port = 993
-backend.encryption.type = "tls"
-backend.login = "info@fortressblinds.co.za"
-backend.auth.type = "password"
-backend.auth.cmd = "echo \"$INFO_MAIL_PASSWORD\""
+# IMAP — Mailcow, implicit TLS on 993
+imap.server = "imaps://mail.fortressblinds.co.za:993"
+imap.sasl.plain.username = "info@fortressblinds.co.za"
+imap.sasl.plain.password.command = "echo \"$INFO_MAIL_PASSWORD\""
+mailbox.alias.inbox = "INBOX"
 
-message.send.backend.type = "smtp"
-message.send.backend.host = "mail.fortressblinds.co.za"
-message.send.backend.port = 587
-message.send.backend.encryption.type = "start-tls"
-message.send.backend.login = "info@fortressblinds.co.za"
-message.send.backend.auth.type = "password"
-message.send.backend.auth.cmd = "echo \"$INFO_MAIL_PASSWORD\""
+# SMTP — Mailcow, STARTTLS on 587
+smtp.server = "smtp://mail.fortressblinds.co.za:587"
+smtp.starttls = true
+smtp.sasl.plain.username = "info@fortressblinds.co.za"
+smtp.sasl.plain.password.command = "echo \"$INFO_MAIL_PASSWORD\""

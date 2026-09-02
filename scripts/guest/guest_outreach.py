@@ -238,37 +238,43 @@ def get_recent_craig_replies(lookback_hours: int = 48) -> list:
     """
     from datetime import datetime, timedelta
 
-    # Single list call
+    # Single list call (himalaya v2 --json)
     result = subprocess.run(
-        ["himalaya", "envelope", "list", "-o", "plain"],
+        ["himalaya", "envelope", "list", "--json"],
         capture_output=True, text=True, cwd=Path.home(),
         timeout=HIMALAYA_TIMEOUT + 5
     )
     if result.returncode != 0:
         return []
 
+    import json as _json
+    try:
+        data = _json.loads(result.stdout)
+    except (_json.JSONDecodeError, TypeError):
+        return []
+
     cutoff = datetime.now() - timedelta(hours=lookback_hours)
     candidates = []
 
-    for line in result.stdout.strip().split('\n'):
-        if not line or line.startswith('ID'):
+    for env in data.get("envelopes", []):
+        if not isinstance(env, dict):
             continue
-        parts = [p.strip() for p in line.split('|') if p.strip()]
-        if len(parts) >= 4:
-            env_id = parts[0]
-            subject = parts[1]
-            date_str = parts[3]
+        env_id = str(env.get("id", "")).strip()
+        if not env_id.isdigit():
+            continue
+        subject = env.get("subject", "") or ""
 
-            if '[GUEST POST APPROVAL]' not in subject:
+        if '[GUEST POST APPROVAL]' not in subject:
+            continue
+
+        date_str = env.get("date", "") or ""
+        try:
+            email_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            if email_date <= cutoff:
                 continue
-
-            try:
-                date_clean = re.sub(r'[+-]\d{2}:\d{2}$', '', date_str).strip()
-                email_date = datetime.strptime(date_clean, "%Y-%m-%d %H:%M")
-                if email_date >= cutoff:
-                    candidates.append({"id": env_id, "subject": subject, "date": date_str})
-            except Exception:
-                pass
+            candidates.append({"id": env_id, "subject": subject, "date": date_str})
+        except Exception:
+            pass
 
     if not candidates:
         return []
@@ -276,11 +282,17 @@ def get_recent_craig_replies(lookback_hours: int = 48) -> list:
     # Fetch all bodies CONCURRENTLY — big speedup
     def fetch_body(env_id: str) -> tuple:
         try:
-            body = subprocess.run(
-                ["himalaya", "message", "read", env_id],
+            rb = subprocess.run(
+                ["himalaya", "message", "read", env_id, "--json"],
                 capture_output=True, text=True, cwd=Path.home(),
                 timeout=HIMALAYA_TIMEOUT
-            ).stdout
+            )
+            body = rb.stdout
+            if rb.returncode == 0:
+                try:
+                    body = _json.loads(rb.stdout).get("text_body") or ""
+                except Exception:
+                    pass
             return (env_id, body)
         except Exception:
             return (env_id, "")

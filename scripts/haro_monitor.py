@@ -18,6 +18,15 @@ from pitch_templates import select_angle, get_angle_name_and_guidance, build_pit
 from haro_responder import read_email, extract_forwarded_haro_content, is_relevant_query, score_relevance, humanize_draft
 from blocklist import is_blocked, is_buyer, block_email, add_buyer
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME, NOTIFY_EMAIL
+from lib.n8n_webhook import send_event as n8n_event
+
+# CRM integration
+try:
+    from lib.crm_client import get_or_create_lead, update_lead, CRMError as CRMErr
+    CRM_AVAILABLE = True
+except ImportError:
+    CRM_AVAILABLE = False
+    CRMErr = Exception
 
 STATE_FILE = Path(__file__).parent / "state" / "processed.jsonl"
 DRAFTS_DIR = Path(__file__).parent / "state" / "drafts"
@@ -242,67 +251,40 @@ def strip_ansi(text: str) -> str:
 
 
 def get_recent_envelopes() -> list:
-    """Get all recent envelopes from inbox.
+    """Get all recent envelopes from inbox (himalaya v2 --json format).
 
-    Table format: | ID | FLAGS | SUBJECT | FROM | DATE(+00:00) |
-    The SUBJECT field may contain | characters (e.g. "Lifestyle | Entertainment").
-    We parse using a hybrid approach:
-    - ID is at fixed position [1:5]
-    - DATE anchor: scan from end for | before +00:00 timestamp
-    - FROM: scan backwards from date for | where from_part has no |
-    - SUBJECT: from 3rd pipe to from_sep
+    Returns list of {id, subject, sender, date, is_read}. Uses JSON output so
+    parsing is robust (the old v1 pipe-table format is gone in himalaya v2).
     """
     result = subprocess.run(
-        ["himalaya", "envelope", "list", "-o", "plain"],
+        ["himalaya", "envelope", "list", "--json"],
         capture_output=True, text=True, timeout=30
     )
 
     envelopes = []
-    for line in result.stdout.split('\n'):
-        line = strip_ansi(line)
-        if not line.startswith('|') or '---' in line or 'WARN' in line:
+    try:
+        data = json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return envelopes
+
+    for env in data.get("envelopes", []):
+        if not isinstance(env, dict):
             continue
-        if '+00:00' not in line:
+        id_part = str(env.get("id", "")).strip()
+        if not id_part.isdigit():
             continue
-
-        try:
-            # ID is always at positions 1-5 (4 chars, space-padded)
-            id_part = line[1:5].strip()
-            if not id_part.isdigit():
-                continue
-
-            # Find date separator (| before DATE field) by scanning backwards
-            trailing = len(line) - 1  # trailing |
-            date_sep = line.rindex('|', 0, trailing)
-
-            # Find from separator: scan backwards for | where from_part has no |
-            from_sep = None
-            for candidate in range(date_sep - 1, -1, -1):
-                if line[candidate] == '|':
-                    from_candidate = line[candidate+1:date_sep].strip()
-                    if '|' not in from_candidate:
-                        from_sep = candidate
-                        from_part = from_candidate
-                        break
-
-            if from_sep is None:
-                continue
-
-            # Find subject/from boundary: 3rd pipe from the start
-            # First pipe at 0, second at 5, third at 13
-            second_pipe = line.index('|', 5)          # position 5
-            third_pipe = line.index('|', second_pipe + 1)  # position 13
-            subject_part = line[third_pipe + 1:from_sep].strip()
-
-            envelopes.append({
-                'id': id_part,
-                'subject': subject_part,
-                'sender': from_part,
-                'date': line[date_sep+1:trailing].strip(),
-                'is_read': False
-            })
-        except (ValueError, IndexError):
-            continue
+        # sender = first From entry's email
+        sender = ""
+        from_list = env.get("from") or []
+        if from_list and isinstance(from_list, list) and isinstance(from_list[0], dict):
+            sender = from_list[0].get("email", "") or from_list[0].get("name", "")
+        envelopes.append({
+            'id': id_part,
+            'subject': env.get("subject", "") or "",
+            'sender': sender,
+            'date': env.get("date", "") or "",
+            'is_read': False
+        })
 
     return envelopes
 
@@ -361,6 +343,9 @@ def main():
         if not relevant:
             log(f"  [{email_id}] Not relevant — marking as skipped")
             mark_processed(email_id, "SKIPPED_NOT_RELEVANT")
+            n8n_event("haro_pitch", "skipped_not_relevant",
+                       query=query_data.get('query_text','')[:80],
+                       extra={"email_id": email_id, "score": score})
             continue
 
         # Check blocklist — skip blocked addresses
@@ -368,6 +353,9 @@ def main():
         if reply_to and is_blocked(reply_to):
             log(f"  [{email_id}] Reply-to {reply_to} is blocked — skipping")
             mark_processed(email_id, "SKIPPED_BLOCKLISTED")
+            n8n_event("haro_pitch", "skipped_blocked",
+                       query=query_data.get('query_text','')[:80],
+                       extra={"email_id": email_id, "reply_to": reply_to})
             continue
 
         # Check if this is a confirmed buyer lead
@@ -443,6 +431,39 @@ Email ID: {email_id} | Processed: {datetime.now().isoformat()}
         if send_result.get("success"):
             log(f"  [{email_id}] Draft sent to Craig for approval ✅")
             drafted_count += 1
+            n8n_event("haro_pitch", "pending_approval",
+                       prospect=query_data.get('outlet', ''),
+                       query=query_data.get('query_text','')[:100],
+                       extra={
+                           "email_id": email_id,
+                           "score": score,
+                           "journalist": query_data.get('journalist_name', ''),
+                           "angle": angle_name,
+                       })
+
+            # ── CRM: Create lead (NEW → REVIEWED → QUALIFIED) ───────────────
+            if CRM_AVAILABLE:
+                try:
+                    reply_to = query_data.get('reply_to', '') or ''
+                    outlet = query_data.get('outlet', 'Unknown')
+                    journalist = query_data.get('journalist_name', '')
+                    query_text = query_data.get('query_text', '') or ''
+
+                    lead = get_or_create_lead(
+                        source="HARO",
+                        contact_email=reply_to if reply_to else None,
+                        contact_name=journalist or None,
+                        company_name=outlet,
+                        source_query=query_text[:200] or None,
+                        message_excerpt=query_text[:500],
+                        quality_score=max(1, min(5, score // 20)),  # 0-100 → 1-5
+                        notes=f"Angle: {angle_name} | Relevance: {score}/100",
+                    )
+                    # Lead created as NEW → immediately QUALIFIED (HarO pitches are always real opportunities)
+                    update_lead(lead['id'], status="QUALIFIED", lead_type="VALID")
+                    log(f"  CRM: created lead {lead['id']} → QUALIFIED")
+                except CRMErr as e:
+                    log(f"  CRM lead creation failed: {e}")
         else:
             log(f"  [{email_id}] Failed to send draft: {send_result.get('error')}")
 
