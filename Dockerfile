@@ -29,14 +29,15 @@ RUN pip install --no-cache-dir playwright && \
 # Copy application (exclude git, state, secrets)
 COPY . .
 
+# Install himalaya email CLI config (root-run cron + himalaya read this) so the
+# HARO monitor reads the Mailcow inbox that receives HARO/Qwoted queries (info@).
+RUN mkdir -p /root/.config/himalaya && cp himalaya/config.toml /root/.config/himalaya/config.toml
+
 # Health check server
 COPY run_mode.sh /app/run_mode.sh
 RUN chmod +x /app/run_mode.sh
 # Symlink python3 -> python (crontabs reference 'python' not 'python3')
 RUN ln -sf /usr/local/bin/python3 /usr/local/bin/python
-
-# Patch crontab: guest_outreach_engine.py requires a subcommand
-RUN sed -i 's|/app/run_mode.sh guest$|/app/run_mode.sh guest followup|' /etc/crontab
 
 # Volume mount point for persistent data
 VOLUME ["/app/state"]
