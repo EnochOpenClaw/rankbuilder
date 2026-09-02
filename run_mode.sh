@@ -13,7 +13,13 @@ case "$MODE" in
     python scripts/connectively_monitor.py
     ;;
   guest)
-    python scripts/guest_outreach_engine.py
+    # guest_outreach_engine.py requires a subcommand (CLI changed since run_mode.sh
+    # was written — it used to run bare). Run a balanced daily outreach cycle:
+    # discover new prospects, send a modest batch of pitches, then run follow-ups.
+    echo "[$(date)] Guest mode — discover + send + followup"
+    python scripts/guest_outreach_engine.py discover || true
+    python scripts/guest_outreach_engine.py send --limit 5 || true
+    python scripts/guest_outreach_engine.py followup || true
     ;;
   prospect)
     python scripts/prospect_checker.py

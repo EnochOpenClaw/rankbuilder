@@ -28,7 +28,12 @@ import time
 from pathlib import Path
 from datetime import datetime
 
-WORKSPACE     = Path.home() / ".openclaw" / "workspace" / "rankbuilder"
+import os
+
+# Container path vs local path
+CONTAINER_PATH = Path("/app")
+LOCAL_PATH    = Path.home() / ".openclaw" / "workspace" / "rankbuilder"
+WORKSPACE      = Path("/app") if Path("/app").exists() else LOCAL_PATH
 PENDING_FILE  = WORKSPACE / "prospects" / "pending_discovery.json"
 OUTREACH_LOG  = WORKSPACE / "prospects" / "outreach_log.jsonl"
 PROSPECT_DB   = WORKSPACE / "prospects" / "prospect_db.json"
@@ -172,6 +177,7 @@ def merge_search_results(results: list, seen_domains=None, seen_urls=None) -> in
     db["total_found"] = len(db["prospects"])
     db["last_updated"] = datetime.now().date().isoformat()
 
+    PROSPECT_DB.parent.mkdir(parents=True, exist_ok=True)  # ensure dir exists before write
     with open(PROSPECT_DB, "w") as f:
         json.dump(db, f, indent=2, ensure_ascii=False)
 
