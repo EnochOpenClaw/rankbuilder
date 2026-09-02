@@ -15,7 +15,7 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'lib'))
 from pitch_templates import select_angle, get_angle_name_and_guidance, build_pitch_response, BRAND_BIO, BRAND_VOICE
-from haro_responder import read_email, extract_forwarded_haro_content, is_relevant_query, score_relevance, humanize_draft
+from haro_responder import read_email, extract_forwarded_haro_content, extract_haro_digest_queries, is_relevant_query, score_relevance, humanize_draft
 from blocklist import is_blocked, is_buyer, block_email, add_buyer
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME, NOTIFY_EMAIL
 from n8n_webhook import send_event as n8n_event
@@ -327,75 +327,93 @@ def main():
             mark_processed(email_id, f"REPLY_{action}")
             continue
 
-        # Parse HARO content
-        query_data = extract_forwarded_haro_content(body)
-        if not query_data:
+        # Parse HARO content — modern digests contain MANY queries.
+        # Try the digest parser first (returns a list); fall back to the legacy
+        # single-forwarded-query parser for older formats.
+        queries = extract_haro_digest_queries(body)
+        if not queries:
+            single = extract_forwarded_haro_content(body)
+            if single:
+                queries = [single]
+
+        if not queries:
             log(f"  [{email_id}] No HARO query found in email")
             mark_processed(email_id, "NOT_HARO")
             continue
 
-        # Check relevance
-        relevant = is_relevant_query(query_data)
-        score = score_relevance(query_data)
-        log(f"  [{email_id}] Relevance: {relevant} (score: {score})")
-        log(f"  [{email_id}] Query: {query_data.get('query_text', '')[:80]}...")
+        log(f"  [{email_id}] Found {len(queries)} HARO query/ies in digest")
+        for query_data in queries:
+            processed_count, drafted_count = _process_haro_query(
+                email_id, query_data, processed_count, drafted_count
+            )
 
-        if not relevant:
-            log(f"  [{email_id}] Not relevant — marking as skipped")
-            mark_processed(email_id, "SKIPPED_NOT_RELEVANT")
-            n8n_event("haro_pitch", "skipped_not_relevant",
-                       query=query_data.get('query_text','')[:80],
-                       extra={"email_id": email_id, "score": score})
-            continue
+    log(f"=== Done. Processed: {processed_count}, Drafted: {drafted_count} ===")
 
-        # Check blocklist — skip blocked addresses
-        reply_to = query_data.get('reply_to', '')
-        if reply_to and is_blocked(reply_to):
-            log(f"  [{email_id}] Reply-to {reply_to} is blocked — skipping")
-            mark_processed(email_id, "SKIPPED_BLOCKLISTED")
-            n8n_event("haro_pitch", "skipped_blocked",
-                       query=query_data.get('query_text','')[:80],
-                       extra={"email_id": email_id, "reply_to": reply_to})
-            continue
 
-        # Check if this is a confirmed buyer lead
-        if reply_to and is_buyer(reply_to):
-            log(f"  [{email_id}] Reply-to {reply_to} is a buyer lead — flagging for follow-up")
+def _process_haro_query(email_id, query_data, processed_count, drafted_count):
+    """Process a single HARO query: relevance → blocklist → draft → approval."""
+    # Check relevance
+    relevant = is_relevant_query(query_data)
+    score = score_relevance(query_data)
+    log(f"  [{email_id}] Relevance: {relevant} (score: {score})")
+    log(f"  [{email_id}] Query: {query_data.get('query_text', '')[:80]}...")
 
-        # Draft response with angle guidance
-        log(f"  [{email_id}] Drafting response with kimi-k2.6:cloud [angle: {select_angle(query_data.get('query_text',''), query_data.get('summary','')).replace('angle_','')}]...")
-        drafted = draft_response(query_data)
+    if not relevant:
+        log(f"  [{email_id}] Not relevant — marking as skipped")
+        mark_processed(email_id, "SKIPPED_NOT_RELEVANT")
+        n8n_event("haro_pitch", "skipped_not_relevant",
+                   query=query_data.get('query_text','')[:80],
+                   extra={"email_id": email_id, "score": score})
+        return processed_count, drafted_count
 
-        if drafted.startswith("Error"):
-            log(f"  [{email_id}] Drafting failed: {drafted}")
-            mark_processed(email_id, "ERROR_DRAFT")
-            continue
+    # Check blocklist — skip blocked addresses
+    reply_to = query_data.get('reply_to', '')
+    if reply_to and is_blocked(reply_to):
+        log(f"  [{email_id}] Reply-to {reply_to} is blocked — skipping")
+        mark_processed(email_id, "SKIPPED_BLOCKLISTED")
+        n8n_event("haro_pitch", "skipped_blocked",
+                   query=query_data.get('query_text','')[:80],
+                   extra={"email_id": email_id, "reply_to": reply_to})
+        return processed_count, drafted_count
 
-        # Polish with angle + word count discipline
-        log(f"  [{email_id}] Polishing with pitch angle refinement...")
-        drafted = build_pitch_response(query_data, drafted)
-        word_count = len(drafted.split())
-        log(f"  [{email_id}] Draft complete: {word_count} words")
+    # Check if this is a confirmed buyer lead
+    if reply_to and is_buyer(reply_to):
+        log(f"  [{email_id}] Reply-to {reply_to} is a buyer lead — flagging for follow-up")
 
-        # Humanize the drafted response
-        log(f"  [{email_id}] Humanizing draft to remove AI patterns...")
-        humanization = humanize_draft(drafted, style="formal")
-        drafted = humanization["humanized_text"]
-        log(f"  [{email_id}] Humanization: {humanization['changes_summary']}")
+    # Draft response with angle guidance
+    log(f"  [{email_id}] Drafting response with kimi-k2.6:cloud [angle: {select_angle(query_data.get('query_text',''), query_data.get('summary','')).replace('angle_','')}]...")
+    drafted = draft_response(query_data)
 
-        # Save drafted response for YES approval
-        mark_processed(email_id, "AWAITING_APPROVAL", drafted)
+    if drafted.startswith("Error"):
+        log(f"  [{email_id}] Drafting failed: {drafted}")
+        mark_processed(email_id, "ERROR_DRAFT")
+        return processed_count, drafted_count
 
-        # Send draft to Craig for approval
-        angle_name, _ = get_angle_name_and_guidance(query_data)
-        angle_tag = angle_name.replace('angle_', '').upper()
-        summary_preview = (query_data.get('summary') or query_data.get('query_text', '') or 'Query')[:60]
-        subject = f"📋 [HARO APPROVAL] {query_data.get('outlet', 'Query')} | {angle_tag} — \"{summary_preview}\""
+    # Polish with angle + word count discipline
+    log(f"  [{email_id}] Polishing with pitch angle refinement...")
+    drafted = build_pitch_response(query_data, drafted)
+    word_count = len(drafted.split())
+    log(f"  [{email_id}] Draft complete: {word_count} words")
 
-        query_text_display = (query_data.get('query_text') or 'N/A')[:500].replace('<', '&lt;').replace('>', '&gt;')
-        drafted_display = drafted.replace('<', '&lt;').replace('>', '&gt;')
+    # Humanize the drafted response
+    log(f"  [{email_id}] Humanizing draft to remove AI patterns...")
+    humanization = humanize_draft(drafted, style="formal")
+    drafted = humanization["humanized_text"]
+    log(f"  [{email_id}] Humanization: {humanization['changes_summary']}")
 
-        html_body = f"""
+    # Save drafted response for YES approval
+    mark_processed(email_id, "AWAITING_APPROVAL", drafted)
+
+    # Send draft to Craig for approval
+    angle_name, _ = get_angle_name_and_guidance(query_data)
+    angle_tag = angle_name.replace('angle_', '').upper()
+    summary_preview = (query_data.get('summary') or query_data.get('query_text', '') or 'Query')[:60]
+    subject = f"📋 [HARO APPROVAL] {query_data.get('outlet', 'Query')} | {angle_tag} — \"{summary_preview}\""
+
+    query_text_display = (query_data.get('query_text') or 'N/A')[:500].replace('<', '&lt;').replace('>', '&gt;')
+    drafted_display = drafted.replace('<', '&lt;').replace('>', '&gt;')
+
+    html_body = f"""
 <!DOCTYPE html>
 <html>
 <body style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px;">
@@ -427,50 +445,45 @@ Email ID: {email_id} | Processed: {datetime.now().isoformat()}
 </body>
 </html>"""
 
-        send_result = send_email(NOTIFY_EMAIL, subject, html_body)
-        if send_result.get("success"):
-            log(f"  [{email_id}] Draft sent to Craig for approval ✅")
-            drafted_count += 1
-            n8n_event("haro_pitch", "pending_approval",
-                       prospect=query_data.get('outlet', ''),
-                       query=query_data.get('query_text','')[:100],
-                       extra={
-                           "email_id": email_id,
-                           "score": score,
-                           "journalist": query_data.get('journalist_name', ''),
-                           "angle": angle_name,
-                       })
+    send_result = send_email(NOTIFY_EMAIL, subject, html_body)
+    if send_result.get("success"):
+        log(f"  [{email_id}] Draft sent to Craig for approval ✅")
+        drafted_count += 1
+        n8n_event("haro_pitch", "pending_approval",
+                   prospect=query_data.get('outlet', ''),
+                   query=query_data.get('query_text','')[:100],
+                   extra={
+                       "email_id": email_id,
+                       "score": score,
+                       "journalist": query_data.get('journalist_name', ''),
+                       "angle": angle_name,
+                   })
 
-            # ── CRM: Create lead (NEW → REVIEWED → QUALIFIED) ───────────────
-            if CRM_AVAILABLE:
-                try:
-                    reply_to = query_data.get('reply_to', '') or ''
-                    outlet = query_data.get('outlet', 'Unknown')
-                    journalist = query_data.get('journalist_name', '')
-                    query_text = query_data.get('query_text', '') or ''
+        # ── CRM: Create lead (NEW → REVIEWED → QUALIFIED) ───────────────
+        if CRM_AVAILABLE:
+            try:
+                reply_to = query_data.get('reply_to', '') or ''
+                outlet = query_data.get('outlet', 'Unknown')
+                journalist = query_data.get('journalist_name', '')
+                query_text = query_data.get('query_text', '') or ''
 
-                    lead = get_or_create_lead(
-                        source="HARO",
-                        contact_email=reply_to if reply_to else None,
-                        contact_name=journalist or None,
-                        company_name=outlet,
-                        source_query=query_text[:200] or None,
-                        message_excerpt=query_text[:500],
-                        quality_score=max(1, min(5, score // 20)),  # 0-100 → 1-5
-                        notes=f"Angle: {angle_name} | Relevance: {score}/100",
-                    )
-                    # Lead created as NEW → immediately QUALIFIED (HarO pitches are always real opportunities)
-                    update_lead(lead['id'], status="QUALIFIED", lead_type="VALID")
-                    log(f"  CRM: created lead {lead['id']} → QUALIFIED")
-                except CRMErr as e:
-                    log(f"  CRM lead creation failed: {e}")
-        else:
-            log(f"  [{email_id}] Failed to send draft: {send_result.get('error')}")
+                lead = get_or_create_lead(
+                    source="HARO",
+                    contact_email=reply_to if reply_to else None,
+                    contact_name=journalist or None,
+                    company_name=outlet,
+                    source_query=query_text[:200] or None,
+                    message_excerpt=query_text[:500],
+                    quality_score=max(1, min(5, score // 20)),  # 0-100 → 1-5
+                    notes=f"Angle: {angle_name} | Relevance: {score}/100",
+                )
+                # Lead created as NEW → immediately QUALIFIED (HarO pitches are always real opportunities)
+                update_lead(lead['id'], status="QUALIFIED", lead_type="VALID")
+                log(f"  CRM: created lead {lead['id']} → QUALIFIED")
+            except CRMErr as e:
+                log(f"  CRM lead creation failed: {e}")
+    else:
+        log(f"  [{email_id}] Failed to send draft: {send_result.get('error')}")
 
-        processed_count += 1
-
-    log(f"=== Done. Processed: {processed_count}, Drafted: {drafted_count} ===")
-
-
-if __name__ == "__main__":
-    main()
+    processed_count += 1
+    return processed_count, drafted_count

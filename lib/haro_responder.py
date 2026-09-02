@@ -300,6 +300,93 @@ def extract_forwarded_haro_content(email_body: str) -> Optional[dict]:
     return data if data.get('query_text') else None
 
 
+def extract_haro_digest_queries(email_body: str) -> list[dict]:
+    """
+    Parse a modern HARO digest email into a list of individual query dicts.
+
+    Modern HARO emails (post-2024) are a DIGEST: an index of many numbered
+    queries under category headers, followed by a DETAILS section where each
+    query has the full fields (Name / Category / Email / Media Outlet /
+    Deadline). The old single-forwarded-query format is obsolete.
+
+    Returns a list of dicts, each shaped like extract_forwarded_haro_content's
+    output: {journalist_name, outlet, category, deadline, query_text,
+    reply_to, journalist_profile, summary}. Empty list if no queries found.
+    """
+    if not email_body:
+        return []
+
+    # The DETAILS section starts after a row of asterisks (e.g. *********).
+    # Each query block begins with "N) Summary: ...".
+    details = email_body
+    m = re.search(r'\*{5,}', email_body)
+    if m:
+        details = email_body[m.end():]
+
+    # Split into per-query blocks on "N) Summary:" boundaries.
+    blocks = re.split(r'\n\s*\d+\)\s*Summary:', details)
+    queries = []
+    for block in blocks:
+        block = block.strip()
+        if not block:
+            continue
+        q = _parse_digest_query_block(block)
+        if q and q.get('query_text'):
+            queries.append(q)
+    return queries
+
+
+def _parse_digest_query_block(block: str) -> Optional[dict]:
+    """Parse one query block from the HARO digest details section."""
+    data = {}
+
+    # Summary — first line(s) up to the next field label.
+    sm = re.search(r'^(.+?)(?:\n\s*Name:|\n\s*Category:|\n\s*Email:|\n\s*Deadline:|\n\s*Media Outlet:|\n\s*HARO Journalist)', block, re.IGNORECASE | re.DOTALL)
+    if sm:
+        data['summary'] = sm.group(1).strip()
+
+    # Journalist name
+    nm = re.search(r'Name:\s*(.+?)(?:\n|Email:|$)', block, re.IGNORECASE | re.DOTALL)
+    if nm:
+        data['journalist_name'] = nm.group(1).strip()
+
+    # Category
+    cm = re.search(r'Category:\s*(.+?)(?:\n|Query:|$)', block, re.IGNORECASE | re.DOTALL)
+    if cm:
+        data['category'] = cm.group(1).strip()
+
+    # Reply-to email (helpareporter reply+hash, or generic)
+    rm = re.search(r'Email:\s*([^\s<>]+@helpareporter\.com[^\s<>]*)', block, re.IGNORECASE)
+    if rm:
+        data['reply_to'] = rm.group(1).strip()
+    else:
+        rm = re.search(r'Email:\s*([^\s\n<>]+@[^\s\n<>]+)', block, re.IGNORECASE)
+        if rm:
+            data['reply_to'] = rm.group(1).strip()
+
+    # Media Outlet (strip trailing URL + any dangling paren)
+    om = re.search(r'Media Outlet:\s*(.+?)(?:\n|$)', block, re.IGNORECASE | re.DOTALL)
+    if om:
+        outlet = om.group(1).strip()
+        outlet = re.sub(r'https?://\S+', '', outlet).strip()
+        outlet = outlet.rstrip('(').strip()
+        data['outlet'] = outlet
+
+    # Deadline
+    dm = re.search(r'Deadline:\s*(.+?)(?:\n|$)', block, re.IGNORECASE | re.DOTALL)
+    if dm:
+        data['deadline'] = dm.group(1).strip()
+
+    # Journalist profile URL
+    pm = re.search(r'Journalist Profile URL:\s*(https?://[^\s\n]+)', block, re.IGNORECASE)
+    if pm:
+        data['journalist_profile'] = pm.group(1).strip()
+
+    # query_text = summary (the digest's summary IS the query text)
+    data['query_text'] = data.get('summary', '')
+    return data
+
+
 # ============================================================================
 # RELEVANCE FILTERING
 # ============================================================================
