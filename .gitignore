@@ -20,3 +20,33 @@ __pycache__/
 !CRM-SPEC.md
 !README.md
 *.db
+
+# ── VPS-local artifacts (reconciled 2026-09-02) ─────────────────────────────
+# Timestamped backups made during VPS edits — local safety copies, not source.
+*.bak.*
+*.bak2.*
+*.bak
+# Stale duplicate copies of the backend at the crm/ root (real code is crm/backend/)
+crm/App.css
+crm/App.jsx
+crm/api.js
+crm/assets/
+crm/auth.py
+crm/database.py
+crm/index.css
+crm/index.html
+crm/main.jsx
+crm/notifications.py
+crm/package-lock.json
+crm/package.json
+crm/readfix_*.py
+crm/routes/
+crm/seed.py
+crm/uploads/
+crm/vite.config.js
+# Runtime data
+crm/data/
+# VPS custom backup dir
+_vps_custom_backup/
+# Virtualenv
+venv/

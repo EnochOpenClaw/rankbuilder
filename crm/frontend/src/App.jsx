@@ -3,7 +3,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import {
   Layout, Typography, Card, Row, Col, Statistic, Table, Tag, Button,
   Drawer, Descriptions, Timeline, Select, Input, Space, message, Tabs,
-  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, InputNumber, Checkbox, DatePicker, TimePicker, Alert, Grid, Menu, Dropdown
+  Progress, Empty, Spin, Badge, Modal, Form, Divider, Segmented, Rate, InputNumber, Checkbox, DatePicker, TimePicker, Alert, Grid, Menu, Dropdown, Pagination
 } from 'antd'
 import {
   DashboardOutlined, DatabaseOutlined, UserOutlined, LogoutOutlined,
@@ -483,6 +483,66 @@ function formatPhone(v) {
   return `${digits.slice(0,3)} ${digits.slice(3,6)} ${digits.slice(6)}`
 }
 
+
+// ── Mobile lead card (portrait-friendly) ─────────────────────────────────────
+// Rendered instead of the wide table on phones so users don't have to rotate
+// the screen. Each lead is a stacked card: name, contact, source, status, rep,
+// score. Tapping opens the same lead drawer as the table rows.
+function MobileLeadCard({ lead, isUnread, onOpen }) {
+  const unread = isUnread(lead)
+  return (
+    <div
+      onClick={() => onOpen(lead)}
+      style={{
+        background: unread ? '#fff8e1' : '#fff',
+        border: '1px solid ' + (unread ? '#faad14' : '#f0f0f0'),
+        borderLeft: unread ? '4px solid #faad14' : '4px solid transparent',
+        borderRadius: 10,
+        padding: '12px 14px',
+        marginBottom: 10,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        cursor: 'pointer',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 15, color: '#111' }}>
+            {lead.company_name || '—'}
+            {unread && <Badge color="orange" text="NEW" style={{ marginLeft: 6, fontSize: 10 }} />}
+          </div>
+          {lead.contact_name && (
+            <div style={{ fontSize: 13, color: '#666', marginTop: 2 }}>{lead.contact_name}</div>
+          )}
+        </div>
+        <ScoreBadge score={lead.quality_score} />
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+        <StatusTag status={lead.status} />
+        <Tag>{String(lead.source || '').replace('_', ' ')}</Tag>
+        {lead.lead_type && <LeadTypeTag type={lead.lead_type} />}
+        {lead.payment_status === 'RECEIVED' && <Tag color="green">Paid ✓</Tag>}
+        {lead.payment_status === 'PENDING' && <Tag color="orange">Pending</Tag>}
+        {lead.partner_handoff_id && <Tag color="geekblue">🤝 Handed to Partner</Tag>}
+      </div>
+
+      <div style={{ marginTop: 8, fontSize: 12, color: '#888', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {lead.location && <div>📍 {lead.location}</div>}
+        {lead.contact_phone && <div>📞 {lead.contact_phone}</div>}
+        {lead.assigned_to_name && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>👤</span>
+            <Tag color={lead.assigned_to === 'richard@houseofsupreme.co.za' ? 'geekblue' : lead.assigned_to === 'tiaan@houseofsupreme.co.za' ? 'purple' : 'green'} style={{ fontSize: 11, margin: 0 }}>
+              {lead.assigned_to_name}
+            </Tag>
+          </div>
+        )}
+        <div>📅 {dayjs(lead.created_at).format('MMM D, YYYY')}</div>
+      </div>
+    </div>
+  )
+}
+
 export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign, canWrite = true, sources = [], onSourcesChange, currentUserEmail = '' }) {
   const [leads, setLeads] = useState([])
   const [total, setTotal] = useState(0)
@@ -496,6 +556,9 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
   const [createMode, setCreateMode] = useState(false)
   const [repOptions, setRepOptions] = useState([])
   const [viewMode, setViewMode] = useState('table')
+  // Mobile detection — drives the portrait-friendly card list on phones
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
 
   // Partner hand-off (e.g. send a lead to Southern Shutters / Sian)
   const [handoffLead, setHandoffLead] = useState(null)
@@ -522,7 +585,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
   // and managers can instantly spot leads that still need attention.
   const isUnread = (r) =>
     !!r && !!r.assigned_to && !r.archived &&
-    r.read_by !== currentUserEmail
+    !r.read_by_me
 
   // Open a lead in the drawer AND mark it read for the current user, then
   // update it in the local list so the highlight clears immediately.
@@ -873,7 +936,27 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
         />
       </div>
 
-      {viewMode === 'board' ? (
+      {isMobile ? (
+        // Portrait-friendly card list on phones — no horizontal scroll, no rotation needed
+        <div>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+          ) : leads.length === 0 ? (
+            <Empty description="No leads" />
+          ) : (
+            leads.map(l => (
+              <MobileLeadCard key={l.id} lead={l} isUnread={isUnread} onOpen={openLead} />
+            ))
+          )}
+          <div style={{ textAlign: 'center', marginTop: 12 }}>
+            <Pagination
+              current={page} pageSize={pageSize} total={total}
+              onChange={(p, ps) => { setPage(p); setPageSize(ps) }}
+              size="small"
+            />
+          </div>
+        </div>
+      ) : viewMode === 'board' ? (
         <KanbanBoard
           clientId={clientId}
           canWrite={canWrite}
@@ -969,7 +1052,7 @@ const KANBAN_COLUMNS = ['NEW', 'REVIEWED', 'QUALIFIED', 'SENT', 'CONTACTED', 'CO
 function KanbanBoard({ clientId, canWrite = true, onUpdate, onOpenLead, currentUserEmail = '' }) {
   // Unread = assigned but not yet opened by the current user (same rule as the table)
   const isUnread = (lead) =>
-    !!lead.assigned_to && !lead.archived && lead.read_by !== currentUserEmail
+    !!lead.assigned_to && !lead.archived && !lead.read_by_me
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
 
