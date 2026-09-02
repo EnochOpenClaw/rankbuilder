@@ -290,7 +290,20 @@ def get_recent_craig_replies(lookback_hours: int = 48) -> list:
             body = rb.stdout
             if rb.returncode == 0:
                 try:
-                    body = _json.loads(rb.stdout).get("text_body") or ""
+                    d = _json.loads(rb.stdout)
+                    parts = d.get("parts") or []
+                    tb = d.get("text_body") or []
+                    chunks = []
+                    for idx in tb:
+                        if isinstance(idx, int) and 0 <= idx < len(parts):
+                            b = parts[idx].get("body")
+                            if isinstance(b, dict):
+                                t = b.get("Text") or b.get("Html") or ""
+                                if isinstance(t, str):
+                                    chunks.append(t)
+                            elif isinstance(b, str):
+                                chunks.append(b)
+                    body = "\n".join(chunks)
                 except Exception:
                     pass
             return (env_id, body)

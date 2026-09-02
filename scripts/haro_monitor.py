@@ -487,3 +487,6 @@ Email ID: {email_id} | Processed: {datetime.now().isoformat()}
 
     processed_count += 1
     return processed_count, drafted_count
+
+if __name__ == "__main__":
+    main()

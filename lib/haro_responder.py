@@ -211,7 +211,12 @@ def get_unread_envelopes():
 
 
 def read_email(email_id: str) -> str:
-    """Read full email body via himalaya (v2 --json, extracts text_body)."""
+    """Read full email body via himalaya (v2 --json).
+
+    himalaya v2 returns: {"text_body": [<part indices>], "parts": [{body: {"Text": ...}}]}.
+    text_body is a list of indices into parts; each part's body is a dict with
+    a "Text" key. We join the referenced parts' text.
+    """
     result = subprocess.run(
         ["himalaya", "message", "read", email_id, "--json"],
         capture_output=True, text=True, cwd=Path.home()
@@ -220,8 +225,26 @@ def read_email(email_id: str) -> str:
         return ""
     try:
         data = json.loads(result.stdout)
-        body = data.get("text_body") or ""
-        return body if isinstance(body, str) else str(body)
+        parts = data.get("parts") or []
+        text_body = data.get("text_body") or []
+        chunks = []
+        for idx in text_body:
+            if isinstance(idx, int) and 0 <= idx < len(parts):
+                b = parts[idx].get("body")
+                if isinstance(b, dict):
+                    t = b.get("Text") or b.get("Html") or ""
+                    if isinstance(t, str):
+                        chunks.append(t)
+                elif isinstance(b, str):
+                    chunks.append(b)
+        text = "\n".join(chunks)
+        if text.strip():
+            return text
+        # Fallback: html_body if present
+        hb = data.get("html_body")
+        if isinstance(hb, str):
+            return hb
+        return ""
     except (json.JSONDecodeError, TypeError):
         # fallback: raw stdout
         return result.stdout
