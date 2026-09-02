@@ -146,6 +146,7 @@ def _lead_to_response(lead: Lead) -> LeadResponse:
         estimated_deal_value=lead.estimated_deal_value,
         created_by=lead.created_by,
         payment_status=lead.payment_status,
+        payment_received_at=lead.payment_received_at,
         notes=lead.notes,
         archived=lead.archived,
         archived_at=lead.archived_at,
@@ -792,6 +793,11 @@ def update_lead(
         # Track conversion
         if field == "conversion_status" and value == "CONVERTED":
             lead.converted_at = datetime.utcnow()
+
+        # Track payment received — starts the install/quiet window before the
+        # post-install follow-up. Only set once (don't overwrite on re-save).
+        if field == "payment_status" and value == "RECEIVED" and not lead.payment_received_at:
+            lead.payment_received_at = datetime.utcnow()
 
     if changes:
         lead.updated_at = datetime.utcnow()

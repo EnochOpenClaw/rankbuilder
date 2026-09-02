@@ -19,14 +19,14 @@ API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 MODEL = os.environ.get("AI_DRAFT_MODEL", "openai/gpt-4o-mini")
 BASE = "https://openrouter.ai/api/v1/chat/completions"
 
-SYSTEM_PROMPT = """You are an AI sales assistant for RankBuilder (FortressBlinds), a South African company that supplies and installs custom aluminium security shutters, insect screens and window blinds. A new lead has just come in.
+SYSTEM_PROMPT = """You are an AI sales assistant for House of Supreme, a South African company that supplies and installs custom aluminium security shutters, insect screens and window blinds. A new lead has just come in.
 
 Write a warm, professional reply to this lead. Keep it under 150 words. Structure:
 1. Acknowledge their enquiry personally
 2. Mention something relevant to their request
 3. State you will arrange a measure/quote
 4. Ask ONE simple qualifying question (budget or timeline)
-5. Sign as: Craig, FortressBlinds
+5. Sign as the salesperson's name provided (the current CRM user)
 
 Tone: professional South African small-business, friendly but not pushy."""
 
@@ -46,7 +46,7 @@ def _load_key():
     return API_KEY
 
 
-def draft_reply(lead) -> dict:
+def draft_reply(lead, user_name: str = "", user_email: str = "") -> dict:
     """Generate an AI draft reply for a lead. Returns {draft, error}."""
     key = _load_key()
     if not key:
@@ -57,6 +57,8 @@ def draft_reply(lead) -> dict:
     location = lead.location or ""
     enquiry = lead.message_excerpt or lead.source_query or "a quote enquiry"
     source = lead.source.value if hasattr(lead.source, "value") else str(lead.source or "")
+    # The salesperson signing the reply = the current CRM user (not hardcoded).
+    signer = user_name or user_email or "the House of Supreme team"
 
     user_prompt = f"""
 Lead details:
@@ -65,6 +67,8 @@ Lead details:
 - Location: {location}
 - Source: {source}
 - Enquiry: {enquiry}
+
+Sign the reply as: {signer}
 
 Write the reply now.
 """
@@ -100,13 +104,13 @@ Write the reply now.
         return {"draft": None, "error": f"AI request failed: {str(e)[:200]}"}
 
 
-def draft_for_lead_id(lead_id: str) -> dict:
+def draft_for_lead_id(lead_id: str, user_name: str = "", user_email: str = "") -> dict:
     """Load a lead by id and generate a draft."""
     db = SessionLocal()
     try:
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
         if not lead:
             return {"draft": None, "error": "Lead not found"}
-        return draft_reply(lead)
+        return draft_reply(lead, user_name=user_name, user_email=user_email)
     finally:
         db.close()

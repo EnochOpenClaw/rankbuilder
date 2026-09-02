@@ -224,6 +224,8 @@ class Lead(Base):
     estimated_deal_value = Column(Float, nullable=True)  # est. value before quote (R)
     created_by = Column(String(255), nullable=True)  # email of user who created the lead
     payment_status = Column(String(20), nullable=True)  # PENDING / RECEIVED
+    payment_received_at = Column(DateTime, nullable=True)  # when payment_status became RECEIVED (starts install/quiet window)
+    post_install_followup_sent_at = Column(DateTime, nullable=True)  # when the 7-day post-install follow-up was sent
 
     # Internal
     notes = Column(Text, nullable=True)

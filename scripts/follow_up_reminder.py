@@ -56,6 +56,11 @@ log = logging.getLogger("crm.followup")
 STAGE_1_HOURS = int(os.environ.get("FOLLOW_UP_REMINDER_HOURS", "24"))  # rep reminder
 STAGE_2_HOURS = int(os.environ.get("FOLLOW_UP_STAGE2_HOURS", "48"))     # rep, firmer
 STAGE_3_HOURS = int(os.environ.get("FOLLOW_UP_STAGE3_HOURS", "72"))     # managers
+# ── Payment-received quiet window ────────────────────────────────────────────
+# Once a lead's payment is RECEIVED (job won, install in progress), suppress the
+# follow-up/escalation nudges for this many days. After the window the normal
+# ladder can resume if the lead is still open. Default 7 days (1 week).
+PAYMENT_QUIET_DAYS = int(os.environ.get("PAYMENT_QUIET_DAYS", "7"))
 MANAGER_EMAILS = [
     ("robin@houseofsupreme.co.za", "Robin Bras"),
     ("vanessa@houseofsupreme.co.za", "Vanessa Bras"),
@@ -174,6 +179,16 @@ def main():
 
         sent = {"stage1": 0, "stage2": 0, "stage3": 0}
         for lead in leads:
+            # ── Payment-received quiet window ──────────────────────────────
+            # If payment was received within the last PAYMENT_QUIET_DAYS, the job
+            # is in install/production — don't nag the team about follow-up yet.
+            if lead.payment_status == "RECEIVED" and lead.payment_received_at:
+                pr = lead.payment_received_at
+                if pr.tzinfo is None:
+                    pr = pr.replace(tzinfo=timezone.utc)
+                if (now - pr).total_seconds() < PAYMENT_QUIET_DAYS * 86400:
+                    continue  # in quiet window — skip follow-up nudges
+
             # Reference time: last follow-up if present, else creation
             ref = lead.last_follow_up_at or lead.created_at
             if ref is None:

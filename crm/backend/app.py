@@ -163,6 +163,15 @@ def startup():
             if "must_change_password" not in ucols:
                 conn6.execute(text("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 1"))
         print("[migrate] users.must_change_password ensured")
+        # leads.payment_received_at — timestamp when payment_status became RECEIVED
+        # (starts the install/quiet window before the post-install follow-up)
+        pcols = {c["name"] for c in insp.get_columns("leads")}
+        with engine.begin() as conn7:
+            if "payment_received_at" not in pcols:
+                conn7.execute(text("ALTER TABLE leads ADD COLUMN payment_received_at DATETIME"))
+            if "post_install_followup_sent_at" not in pcols:
+                conn7.execute(text("ALTER TABLE leads ADD COLUMN post_install_followup_sent_at DATETIME"))
+        print("[migrate] leads.payment_received_at / post_install_followup_sent_at ensured")
         # leads — older backups missing columns added in later code (address,
         # sales-value, SLA-escalation fields). Additive + idempotent.
         lcols2 = {c["name"] for c in insp.get_columns("leads")}

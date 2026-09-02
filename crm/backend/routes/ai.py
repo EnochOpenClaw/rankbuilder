@@ -28,5 +28,9 @@ def draft_reply(
     payload: DraftRequest,
     current_user: User = Depends(get_current_user),
 ):
-    """Generate an AI draft reply for a lead."""
-    return draft_for_lead_id(payload.lead_id)
+    """Generate an AI draft reply for a lead, signed by the current user."""
+    return draft_for_lead_id(
+        payload.lead_id,
+        user_name=current_user.full_name if current_user else "",
+        user_email=current_user.email if current_user else "",
+    )

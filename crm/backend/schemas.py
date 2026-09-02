@@ -188,6 +188,7 @@ class LeadResponse(BaseModel):
     estimated_deal_value: Optional[float]
     created_by: Optional[str]
     payment_status: Optional[str]
+    payment_received_at: Optional[datetime] = None
     notes: Optional[str]
     archived: Optional[int] = 0
     archived_at: Optional[datetime] = None
