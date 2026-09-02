@@ -18,11 +18,11 @@ from pitch_templates import select_angle, get_angle_name_and_guidance, build_pit
 from haro_responder import read_email, extract_forwarded_haro_content, is_relevant_query, score_relevance, humanize_draft
 from blocklist import is_blocked, is_buyer, block_email, add_buyer
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME, NOTIFY_EMAIL
-from lib.n8n_webhook import send_event as n8n_event
+from n8n_webhook import send_event as n8n_event
 
 # CRM integration
 try:
-    from lib.crm_client import get_or_create_lead, update_lead, CRMError as CRMErr
+    from crm_client import get_or_create_lead, update_lead, CRMError as CRMErr
     CRM_AVAILABLE = True
 except ImportError:
     CRM_AVAILABLE = False

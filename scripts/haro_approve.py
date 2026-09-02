@@ -17,7 +17,7 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'lib'))
 from credentials import BREVO_API_KEY, BREVO_ENDPOINT, SENDER_EMAIL, SENDER_NAME
-from lib.n8n_webhook import send_event as n8n_event
+from n8n_webhook import send_event as n8n_event
 
 # CRM integration — create lead when pitch is sent
 try:
