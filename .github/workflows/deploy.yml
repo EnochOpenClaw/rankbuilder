@@ -1,0 +1,87 @@
+name: Deploy CRM Frontend
+
+# Deploys the RankBuilder CRM frontend to the VPS web root on push to main.
+# This is the "always available" wiring for crm/deploy-crm-frontend.sh:
+# the workflow copies the (hardened) deploy script to the VPS and runs it,
+# which builds the React app, deploys to /var/www/crm-frontend, fixes
+# permissions (dirs 755 / files 644 / www-data) and verifies the JS bundle
+# returns HTTP 200 — preventing the blank-page 403 bug.
+#
+# Required repo secrets (Actions > Secrets):
+#   VPS_HOST        = 161.97.142.87
+#   VPS_USER        = root
+#   VPS_SSH_KEY     = private key for fortressblinds_vps_key (PEM, key-only auth)
+#
+# Note: the VPS is SSH key-only (password auth disabled 2026-08-06).
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'crm/frontend/**'
+      - 'crm/deploy-crm-frontend.sh'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:  # allow manual trigger
+
+jobs:
+  deploy-frontend:
+    name: Deploy CRM frontend to VPS
+    runs-on: ubuntu-latest
+    # Fail loudly rather than silently shipping a broken/degraded page.
+    if: github.repository == 'EnochOpenClaw/rankbuilder'
+    concurrency:
+      group: deploy-crm-frontend
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          # Fail fast if secrets aren't configured yet.
+          if [ -z "$VPS_SSH_KEY" ] || [ -z "$VPS_HOST" ]; then
+            echo "::error::Missing required secrets VPS_SSH_KEY / VPS_HOST. Configure them in repo Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "VPS_HOST=$VPS_HOST" >> "$GITHUB_ENV"
+          echo "VPS_USER=${VPS_USER:-root}" >> "$GITHUB_ENV"
+
+      - name: Copy deploy script to VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              "$VPS_USER@$VPS_HOST" \
+              "mkdir -p /root/bin"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              crm/deploy-crm-frontend.sh "$VPS_USER@$VPS_HOST:/root/bin/deploy-crm-frontend.sh"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              "$VPS_USER@$VPS_HOST" \
+              "chmod +x /root/bin/deploy-crm-frontend.sh && echo 'deploy script installed'"
+
+      - name: Run hardened deploy
+        run: |
+          # RUN_BUILD=1: build the React app, copy to /var/www/crm-frontend,
+          # fix permissions, and verify the JS bundle over HTTPS.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              "$VPS_USER@$VPS_HOST" \
+              "RUN_BUILD=1 /root/bin/deploy-crm-frontend.sh"
+
+      - name: Verify live site
+        run: |
+          # Belt-and-braces: confirm the dashboard + its JS bundle serve 200.
+          DOMAIN="dashboard.fortressblinds.co.za"
+          HTML=$(curl -s --max-time 15 "https://${DOMAIN}/" || echo '')
+          JS=$(echo "$HTML" | grep -oE '/assets/[^"]+\.js' | head -1)
+          if [ -n "$JS" ]; then
+            echo "Deployed JS bundle: $JS"
+            curl -sf -o /dev/null -w 'JS bundle: HTTP %{http_code}\n' \
+                 "https://${DOMAIN}${JS}" && echo "✔ Live site serving correctly"
+          else
+            echo "Warning: could not extract JS bundle from live page."
+          fi
