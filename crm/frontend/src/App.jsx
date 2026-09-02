@@ -1633,6 +1633,7 @@ function LeadDrawer({ lead, open, onClose, onUpdate, canWrite = true, repOptions
               <Select.Option value="+91">🇮🇳 +91</Select.Option>
               <Select.Option value="+234">🇳🇬 +234</Select.Option>
               <Select.Option value="+254">🇰🇪 +254</Select.Option>
+              <Select.Option value="+263">🇿🇼 +263</Select.Option>
             </Select>
             <Input
               value={contactPhone}
@@ -3890,11 +3891,11 @@ export default function App() {
       >
         <p style={{ color: '#555' }}>Choose a guide to get started:</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Card size="small" hoverable onClick={() => window.open('/help/agent', '_blank')}>
+          <Card size="small" hoverable onClick={() => window.open('/help/agent.html', '_blank')}>
             <Text strong>👤 Agent Guide</Text>
             <div style={{ color: '#888', fontSize: 12 }}>For sales reps — working leads, quotes, AI drafts, scoring, commissions</div>
           </Card>
-          <Card size="small" hoverable onClick={() => window.open('/help/admin', '_blank')}>
+          <Card size="small" hoverable onClick={() => window.open('/help/admin.html', '_blank')}>
             <Text strong>🛠️ Admin Guide</Text>
             <div style={{ color: '#888', fontSize: 12 }}>For managers — roles, users, sources, scoring rules, SLA, reports</div>
           </Card>

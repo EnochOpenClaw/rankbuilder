@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Guide — RankBuilder CRM</title>
+<style>
+  :root {
+    --navy: #001529;
+    --bg: #f0f2f5;
+    --card: #ffffff;
+    --accent: #1677ff;
+    --text: #1f1f1f;
+    --muted: #888;
+    --border: #f0f0f0;
+    --green: #52c41a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  header {
+    background: var(--navy);
+    color: #fff;
+    padding: 20px 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header .inner { max-width: 860px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  header .badge { font-size: 11px; background: #1677ff; color: #fff; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  header a { color: #fff; text-decoration: none; font-size: 13px; background: #ffffff22; padding: 6px 12px; border-radius: 6px; }
+  header a:hover { background: #ffffff33; }
+
+  main { max-width: 860px; margin: 24px auto; padding: 0 16px; }
+  .card {
+    background: var(--card);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    border: 1px solid var(--border);
+  }
+  h2 { font-size: 18px; margin-bottom: 12px; color: var(--navy); display: flex; align-items: center; gap: 8px; }
+  h3 { font-size: 15px; margin: 14px 0 6px; color: #333; }
+  p { margin-bottom: 10px; }
+  ul { margin: 0 0 10px 20px; }
+  li { margin-bottom: 4px; }
+  code {
+    background: #f5f5f5; padding: 2px 6px; border-radius: 4px;
+    font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.9em; color: #c7254e;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  th { background: #fafafa; font-weight: 600; }
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0; }
+  .flow span {
+    background: #e6f4ff; color: #0958d9; border: 1px solid #91caff;
+    padding: 3px 10px; border-radius: 14px; font-size: 12px; font-weight: 600;
+  }
+  .flow .arrow { background: none; border: none; color: var(--muted); }
+  .tip {
+    background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 6px;
+    padding: 10px 14px; margin: 10px 0; font-size: 14px;
+  }
+  .tip strong { color: #389e0d; }
+  .route { background: #f6f6f6; border-radius: 6px; padding: 6px 10px; display: inline-block; margin-bottom: 6px; font-size: 13px; }
+  footer { max-width: 860px; margin: 24px auto 40px; padding: 0 16px; color: var(--muted); font-size: 13px; }
+  @media (max-width: 640px) { .card { padding: 16px; } header h1 { font-size: 17px; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="inner">
+    <h1>🛠️ Admin Guide <span class="badge">RankBuilder CRM</span></h1>
+    <a href="/">← Back to CRM</a>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <p>For managers: <strong>roles</strong>, <strong>users</strong>, <strong>lead sources</strong>, <strong>scoring rules</strong>, <strong>SLA</strong>, <strong>reports</strong>.</p>
+  </div>
+
+  <div class="card">
+    <h2>1. Roles</h2>
+    <p>Four roles control what each person can see and do:</p>
+    <table>
+      <tr><th>Role</th><th>What they can do</th></tr>
+      <tr><td><strong>SYSTEM_ADMIN</strong></td><td>Everything — manage clients, users, all leads, all reports</td></tr>
+      <tr><td><strong>CLIENT_ADMIN</strong></td><td>Manage one client: users, sources, scoring, reports, campaigns</td></tr>
+      <tr><td><strong>AGENT</strong></td><td>Work leads (view/edit assigned or created leads, log follow-ups, quotes, AI drafts)</td></tr>
+      <tr><td><strong>VIEWER</strong></td><td>Read-only — see dashboards and leads, no edits</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>2. Users</h2>
+    <p>Add users under the <strong>Users</strong> tab (admin only). Assign a role and link them to the correct client. Agents should be linked to their client so they see the right leads.</p>
+  </div>
+
+  <div class="card">
+    <h2>3. Lead Sources</h2>
+    <p>When creating/editing a lead, pick the <strong>Source</strong> that reflects where it came from:</p>
+    <ul>
+      <li><strong>HARO</strong> / <strong>CONNECTIVELY</strong> — journalist/PR query responses</li>
+      <li><strong>GUEST_OUTREACH</strong> — guest-post / outreach campaigns</li>
+      <li><strong>WEBSITE</strong> — website enquiry or Contact Form 7 submission</li>
+      <li><strong>FACEBOOK</strong> — social enquiry</li>
+      <li><strong>DIRECT_MAIL</strong> — physical mail / flyer drop</li>
+      <li><strong>CALL_IN</strong> — inbound phone call</li>
+      <li><strong>WEB_SEARCH</strong> — prospecting research</li>
+      <li><strong>MANUAL</strong> — anything entered by hand (use the source_detail field to say where)</li>
+    </ul>
+    <div class="tip"><strong>Tip for agents:</strong> if a lead comes from the HOS website, pick <strong>WEBSITE</strong> directly — don't use MANUAL. Reserve MANUAL for genuinely manual entries (paper, referrals, etc.) and note the origin in source_detail.</div>
+  </div>
+
+  <div class="card">
+    <h2>4. Pipeline &amp; Status</h2>
+    <div class="flow">
+      <span>NEW</span><span class="arrow">→</span><span>REVIEWED</span><span class="arrow">→</span>
+      <span>QUALIFIED</span><span class="arrow">→</span><span>SENT</span><span class="arrow">→</span>
+      <span>CONTACTED</span><span class="arrow">→</span><span>CONVERTED / LOST</span>
+    </div>
+    <p>Each lead also has a <strong>Type</strong> (VALID / INVALID / FOLLOW_UP) and a <strong>payment_status</strong> (PENDING / RECEIVED) once it moves to production.</p>
+  </div>
+
+  <div class="card">
+    <h2>5. Auto-Assignment (region routing)</h2>
+    <p>Leads are auto-assigned to reps by location:</p>
+    <table>
+      <tr><th>Region</th><th>Assigned rep</th></tr>
+      <tr><td>Johannesburg / Gauteng</td><td>Tiaan</td></tr>
+      <tr><td>Cape Town / Western Cape</td><td>Richard</td></tr>
+      <tr><td>All other regions</td><td>Craig (default)</td></tr>
+    </table>
+    <p>Unrecognised regions fall back to the default rep.</p>
+  </div>
+
+  <div class="card">
+    <h2>6. Follow-Up SLA &amp; Escalation</h2>
+    <p>Agents should log every contact attempt as a follow-up row. The system tracks follow-up count and timestamps so you can see which leads are being neglected. A fresh follow-up resets the escalation ladder.</p>
+    <p>Default SLA thresholds:</p>
+    <ul>
+      <li><strong>NEW</strong> not reviewed within <code>4h</code> — SLA breach</li>
+      <li><strong>QUALIFIED</strong> not moved within <code>24h</code> — SLA breach</li>
+      <li><strong>SENT</strong> not followed within <code>48h</code> — SLA breach</li>
+      <li><strong>Stale</strong> — no activity in <code>3 days</code></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>7. Reports</h2>
+    <p>The <strong>Dashboard</strong> tab gives you the pipeline funnel, rep productivity and lead flow. Use the source breakdown to see which channels generate the best leads.</p>
+  </div>
+
+  <div class="card">
+    <h2>8. Clients (multi-tenant)</h2>
+    <p>Under <strong>Clients</strong> (SYSTEM_ADMIN only) you can provision a new client with its own admin login, API key and campaign. Each client's data is isolated.</p>
+  </div>
+
+  <div class="card">
+    <h2>Quick Tips</h2>
+    <div class="tip"><strong>Keep sources accurate</strong> — they drive all channel reporting.</div>
+    <div class="tip"><strong>Monitor follow-up counts:</strong> many leads go cold because nobody logged a second call.</div>
+    <div class="tip"><strong>Mark leads LOST early</strong> if they're invalid — don't leave them hanging in the funnel.</div>
+  </div>
+
+  <div class="card">
+    <p style="margin:0;color:var(--muted);font-size:14px;">Need help? Contact your system admin.</p>
+  </div>
+</main>
+
+<footer>RankBuilder CRM — Admin Guide · source: <code>crm/frontend/help-admin.md</code></footer>
+
+</body>
+</html>
