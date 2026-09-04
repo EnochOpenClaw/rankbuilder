@@ -47,7 +47,12 @@ def check_sla(db):
     now = datetime.utcnow()
     cnew = now - timedelta(hours=NH)
     cstale = now - timedelta(days=SD)
-    for lead in db.query(Lead).filter(Lead.conversion_status.is_(None), Lead.partner_handoff_id.is_(None)).all():
+    for lead in db.query(Lead).filter(
+        Lead.conversion_status.is_(None),
+        Lead.partner_handoff_id.is_(None),
+        Lead.status.notin_(["CONVERTED", "LOST"]),  # terminal deals stop pinging
+        Lead.archived == 0,  # archived deals stop pinging
+    ).all():
         # (skip leads handed off to a partner — they're no longer this rep's to action)
         # ── Payment-received quiet window ──────────────────────────────────
         # If payment was received within the last PAYMENT_QUIET_DAYS, the job is

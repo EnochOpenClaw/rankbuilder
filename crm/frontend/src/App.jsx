@@ -1074,7 +1074,13 @@ function KanbanBoard({ clientId, canWrite = true, onUpdate, onOpenLead, currentU
     // Optimistic update
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: newStatus } : l))
     try {
-      await api.updateLead(leadId, { status: newStatus })
+      // Dragging to a terminal column also records the conversion outcome so
+      // SLA/follow-up crons stop pinging the deal.
+      const payload = { status: newStatus }
+      if (newStatus === 'LOST' || newStatus === 'CONVERTED') {
+        payload.conversion_status = newStatus
+      }
+      await api.updateLead(leadId, payload)
       onUpdate && onUpdate()
     } catch (e) {
       message.error('Move failed: ' + e.message)

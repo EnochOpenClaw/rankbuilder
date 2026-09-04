@@ -111,6 +111,13 @@ def main():
                 r.status = "DISMISSED"
                 continue
 
+            # Terminal/archived deals stop pinging — dismiss their reminders
+            st = lead.status.value if hasattr(lead.status, "value") else str(lead.status)
+            if st in ("CONVERTED", "LOST") or lead.archived:
+                r.status = "DISMISSED"
+                log.info("Reminder %s dismissed — lead %s is %s/archived", r.id, lead.id, st)
+                continue
+
             to_email = lead.assigned_to or r.created_by
             to_name = lead.assigned_to_name or to_email or ""
             if not to_email:

@@ -172,6 +172,7 @@ def main():
             .filter(
                 Lead.assigned_to.isnot(None),
                 Lead.status.notin_([LeadStatus.CONVERTED, LeadStatus.LOST]),
+                Lead.archived == 0,  # archived deals stop pinging
                 Lead.partner_handoff_id.is_(None),  # skip leads handed off to a partner
             )
             .all()
