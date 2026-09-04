@@ -36,6 +36,8 @@ RUN mkdir -p /root/.config/himalaya && cp himalaya/config.toml /root/.config/him
 # Health check server
 COPY run_mode.sh /app/run_mode.sh
 RUN chmod +x /app/run_mode.sh
+# Ensure log + state dirs exist (scripts write here; fresh containers lack them)
+RUN mkdir -p /app/scripts/logs /app/scripts/state
 # Symlink python3 -> python (crontabs reference 'python' not 'python3')
 RUN ln -sf /usr/local/bin/python3 /usr/local/bin/python
 
