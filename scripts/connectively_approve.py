@@ -274,27 +274,27 @@ def send_confirmation(to_email: str, action: str, query_id: str, details: str = 
 # ============================================================================
 
 def get_recent_emails(limit: int = 10) -> list:
-    """Get recent emails from inbox via himalaya."""
+    """Get recent emails from inbox via himalaya (v2 --json format)."""
     result = subprocess.run(
-        ["himalaya", "envelope", "list", "-o", "plain"],
+        ["himalaya", "envelope", "list", "--json"],
         capture_output=True, text=True, timeout=30
     )
     emails = []
-    for line in result.stdout.split('\n'):
-        line = re.sub(r'\x1b\[[0-9;]*[mK]', '', line)
-        if not line.startswith('|') or '---' in line or 'WARN' in line:
+    try:
+        data = json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return emails
+    for env in data.get("envelopes", []):
+        if not isinstance(env, dict):
             continue
-        if '+00:00' not in line:
+        id_ = str(env.get("id", "")).strip()
+        if not id_.isdigit():
             continue
-        try:
-            parts = line.split('|')
-            if len(parts) >= 5:
-                id_ = parts[1].strip()
-                subject = parts[2].strip()
-                sender = parts[3].strip()
-                emails.append({"id": id_, "subject": subject, "sender": sender})
-        except:
-            pass
+        from_list = env.get("from") or []
+        sender = ""
+        if from_list and isinstance(from_list, list) and isinstance(from_list[0], dict):
+            sender = from_list[0].get("email", "") or from_list[0].get("name", "")
+        emails.append({"id": id_, "subject": env.get("subject", "") or "", "sender": sender})
     return emails[:limit]
 
 
