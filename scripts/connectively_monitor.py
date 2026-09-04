@@ -211,15 +211,20 @@ Write ONLY the email response. No preamble. No explanation."""
 # PLAYWRIGHT (Python Playwright — no Node.js required)
 # ============================================================================
 
-def _make_stealth_browser(p):
-    from playwright_stealth import stealth
+# NOTE (2026-09-04): playwright-stealth was REMOVED from the browser setup.
+# Vercel's Security Checkpoint (Kasada) flags the stealth-patched browser with
+# "Failed to verify your browser / Code 11", while a plain Chromium context
+# with a realistic UA/viewport/locale passes the JS challenge and auto-resolves
+# after a few seconds. Stealth made us MORE detectable, not less.
+
+def _make_browser(p):
+    """Launch a plain Chromium context with realistic fingerprint. No stealth."""
     browser = p.chromium.launch(
         headless=True,
         args=[
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-blink-features=AutomationControlled',
-            '--disable-webgl',
             '--disable-dev-shm-usage',
         ]
     )
@@ -234,22 +239,34 @@ def _make_stealth_browser(p):
         },
     )
     page = ctx.new_page()
-    s = stealth.Stealth(
-        navigator_webdriver=True, navigator_plugins=True,
-        navigator_user_agent=True, navigator_hardware_concurrency=True,
-        navigator_languages=True, navigator_platform=True,
-        webgl_vendor=True, chrome_load_times=True,
-        iframe_content_window=True,
-    )
-    s.apply_stealth_sync(page)
-    ctx._browser = browser
     return browser, ctx, page
+
+
+def _wait_past_checkpoint(page, max_wait: int = 20) -> bool:
+    """Wait for Vercel Security Checkpoint to auto-resolve.
+
+    The checkpoint is a JS challenge that passes on its own after a few seconds
+    for a real (non-stealth) Chromium. Returns True once the page title is no
+    longer the checkpoint, False if it persists past max_wait.
+    """
+    waited = 0
+    while waited < max_wait:
+        try:
+            title = page.evaluate('() => document.title')
+        except Exception:
+            title = ''
+        if 'checkpoint' not in title.lower() and 'security' not in title.lower():
+            return True
+        page.wait_for_timeout(2000)
+        waited += 2
+    return False
+
 
 def run_playwright(script_fn, timeout: int = 60) -> dict:
     from playwright.sync_api import sync_playwright
     try:
         with sync_playwright() as p:
-            browser, ctx, page = _make_stealth_browser(p)
+            browser, ctx, page = _make_browser(p)
             result = script_fn(p, ctx, page)
             browser.close()
             return result
@@ -259,14 +276,17 @@ def run_playwright(script_fn, timeout: int = 60) -> dict:
 def playwright_login_and_scrape_questions() -> dict:
     def _run(p, ctx, page):
         page.goto('https://www.connectively.us/login', wait_until='domcontentloaded', timeout=20000)
-        page.wait_for_timeout(3000)
+        # Vercel Security Checkpoint auto-resolves after a few seconds for a
+        # real (non-stealth) Chromium. Wait for it instead of bailing immediately.
+        if not _wait_past_checkpoint(page, max_wait=20):
+            page_title = page.evaluate('() => document.title')
+            log(f"Login page: title='{page_title}', URL={page.evaluate('() => window.location.href')}")
+            return {'error': 'Blocked by bot protection: ' + page_title}
         page_title = page.evaluate('() => document.title')
         log(f"Login page: title='{page_title}', URL={page.evaluate('() => window.location.href')}")
-        if 'vercel' in page_title.lower() or 'security' in page_title.lower():
-            return {'error': 'Blocked by bot protection: ' + page_title}
         try:
             page.wait_for_selector('input[type="email"], input[name="email"], input[id="email"]',
-                                   timeout=10000, state='attached')
+                                   timeout=15000, state='attached')
         except Exception as e:
             return {'error': 'Form elements not found: ' + str(e)}
         email_field = (page.locator('input[type="email"]').first
@@ -319,7 +339,7 @@ def playwright_get_query_text(question_url: str, token: str) -> dict:
             'path': '/'
         }])
         page.goto(question_url, wait_until='domcontentloaded', timeout=15000)
-        page.wait_for_timeout(5000)
+        _wait_past_checkpoint(page, max_wait=20)
         question_text = page.evaluate(("() => { " +
             "var selectors = ['[class*=question]', '[class*=Query]', 'h1', 'h2', " +
             "'div[class*=Card]', 'div[class*=Content]']; " +
@@ -354,7 +374,7 @@ def playwright_submit_answer(question_url: str, answer_text: str, token: str) ->
             'path': '/'
         }])
         page.goto(question_url, wait_until='domcontentloaded', timeout=15000)
-        page.wait_for_timeout(5000)
+        _wait_past_checkpoint(page, max_wait=20)
         textarea = page.locator('textarea, [role="textbox"]').first
         if textarea.count() == 0:
             return {'success': False, 'error': 'No textarea found'}

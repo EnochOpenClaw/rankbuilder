@@ -26,8 +26,22 @@ SENDER_NAME = "Craig Pauls"
 NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL", "craig@fortressblinds.co.za")
 
 # Connectively login credentials
+# Prefer env vars (set in Coolify/container), but fall back to the local
+# gitignored lib/credentials.json so the correct account is used even when
+# the env var is stale/wrong (e.g. agentdevelopmentops@gmail.com which does
+# not exist on Connectively).
 CONNECTIVELY_EMAIL = os.environ.get("CONNECTIVELY_EMAIL", "")
 CONNECTIVELY_PASSWORD = os.environ.get("CONNECTIVELY_PASSWORD", "")
+if not CONNECTIVELY_EMAIL or not CONNECTIVELY_PASSWORD:
+    _cred_file = Path(__file__).parent / "credentials.json"
+    if _cred_file.exists():
+        try:
+            import json as _json
+            _c = _json.loads(_cred_file.read_text()).get("connectively", {})
+            CONNECTIVELY_EMAIL = CONNECTIVELY_EMAIL or _c.get("email", "")
+            CONNECTIVELY_PASSWORD = CONNECTIVELY_PASSWORD or _c.get("password", "")
+        except Exception:
+            pass
 
 # LinkedIn OAuth (for posting to personal profile via API)
 # Client ID and Secret from: linkedin.com/developers → your app → Auth
