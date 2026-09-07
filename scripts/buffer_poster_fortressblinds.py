@@ -52,6 +52,21 @@ def is_error(r):
     if not isinstance(r, dict): return False, None
     err = r.get("error")
     if err: return True, str(err) if isinstance(err, str) else err.get("message", str(err))
+    # Buffer MCP returns API errors inside result.content[0].text as JSON
+    # (e.g. {"error":"...","httpCode":400}) with result.isError=true.
+    try:
+        res = r.get("result") or {}
+        if res.get("isError"):
+            text = res.get("content", [{}])[0].get("text", "")
+            try:
+                d = json.loads(text)
+                if isinstance(d, dict) and d.get("error"):
+                    return True, str(d["error"])
+            except Exception:
+                pass
+            return True, text[:200]
+    except Exception:
+        pass
     return False, None
 
 def get_org():
@@ -77,11 +92,16 @@ def get_linkedin_channel(org_id):
 def create_post(channel_id, text, due_at=None):
     args = {
         "channelId": channel_id,
-        "schedulingType": "automatic",
         "text": text,
     }
     if due_at:
+        # A due date requires customScheduled mode; addToQueue rejects dueAt.
+        args["mode"] = "customScheduled"
         args["dueAt"] = due_at.isoformat()
+        args["schedulingType"] = "automatic"
+    else:
+        args["mode"] = "addToQueue"
+        args["schedulingType"] = "automatic"
     r = call_mcp("create_post", args)
     ok, err = is_error(r)
     if ok: return False, err
