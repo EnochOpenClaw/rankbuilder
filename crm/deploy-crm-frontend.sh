@@ -37,6 +37,15 @@ log()  { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 pass() { printf '\033[1;32m  ✓ %s\033[0m\n' "$*"; }
 err()  { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; }
 
+# ── 0. Sync the repo checkout (GitHub Actions deploys from the VPS checkout;
+#      without this the build uses stale files and the live site misses the
+#      latest commits). Safe no-op when the VPS checkout is already current.
+if [ -d "$FRONTEND_DIR/../.git" ] || [ -d "$(dirname "$FRONTEND_DIR")/.git" ]; then
+  log "Syncing repo checkout..."
+  ( cd "$(dirname "$FRONTEND_DIR")" && git fetch origin && git pull --ff-only origin main ) \
+    || log "WARN: git pull failed — continuing with existing checkout"
+fi
+
 [ -d "$FRONTEND_DIR" ] || { err "Frontend dir not found: $FRONTEND_DIR"; exit 1; }
 
 # ── 1. Build (if requested) ───────────────────────────────────────────────
