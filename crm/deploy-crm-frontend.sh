@@ -40,9 +40,10 @@ err()  { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; }
 # ── 0. Sync the repo checkout (GitHub Actions deploys from the VPS checkout;
 #      without this the build uses stale files and the live site misses the
 #      latest commits). Safe no-op when the VPS checkout is already current.
-if [ -d "$FRONTEND_DIR/../.git" ] || [ -d "$(dirname "$FRONTEND_DIR")/.git" ]; then
+REPO_ROOT="$(cd "$(dirname "$FRONTEND_DIR")/.." 2>/dev/null && pwd)"
+if [ -d "$REPO_ROOT/.git" ]; then
   log "Syncing repo checkout..."
-  ( cd "$(dirname "$FRONTEND_DIR")" && git fetch origin && git pull --ff-only origin main ) \
+  ( cd "$REPO_ROOT" && git fetch origin && git pull --ff-only origin main ) \
     || log "WARN: git pull failed — continuing with existing checkout"
 fi
 
