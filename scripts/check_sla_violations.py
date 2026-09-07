@@ -21,7 +21,7 @@ def _load_env():
         if k and k not in os.environ: os.environ[k] = v
 _load_env()
 
-from backend.database import SessionLocal, Lead
+from backend.database import SessionLocal, Lead, LeadReminder
 from backend.notifications import _brevo_send, _get_notification_recipients
 log = logging.getLogger("sla_monitor")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -47,12 +47,27 @@ def check_sla(db):
     now = datetime.utcnow()
     cnew = now - timedelta(hours=NH)
     cstale = now - timedelta(days=SD)
+    # ── Reminder pause (Craig 2026-09-07) ─────────────────────────────────
+    # A lead with a PENDING reminder scheduled in the future is "paused":
+    # SLA alerts are suppressed until the reminder fires (or is dismissed).
+    # Cap: pause only counts if the reminder was set within the last 7 days
+    # (prevents an agent hiding a lead with a far-future reminder). Reminders
+    # set for today/past don't pause (they fire immediately).
+    paused_ids = {
+        r.lead_id for r in db.query(LeadReminder).filter(
+            LeadReminder.status == "PENDING",
+            LeadReminder.remind_at > now,
+            LeadReminder.created_at >= now - timedelta(days=7),
+        ).all()
+    }
     for lead in db.query(Lead).filter(
         Lead.conversion_status.is_(None),
         Lead.partner_handoff_id.is_(None),
         Lead.status.notin_(["CONVERTED", "LOST"]),  # terminal deals stop pinging
         Lead.archived == 0,  # archived deals stop pinging
     ).all():
+        if lead.id in paused_ids:
+            continue  # reminder scheduled — don't nag until it fires
         # (skip leads handed off to a partner — they're no longer this rep's to action)
         # ── Payment-received quiet window ──────────────────────────────────
         # If payment was received within the last PAYMENT_QUIET_DAYS, the job is

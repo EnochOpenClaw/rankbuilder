@@ -48,7 +48,7 @@ def _load_env_file():
 
 _load_env_file()
 
-from backend.database import SessionLocal, Lead, LeadStatus
+from backend.database import SessionLocal, Lead, LeadStatus, LeadReminder
 
 log = logging.getLogger("crm.followup")
 
@@ -167,6 +167,19 @@ def main():
     db = SessionLocal()
     try:
         now = datetime.now(timezone.utc)
+        # ── Reminder pause (Craig 2026-09-07) ─────────────────────────────
+        # A lead with a PENDING reminder scheduled in the future is "paused":
+        # follow-up nudges are suppressed until the reminder fires (or is
+        # dismissed). Cap: pause only counts if the reminder was set within
+        # the last 7 days (prevents hiding a lead with a far-future reminder).
+        # Reminders set for today/past don't pause (they fire immediately).
+        paused_ids = {
+            r.lead_id for r in db.query(LeadReminder).filter(
+                LeadReminder.status == "PENDING",
+                LeadReminder.remind_at > now,
+                LeadReminder.created_at >= now - timedelta(days=7),
+            ).all()
+        }
         leads = (
             db.query(Lead)
             .filter(
@@ -177,6 +190,7 @@ def main():
             )
             .all()
         )
+        leads = [l for l in leads if l.id not in paused_ids]
 
         sent = {"stage1": 0, "stage2": 0, "stage3": 0}
         for lead in leads:
