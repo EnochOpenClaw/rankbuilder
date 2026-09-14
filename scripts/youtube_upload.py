@@ -32,7 +32,9 @@ def load_tokens():
 
 def load_secrets():
     with open(CLIENT_FILE) as f:
-        return json.load(f)["installed"]
+        data = json.load(f)
+    # Accept either "installed" (desktop) or "web" client type
+    return data.get("installed") or data.get("web")
 
 
 def refresh_access_token(tokens, secrets):
