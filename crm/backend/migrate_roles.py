@@ -39,7 +39,7 @@ import sqlite3
 
 DB_PATH = os.environ.get("CRM_DB", "/root/rankbuilder/crm/data/rankbuilder_crm.db")
 
-# ── Recommended least-privilege role layout (Craig 2026-09-14 FINAL) ────────────
+# ── Role layout (Craig 2026-09-14 FINAL) ────────────────────────────────────
 # email -> role. Only roles in the UserRole enum are valid:
 #   SYSTEM_ADMIN, CLIENT_ADMIN, SALES_MANAGER, AGENT, VIEWER
 # - craig:  SYSTEM_ADMIN  (full, cross-client admin — unchanged)
@@ -48,18 +48,20 @@ DB_PATH = os.environ.get("CRM_DB", "/root/rankbuilder/crm/data/rankbuilder_crm.d
 # - richard: DO NOT TOUCH — Craig confirmed Richard's current setup is perfect
 #            (Cape Town rep, sees only CPT-assigned jobs, manages them). He is NOT
 #            in this map and is never reassigned or re-scoped by this migration.
-# - lee-ann, robin, vanessa: VIEWER (management read-only; notified via group)
+# - robin, lee-ann, vanessa: PENDING CRAIG CONFIRMATION — they are CLIENT_ADMIN on
+#            production; demoting them to VIEWER would remove their write access on
+#            the live system, which Craig has not explicitly approved. Excluded from
+#            this migration (left untouched) until he rules on it.
 # - agent@rankbuilder.local: AGENT (only their own assigned leads)
 DEFAULT_ROLE_MAP = {
     "craig@houseofsupreme.co.za": "SYSTEM_ADMIN",
     "tiaan@houseofsupreme.co.za": "SALES_MANAGER",
-    "lee-ann@houseofsupreme.co.za": "VIEWER",
-    "robin@houseofsupreme.co.za": "VIEWER",
-    "vanessa@houseofsupreme.co.za": "VIEWER",
     "agent@rankbuilder.local": "AGENT",
 }
 # Users deliberately EXCLUDED from reassignment (never touched):
 #   richard@houseofsupreme.co.za — Craig's final call: leave exactly as he is now.
+#   robin@ / lee-ann@ / vanessa@houseofsupreme.co.za — pending Craig's confirmation
+#   on demoting them from CLIENT_ADMIN to VIEWER on the live system.
 
 
 def _column_count(c, table):
