@@ -606,12 +606,18 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
   const onHandoffClientChange = (cid) => {
     setHandoffClientId(cid)
     setHandoffTargetEmail(null)
-    // Load that client's users (listUsers doesn't return is_active; just show the
-    // client's non-SYSTEM_ADMIN users — the partner client is curated by the admin)
-    api.listUsers().then(us => {
-      const targets = (us || []).filter(u => u.client_id === cid && u.role !== 'SYSTEM_ADMIN')
-      setHandoffTargets(targets)
-    }).catch(() => setHandoffTargets([]))
+    // Prefer the group-gated contacts endpoint (works for handoff-group members
+    // like SALES_MANAGER Tiaan browsing partner clients). Fall back to the old
+    // listUsers filter for other roles — never regresses anyone.
+    api.listClientContacts(cid).then(res => {
+      const contacts = (res && res.contacts) || []
+      setHandoffTargets(contacts.filter(c => c.role !== 'SYSTEM_ADMIN'))
+    }).catch(() => {
+      api.listUsers().then(us => {
+        const targets = (us || []).filter(u => u.client_id === cid && u.role !== 'SYSTEM_ADMIN')
+        setHandoffTargets(targets)
+      }).catch(() => setHandoffTargets([]))
+    })
   }
 
   const doHandoff = async () => {
@@ -1015,7 +1021,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
               showIcon
               style={{ marginBottom: 16 }}
               message={`Handing off: ${handoffLead.company_name || handoffLead.contact_name || handoffLead.contact_email || 'Untitled lead'}`}
-              description="This creates a copy of the lead under the partner client. The original stays in your records for tracking."
+              description="This creates a copy of the lead under the partner client. The original is archived and drops off your queue — the partner copy becomes the active tracked job."
             />
             <div style={{ marginBottom: 12 }}>
               <Text strong>Partner Client</Text>
@@ -2886,9 +2892,9 @@ function UsersTab({ user: currentUser, clients }) {
   )
 }
 
-// ── Clients Tab (SYSTEM_ADMIN only) ─────────────────────────────────────────────
+// ── Clients Tab (SYSTEM_ADMIN full; handoff managers read-only) ───────────────
 
-function ClientsTab({ onClientAdded }) {
+function ClientsTab({ onClientAdded, readOnly = false }) {
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
@@ -2932,12 +2938,19 @@ function ClientsTab({ onClientAdded }) {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-          Onboard New Client
-        </Button>
-        <Text type="secondary">{clients.length} client{clients.length === 1 ? '' : 's'}</Text>
-      </Space>
+      {!readOnly && (
+        <Space style={{ marginBottom: 16 }}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+            Onboard New Client
+          </Button>
+          <Text type="secondary">{clients.length} client{clients.length === 1 ? '' : 's'}</Text>
+        </Space>
+      )}
+      {readOnly && (
+        <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+          {clients.length} partner client{clients.length === 1 ? '' : 's'} — read-only handoff view
+        </Text>
+      )}
 
       <Table
         dataSource={clients}
@@ -2945,12 +2958,20 @@ function ClientsTab({ onClientAdded }) {
         loading={loading}
         size="small"
         pagination={false}
-        columns={[
-          { title: 'Company', dataIndex: 'company_name' },
-          { title: 'Contact Email', dataIndex: 'contact_email' },
-          { title: 'API Key', dataIndex: 'api_key', render: k => k ? <Text code style={{ fontSize: 11 }}>{k.slice(0, 12)}…</Text> : '—' },
-          { title: 'Created', dataIndex: 'created_at', render: d => d ? dayjs(d).format('DD MMM YYYY') : '—' },
-        ]}
+        columns={
+          readOnly
+            ? [
+                { title: 'Company', dataIndex: 'company_name' },
+                { title: 'Contact Email', dataIndex: 'contact_email' },
+                { title: 'Created', dataIndex: 'created_at', render: d => d ? dayjs(d).format('DD MMM YYYY') : '—' },
+              ]
+            : [
+                { title: 'Company', dataIndex: 'company_name' },
+                { title: 'Contact Email', dataIndex: 'contact_email' },
+                { title: 'API Key', dataIndex: 'api_key', render: k => k ? <Text code style={{ fontSize: 11 }}>{k.slice(0, 12)}…</Text> : '—' },
+                { title: 'Created', dataIndex: 'created_at', render: d => d ? dayjs(d).format('DD MMM YYYY') : '—' },
+              ]
+        }
       />
 
       <Modal
@@ -3764,6 +3785,11 @@ export default function App() {
   const isAgent = role === 'AGENT'
   const canWrite = isAdmin || isAgent  // VIEWER is read-only; SALES_MANAGER inherits client-scoped write
   const isMultiClientAdmin = role === 'SYSTEM_ADMIN'
+  // Handoff manager: either SYSTEM_ADMIN or a member of a "Partner Handoff"
+  // group (e.g. Tiaan, SALES_MANAGER, enrolled 2026-09-14). Membership grants
+  // READ access to the Clients section + partner-client contacts for handoff
+  // targeting, without changing role semantics.
+  const isHandoffManager = !!(user.is_handoff_manager || isMultiClientAdmin)
   // Hand-off (e.g. to Cape Town) is delegated: system admin, client admin, and
   // regional sales managers may all hand leads off. Backend enforces this too.
   const canHandoff = role === 'SYSTEM_ADMIN' || role === 'CLIENT_ADMIN' || role === 'SALES_MANAGER'
@@ -3860,7 +3886,7 @@ export default function App() {
               { key: 'leads', icon: <DatabaseOutlined />, label: 'Leads' },
               ...(isAdmin ? [{ key: 'campaigns', icon: <FlagOutlined />, label: 'Campaigns' }] : []),
               ...(isAdmin ? [{ key: 'users', icon: <UserOutlined />, label: 'Users' }] : []),
-              ...(isMultiClientAdmin ? [{ key: 'clients', icon: <GlobalOutlined />, label: 'Clients' }] : []),
+              ...(isHandoffManager ? [{ key: 'clients', icon: <GlobalOutlined />, label: 'Clients' }] : []),
               ...(isMultiClientAdmin ? [{ key: 'sources', icon: <TagsOutlined />, label: 'Sources' }] : []),
               ...(isMultiClientAdmin ? [{ key: 'scoring', icon: <ThunderboltOutlined />, label: 'Scoring' }] : []),
               ...(isAdmin ? [{ key: 'reports', icon: <BarChartOutlined />, label: 'Reports' }] : []),
@@ -3933,10 +3959,13 @@ export default function App() {
               </TabPane>
             )}
 
-            {isMultiClientAdmin && (
+            {isHandoffManager && (
               <TabPane tab={<span><GlobalOutlined /> Clients</span>} key="clients">
                 <div style={{ background: '#fff', borderRadius: 8, padding: isMobile ? 12 : 16 }}>
-                  <ClientsTab onClientAdded={() => setRefreshKey(k => k + 1)} />
+                  <ClientsTab
+                    readOnly={!isMultiClientAdmin}
+                    onClientAdded={() => setRefreshKey(k => k + 1)}
+                  />
                 </div>
               </TabPane>
             )}

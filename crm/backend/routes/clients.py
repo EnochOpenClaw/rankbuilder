@@ -13,17 +13,32 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from backend.database import (
     get_db, Client, User, Campaign, UserRole, NotificationChannel,
     LeadSource, CampaignStatus,
 )
+from backend.database import is_handoff_manager
 from backend.schemas import (
     ClientCreate, ClientResponse, ClientOnboardRequest, ClientOnboardResponse,
 )
 from backend.routes.auth import get_current_user, require_admin_or_owner, hash_password
 
 router = APIRouter()
+
+
+# ── Handoff contact schema (group-gated read, no secrets) ───────────────────
+class ClientContact(BaseModel):
+    id: str
+    email: str
+    full_name: str
+    role: str
+
+
+class ClientContactResponse(BaseModel):
+    client_id: str
+    contacts: list[ClientContact]
 
 
 def _generate_api_key() -> str:
@@ -138,9 +153,13 @@ def list_clients(
     """List clients.
     - SYSTEM_ADMIN: all clients
     - CLIENT_ADMIN / VIEWER: only their own client
+    - SALES_MANAGER (or any role) who is also a Handoff-group member (e.g.
+      "Partner Handoff Managers"): all clients, READ-ONLY, so they can browse
+      partner clients and pick a handoff target. Group membership is purely
+      additive — it widens read visibility only and never changes role semantics.
     """
     q = db.query(Client)
-    if current_user.role.value != "SYSTEM_ADMIN":
+    if current_user.role.value != "SYSTEM_ADMIN" and not is_handoff_manager(current_user):
         if not current_user.client_id:
             raise HTTPException(status_code=403, detail="Account not linked to a client")
         q = q.filter(Client.id == current_user.client_id)
@@ -154,13 +173,58 @@ def get_client(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get a single client (scoped to user's client unless SYSTEM_ADMIN)."""
+    """Get a single client (scoped to user's client unless SYSTEM_ADMIN).
+    Handoff-group members may read any client (additive read visibility)."""
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    if current_user.role.value != "SYSTEM_ADMIN" and current_user.client_id != client.id:
+    if (current_user.role.value != "SYSTEM_ADMIN" and not is_handoff_manager(current_user)
+            and current_user.client_id != client.id):
         raise HTTPException(status_code=403, detail="You can only access your own client")
     return client
+
+
+@router.get("/{client_id}/contacts", response_model=ClientContactResponse)
+def list_client_contacts(
+    client_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    List the users/contacts of a partner client for handoff targeting.
+
+    Group-gated read: only SYSTEM_ADMIN, the client's own admins, or members of a
+    handoff group (e.g. "Partner Handoff Managers") may read another client's
+    users. Used by the "Hand to partner" flow so a regional SALES_MANAGER like
+    Tiaan can see who to hand a lead to (e.g. sian@southernshutters.co.za).
+
+    Returns ONLY safe fields — no password hashes or secrets.
+    """
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    if (current_user.role.value != "SYSTEM_ADMIN" and not is_handoff_manager(current_user)
+            and current_user.client_id != client.id):
+        raise HTTPException(status_code=403, detail="You can only read contacts for your own client")
+
+    contacts = (
+        db.query(User)
+        .filter(User.client_id == client.id, User.is_active == True)
+        .order_by(User.full_name.asc())
+        .all()
+    )
+    return ClientContactResponse(
+        client_id=client.id,
+        contacts=[
+            ClientContact(
+                id=u.id,
+                email=u.email,
+                full_name=u.full_name,
+                role=u.role.value if hasattr(u.role, "value") else str(u.role),
+            )
+            for u in contacts
+        ],
+    )
 
 
 @router.patch("/{client_id}", response_model=ClientResponse)

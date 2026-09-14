@@ -23,6 +23,7 @@ from jose import jwt
 from pydantic import BaseModel
 
 from backend.database import get_db, User, UserRole, Client
+from backend.database import is_handoff_manager
 from backend.auth import UserCreate, UserResponse, TokenResponse
 
 # ── Config ──────────────────────────────────────────────────────────────────────
@@ -277,6 +278,7 @@ def get_me(current_user: User = Depends(get_current_user)):
         role=current_user.role.value,
         created_at=current_user.created_at,
         must_change_password=current_user.must_change_password or 0,
+        is_handoff_manager=is_handoff_manager(current_user),
     )
 
 
@@ -359,6 +361,7 @@ def create_user(
         role=user.role.value,
         created_at=user.created_at,
         must_change_password=1,
+        is_handoff_manager=is_handoff_manager(user),
     )
 
 
@@ -371,12 +374,20 @@ def list_users(
     """
     List users.
     - SYSTEM_ADMIN: all active users, optionally filtered by client_id
-    - CLIENT_ADMIN / SALES_MANAGER: only users belonging to their own client
+    - CLIENT_ADMIN: only users belonging to their own client
+    - SALES_MANAGER: only users belonging to their own client, UNLESS they are a
+      handoff-group member (e.g. "Partner Handoff Managers"), in which case they
+      may also list users of every partner client (additive cross-client read for
+      handoff targeting). Handoff-group membership does NOT re-scope any role.
     """
     q = db.query(User).filter(User.is_active == 1)
 
+    is_handoff = is_handoff_manager(current_user)
     if current_user.role in (UserRole.CLIENT_ADMIN, UserRole.SALES_MANAGER):
-        q = q.filter(User.client_id == current_user.client_id)
+        if current_user.role == UserRole.CLIENT_ADMIN or not is_handoff:
+            # Non-handoff clients/sales managers stay locked to their own client.
+            q = q.filter(User.client_id == current_user.client_id)
+        # Handoff-group SALES_MANAGERs may see all clients' users (no extra filter).
     elif client_id:
         q = q.filter(User.client_id == client_id)
 
@@ -389,6 +400,7 @@ def list_users(
             client_id=u.client_id,
             role=u.role.value,
             created_at=u.created_at,
+            is_handoff_manager=is_handoff_manager(u),
         )
         for u in users
     ]
@@ -447,6 +459,7 @@ def reset_password(
         role=user.role.value,
         created_at=user.created_at,
         must_change_password=1,
+        is_handoff_manager=is_handoff_manager(user),
     )
 
 

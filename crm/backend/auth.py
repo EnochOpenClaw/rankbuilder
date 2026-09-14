@@ -39,6 +39,11 @@ class UserResponse(BaseModel):
     role: str
     created_at: datetime | None = None  # optional — a missing timestamp shouldn't break the list
     must_change_password: int = 0  # 1 = user must change password on next login
+    # Handoff group membership (Craig 2026-09-14). Additive cross-client read
+    # visibility for SALES_MANAGERs so they can browse partner clients/contacts
+    # for handoff targeting. Does NOT change role semantics. True for any
+    # handoff-group member (and SYSTEM_ADMIN by definition).
+    is_handoff_manager: bool = False
 
     class Config:
         from_attributes = True

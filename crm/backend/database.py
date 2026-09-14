@@ -411,6 +411,43 @@ class LeadDocument(Base):
     lead = relationship("Lead", back_populates="documents")
 
 
+class HandoffGroup(Base):
+    """
+    A named cross-client visibility group (Craig 2026-09-14).
+
+    Membership grants READ access to the full partner client list (the CRM
+    "Clients" section) plus the users/contacts on those clients, so a regional
+    SALES_MANAGER can browse partner clients and pick a handoff target. It is
+    purely additive — it does NOT re-scope any existing role's behavior
+    (SYSTEM_ADMIN / CLIENT_ADMIN / AGENT / VIEWER are untouched). The role is
+    still the entry check for handoff (POST /leads/{id}/handoff); the group only
+    supplies the client/contact visibility the manager otherwise lacks.
+
+    Seed a named group e.g. "Partner Handoff Managers" and enrol tiaan in it
+    via the migration / idempotent seed.
+    """
+
+    __tablename__ = "handoff_groups"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(100), unique=True, nullable=False)
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    members = relationship(
+        "User", secondary="user_handoff_groups", back_populates="handoff_groups"
+    )
+
+
+class UserHandoffGroup(Base):
+    """Association table — a user's membership in a handoff group."""
+
+    __tablename__ = "user_handoff_groups"
+
+    user_id = Column(String(36), ForeignKey("users.id"), primary_key=True)
+    group_id = Column(String(36), ForeignKey("handoff_groups.id"), primary_key=True)
+
+
 class User(Base):
     """CRM user — email + password auth, role-based access."""
 
@@ -429,6 +466,9 @@ class User(Base):
     must_change_password = Column(Integer, default=1)  # 1 = force password change on next login
 
     client = relationship("Client", back_populates="users")
+    handoff_groups = relationship(
+        "HandoffGroup", secondary="user_handoff_groups", back_populates="members"
+    )
 
 
 Client.users = relationship(
@@ -459,6 +499,29 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def is_handoff_manager(user) -> bool:
+    """
+    True when the user is a member of any handoff group (e.g. "Partner Handoff
+    Managers"). Membership is PURELY ADDITIVE — it widens read visibility of
+    partner clients and their users for handoff targeting, without changing the
+    user's role semantics.
+
+    SYSTEM_ADMIN already has cross-client visibility, so it is treated as a
+    handoff manager too (short-circuit — avoids a needless DB load).
+    """
+    if user is None:
+        return False
+    if getattr(user, "role", None) == UserRole.SYSTEM_ADMIN:
+        return True
+    # Unwrap lazy-load so we inspect actual membership (a fresh request has
+    # loaded handoff_groups via the association relationship).
+    try:
+        groups = list(user.handoff_groups or [])
+    except Exception:
+        groups = []
+    return len(groups) > 0
 
 
 def seed_lead_sources(db):

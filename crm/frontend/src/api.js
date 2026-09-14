@@ -75,6 +75,7 @@ export const api = {
   createClient: (data) => request('POST', '/clients', data, true),
   listClients: () => request('GET', '/clients', null, true),
   getClient: (id) => request('GET', `/clients/${id}`, null, true),
+  listClientContacts: (id) => request('GET', `/clients/${id}/contacts`, null, true),
   onboardClient: (data) => request('POST', '/clients/onboard', data, true),
 
   // Leads

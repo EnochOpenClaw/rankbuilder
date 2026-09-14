@@ -207,6 +207,62 @@ def test_handoff_delegated_to_client_admin():
     print()
 
 
+def test_handoff_group_member_clients_and_contacts():
+    print("=" * 60)
+    print("TEST 5: handoff-group member sees clients + contacts (Tiaan)")
+    print("=" * 60)
+    from backend.database import SessionLocal, User, HandoffGroup
+    from backend.routes.auth import hash_password
+
+    # Create a throwaway SALES_MANAGER test user in the handoff group
+    db = SessionLocal()
+    gm = User(email="group.sm@example.com", hashed_password=hash_password("TestPass123!"),
+              full_name="Group SM", client_id=HOS, role="SALES_MANAGER")
+    db.add(gm)
+    db.commit()
+    g = db.query(HandoffGroup).filter(HandoffGroup.name == "Partner Handoff Managers").first()
+    assert g, "seed group should exist in test DB"
+    gm.handoff_groups.append(g)
+    db.commit()
+    db.close()
+
+    try:
+        token = login("group.sm@example.com", "TestPass123!")
+        h = {"Authorization": f"Bearer {token}"}
+
+        # /auth/me reports is_handoff_manager
+        r = client.get("/api/auth/me", headers=h)
+        assert r.status_code == 200
+        assert r.json().get("is_handoff_manager") is True, "group member should be reported as handoff manager"
+        print("✅ /auth/me reports is_handoff_manager=True for group member")
+
+        # Can list all clients (read-only handoff view)
+        r = client.get("/api/clients", headers=h)
+        assert r.status_code == 200
+        client_ids = [c["id"] for c in r.json()]
+        assert len(client_ids) >= 1
+        print(f"✅ Group member lists {len(client_ids)} client(s) (cross-client read)")
+
+        # Can read contacts of a partner client (any client id we just got)
+        other_id = next((i for i in client_ids if i != HOS), client_ids[0])
+        r = client.get(f"/api/clients/{other_id}/contacts", headers=h)
+        assert r.status_code == 200, f"contacts: {r.text}"
+        payload = r.json()
+        assert payload["client_id"] == other_id
+        for c in payload["contacts"]:
+            assert "email" in c and "full_name" in c and "role" in c
+            assert "hashed_password" not in c and "password" not in c
+        print(f"✅ Group member reads partner contacts ({len(payload['contacts'])} contact(s), no secrets)")
+    finally:
+        db = SessionLocal()
+        u = db.query(User).filter(User.email == "group.sm@example.com").first()
+        if u:
+            db.delete(u)
+            db.commit()
+        db.close()
+    print()
+
+
 def test_viewer_cannot_handoff():
     print("=" * 60)
     print("TEST 4: VIEWER cannot hand off (least privilege)")
@@ -226,6 +282,7 @@ if __name__ == "__main__":
     test_richard_untouched()
     test_handoff_delegated_to_client_admin()
     test_viewer_cannot_handoff()
+    test_handoff_group_member_clients_and_contacts()
     print("=" * 60)
-    print("🎉 ALL ROLE/DELEGATION/HIGHLIGHT TESTS PASSED")
+    print("🎉 ALL ROLE/DELEGATION/HIGHLIGHT/GROUP TESTS PASSED")
     print("=" * 60)
