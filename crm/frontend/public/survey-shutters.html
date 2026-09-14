@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en-ZA">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shutters vs burglar bars — tell us what matters | FortressBlinds</title>
+<meta name="description" content="A short survey for South African homeowners on shutters vs burglar bars. We'll publish the results once enough responses come in — so your suburb's voice is heard.">
+<style>
+  :root{
+    --ink:#1f2933;
+    --ink-soft:#52606d;
+    --brand:#0b5d4e;         /* deep Fortress green */
+    --brand-dark:#084a3e;
+    --accent:#d97706;        /* warm amber */
+    --bg:#f4f6f5;
+    --card:#ffffff;
+    --line:#dfe5e1;
+    --err:#b91c1c;
+    --ok:#15803d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);
+    background:var(--bg);
+    line-height:1.55;
+  }
+  .page{max-width:720px;margin:0 auto;padding:28px 18px 48px}
+
+  /* Header / hero */
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:26px}
+  .brand-mark{
+    width:34px;height:34px;border-radius:8px;background:var(--brand);
+    color:#fff;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center;
+  }
+  .brand-name{font-weight:700;letter-spacing:.4px;color:var(--ink-soft)}
+  .hero h1{font-size:30px;line-height:1.2;margin:0 0 12px;color:var(--ink)}
+  .hero p{font-size:17px;color:var(--ink-soft);margin:0 0 8px;max-width:60ch}
+
+  /* Card / form */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .field{margin-bottom:18px}
+  label{display:block;font-weight:600;margin-bottom:6px;font-size:15px}
+  .hint{font-size:13px;color:var(--ink-soft);margin-top:3px}
+  input[type=text],input[type=email],input[type=tel]{
+    width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;
+    font-size:15px;background:#fff;color:var(--ink);
+  }
+  input:focus{outline:2px solid var(--brand);outline-offset:1px;border-color:var(--brand)}
+  .question{margin:22px 0 6px;font-weight:700;font-size:15px;color:var(--ink)}
+  .options{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+  .option{
+    display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;
+    padding:10px 12px;cursor:pointer;transition:border-color .12s,background .12s;
+  }
+  .option:hover{border-color:var(--brand)}
+  .option.selected{border-color:var(--brand);background:#eef6f3}
+  .option input{margin:0;accent-color:var(--brand)}
+  .btn{
+    display:inline-block;width:100%;padding:14px 16px;margin-top:8px;border:none;border-radius:10px;
+    background:var(--brand);color:#fff;font-size:16px;font-weight:700;cursor:pointer;transition:background .12s;
+  }
+  .btn:hover{background:var(--brand-dark)}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+
+  /* Status states */
+  .msg{display:none;margin-top:16px;padding:13px 15px;border-radius:9px;font-size:15px}
+  .msg.ok{display:block;background:#ecfdf5;border:1px solid #a7f3d0;color:var(--ok)}
+  .msg.err{display:block;background:#fef2f2;border:1px solid #fecaca;color:var(--err)}
+  .msg .check{font-weight:700}
+
+  footer{margin-top:30px;font-size:13px;color:var(--ink-soft);text-align:center}
+  footer strong{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="brand">
+    <div class="brand-mark">FB</div>
+    <span class="brand-name">FortressBlinds</span>
+  </div>
+
+  <div class="hero">
+    <h1>Shutters vs burglar bars — tell us what matters</h1>
+    <p>A short survey for South African homeowners. Whether you've got bars, shutters, both, or neither, we want to hear what you actually weigh up: security, heat, noise, looks. It takes under a minute.</p>
+    <p>We'll publish the results here once enough responses come in — so your suburb's take gets heard in the national conversation.</p>
+  </div>
+
+  <div class="card">
+    <form id="survey-form" novalidate>
+      <div class="field">
+        <label for="name">Your name *</label>
+        <input type="text" id="name" name="name" required autocomplete="name" placeholder="e.g. Themba Nkosi">
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" autocomplete="email" placeholder="you@example.com">
+        <div class="hint">Only so we can follow up — we won't spam you.</div>
+      </div>
+      <div class="field">
+        <label for="phone">Phone</label>
+        <input type="tel" id="phone" name="phone" autocomplete="tel" placeholder="Optional — e.g. 082 123 4567">
+      </div>
+      <div class="field">
+        <label for="suburb">Suburb / area</label>
+        <input type="text" id="suburb" name="suburb" autocomplete="address-level2" placeholder="e.g. Midrand, Gauteng">
+      </div>
+
+      <!-- Question 1 -->
+      <div class="question" id="q-concern">What's your biggest concern when securing your home?</div>
+      <div class="options" id="opt-concern">
+        <label class="option"><input type="radio" name="concern" value="security"><span>Security / break-ins</span></label>
+        <label class="option"><input type="radio" name="concern" value="heat"><span>Heat control in summer</span></label>
+        <label class="option"><input type="radio" name="concern" value="noise"><span>Noise from outside</span></label>
+        <label class="option"><input type="radio" name="concern" value="aesthetics"><span>Looks / kerb appeal</span></label>
+      </div>
+
+      <!-- Question 2 -->
+      <div class="question" id="q-windows">What are your windows made of?</div>
+      <div class="options" id="opt-windows">
+        <label class="option"><input type="radio" name="windows" value="aluminium"><span>Aluminium</span></label>
+        <label class="option"><input type="radio" name="windows" value="wood"><span>Wood</span></label>
+        <label class="option"><input type="radio" name="windows" value="pvc"><span>PVC</span></label>
+        <label class="option"><input type="radio" name="windows" value="not-sure"><span>Not sure</span></label>
+      </div>
+
+      <!-- Question 3 -->
+      <div class="question" id="q-hometype">What type of home do you live in?</div>
+      <div class="options" id="opt-hometype">
+        <label class="option"><input type="radio" name="hometype" value="house"><span>House</span></label>
+        <label class="option"><input type="radio" name="hometype" value="townhouse"><span>Townhouse / complex</span></label>
+        <label class="option"><input type="radio" name="hometype" value="business"><span>Business premises</span></label>
+      </div>
+
+      <!-- Question 4 -->
+      <div class="question" id="q-current">What do you have on your windows right now?</div>
+      <div class="options" id="opt-current">
+        <label class="option"><input type="radio" name="current" value="bars"><span>Burglar bars</span></label>
+        <label class="option"><input type="radio" name="current" value="shutters"><span>Shutters</span></label>
+        <label class="option"><input type="radio" name="current" value="both"><span>Both</span></label>
+        <label class="option"><input type="radio" name="current" value="none"><span>Neither yet</span></label>
+      </div>
+
+      <!-- UTM tracking (hidden, populated from URL) -->
+      <input type="hidden" id="utm_source" name="utm_source">
+      <input type="hidden" id="utm_medium" name="utm_medium">
+      <input type="hidden" id="utm_campaign" name="utm_campaign">
+
+      <button type="submit" class="btn" id="submit-btn">Submit my answers</button>
+
+      <div class="msg" id="msg-ok" role="status">
+        <span class="check">Thanks — we'll be in touch.</span><br>
+        Your answers have been recorded. We'll publish the suburb-level results once we've got enough responses.
+      </div>
+      <div class="msg err" id="msg-err" role="alert"></div>
+    </form>
+  </div>
+
+  <footer>
+    <strong>FortressBlinds</strong> — shutters made in South Africa. This survey is independent of bars vs shutters; we ask because we genuinely want to know what matters to your family. No spam, ever.
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var form = document.getElementById('survey-form');
+  var submitBtn = document.getElementById('submit-btn');
+  var msgOk = document.getElementById('msg-ok');
+  var msgErr = document.getElementById('msg-err');
+
+  // ── Capture UTM params from the page URL into hidden fields ─────────────
+  (function captureUtm() {
+    var params = new URLSearchParams(window.location.search);
+    var map = { utm_source: 'utm_source', utm_medium: 'utm_medium', utm_campaign: 'utm_campaign' };
+    for (var field in map) {
+      var val = params.get(map[field]);
+      if (val) document.getElementById(field).value = val.slice(0, 100);
+    }
+  })();
+
+  // ── Highlight the selected radio option for a nicer tap target ─────────
+  document.querySelectorAll('.option').forEach(function (opt) {
+    var input = opt.querySelector('input');
+    input.addEventListener('change', function () {
+      var group = input.name;
+      document.querySelectorAll('input[name="' + group + '"]').forEach(function (r) {
+        r.closest('.option').classList.toggle('selected', r.checked);
+      });
+    });
+  });
+
+  function showOk() { msgOk.style.display = 'block'; msgErr.style.display = 'none'; }
+  function showErr(message) { msgErr.textContent = message; msgErr.style.display = 'block'; msgOk.style.display = 'none'; }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    showErr(''); // clear any previous error
+    msgOk.style.display = 'none';
+
+    var name = document.getElementById('name').value.trim();
+    if (!name) { showErr('Please tell us your name.'); return; }
+
+    var answers = {};
+    ['concern', 'windows', 'hometype', 'current'].forEach(function (q) {
+      var checked = form.querySelector('input[name="' + q + '"]:checked');
+      answers[q] = checked ? checked.value : '';
+    });
+
+    var payload = {
+      contact_name: name,
+      contact_email: document.getElementById('email').value.trim() || null,
+      contact_phone: document.getElementById('phone').value.trim() || null,
+      suburb: document.getElementById('suburb').value.trim() || null,
+      answers: answers,
+      utm_source: document.getElementById('utm_source').value || null,
+      utm_medium: document.getElementById('utm_medium').value || null,
+      utm_campaign: document.getElementById('utm_campaign').value || null
+    };
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending…';
+
+    fetch('/api/survey/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          return res.json().then(function (data) {
+            throw new Error((data && data.detail) || 'Something went wrong. Please try again.');
+          });
+        }
+        return res.json();
+      })
+      .then(function () {
+        showOk();
+        form.style.display = 'none';
+      })
+      .catch(function (err) {
+        showErr(err.message || 'Something went wrong. Please check your details and try again.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit my answers';
+      });
+  });
+})();
+</script>
+</body>
+</html>

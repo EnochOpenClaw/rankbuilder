@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from backend.database import seed_lead_sources, SessionLocal, engine, Base
 from backend.scoring import seed_default_rules
-from backend.routes import leads, clients, dashboard, auth, notifications, public, facebook, campaigns, whatsapp, documents, sources, scoring, reports, ai, reminders
+from backend.routes import leads, clients, dashboard, auth, notifications, public, facebook, campaigns, whatsapp, documents, sources, scoring, reports, ai, reminders, survey
 
 # Build artifact path — served as static files in production
 BACKEND_DIR   = Path(__file__).parent   # .../crm/backend/
@@ -90,6 +90,7 @@ app.add_middleware(
 # Register routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(public.router, prefix="/api", tags=["Public"])  # /api/leads/public
+app.include_router(survey.router, prefix="/api", tags=["Survey"])  # /api/survey/submit
 app.include_router(leads.router, prefix="/api/leads", tags=["Leads"])
 app.include_router(clients.router, prefix="/api/clients", tags=["Clients"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
