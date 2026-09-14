@@ -828,6 +828,7 @@ def send_daily_batch(limit=10):
 
             # ── CRM: Create lead ─────────────────────────────────────────────
             try:
+                sys.path.insert(0, str(BASE_DIR))  # ensure rankbuilder root on path for lib/
                 from lib.crm_client import get_or_create_lead, mark_lead_sent, CRMError as CRMErr
                 lead = get_or_create_lead(
                     source="GUEST_OUTREACH",

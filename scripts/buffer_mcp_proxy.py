@@ -83,8 +83,8 @@ def main():
             print(json.dumps(resp), flush=True)
 
         elif method == "tools/list":
-            result = call_buffer("tools/list", params)
-            # Buffer returns {"tools": [...]} directly for tools/list
+            raw_result = call_buffer("tools/list", params)
+            result = raw_result.get("result", raw_result) if isinstance(raw_result, dict) else raw_result
             resp = {"jsonrpc": "2.0", "id": req_id, "result": result}
             print(json.dumps(resp), flush=True)
 
