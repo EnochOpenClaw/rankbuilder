@@ -32,7 +32,13 @@ router = APIRouter()
 
 def _campaign_to_response(campaign: Campaign, db: Session) -> CampaignResponse:
     """Build a CampaignResponse including live lead counts + roadside daily-log totals."""
-    q = db.query(Lead).filter(Lead.campaign_id == campaign.id)
+    # Handed-off source leads (partner_handoff_id set) are trail markers, not live
+    # leads — exclude them from campaign lead counts so the source campaign isn't
+    # inflated by leads that were copied to a partner client.
+    q = db.query(Lead).filter(
+        Lead.campaign_id == campaign.id,
+        Lead.partner_handoff_id.is_(None),
+    )
     total = q.count()
     qualified = q.filter(Lead.status == LeadStatus.QUALIFIED).count()
     converted = q.filter(Lead.status == LeadStatus.CONVERTED).count()

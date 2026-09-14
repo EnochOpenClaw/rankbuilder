@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func
+from sqlalchemy import func, and_, not_
 from sqlalchemy.orm import Session
 
 from backend.database import get_db, Lead, LeadHistory, LeadSource, LeadStatus, LeadType, User
@@ -25,6 +25,22 @@ from backend.database import UserRole
 router = APIRouter()
 
 
+# Handing a lead off to a partner sets partner_handoff_id on BOTH the original
+# (source) lead AND the partner copy. The source is archived (=1) and is a trail
+# marker — it must never count toward the source rep's stats. The copy is the live
+# lead and stays in stats. Exclude only handed-off SOURCES (archived) so the live
+# copy is kept.
+def _exclude_handed_off_sources(q):
+    return q.filter(
+        not_(
+            and_(
+                Lead.partner_handoff_id.isnot(None),
+                Lead.archived == 1,
+            )
+        )
+    )
+
+
 @router.get("/summary", response_model=DashboardResponse)
 def dashboard_summary(
     client_id: str = Query(..., description="Client ID to show dashboard for"),
@@ -37,8 +53,9 @@ def dashboard_summary(
 
     cutoff = datetime.utcnow() - timedelta(days=days)
 
-    # Base filtered query
-    base = db.query(Lead).filter(
+    # Base filtered query. Handed-off source leads (archived trail markers) are
+    # excluded — they never count toward a rep's stats. The partner copy (live) stays.
+    base = _exclude_handed_off_sources(db.query(Lead)).filter(
         Lead.client_id == effective_client_id,
         Lead.created_at >= cutoff,
     )
@@ -59,7 +76,7 @@ def dashboard_summary(
     conversion_rate = round((converted / qualified * 100), 1) if qualified > 0 else 0.0
 
     # Avg response time (NEW → SENT) with percentiles
-    sent_leads = db.query(Lead).filter(
+    sent_leads = _exclude_handed_off_sources(db.query(Lead)).filter(
         Lead.client_id == client_id,
         Lead.sent_to_client_at.isnot(None),
         Lead.created_at >= cutoff,
@@ -97,7 +114,11 @@ def dashboard_summary(
     # Source breakdown
     source_rows = (
         db.query(Lead.source, func.count(Lead.id).label("count"))
-        .filter(Lead.client_id == client_id, Lead.created_at >= cutoff)
+        .filter(
+            Lead.client_id == client_id,
+            Lead.created_at >= cutoff,
+            Lead.partner_handoff_id.is_(None),
+        )
         .group_by(Lead.source)
         .all()
     )
@@ -111,6 +132,7 @@ def dashboard_summary(
                 Lead.source == row[0],
                 Lead.lead_type == LeadType.VALID,
                 Lead.created_at >= cutoff,
+                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
         )
@@ -120,6 +142,7 @@ def dashboard_summary(
             Lead.source == row[0],
             Lead.sent_to_client_at.isnot(None),
             Lead.created_at >= cutoff,
+            Lead.partner_handoff_id.is_(None),
         ).all()
         if src_sent_leads:
             src_diffs = [(l.sent_to_client_at - l.created_at).total_seconds() / 3600 for l in src_sent_leads]
@@ -144,7 +167,11 @@ def dashboard_summary(
             func.date(Lead.created_at).label("date"),
             func.count(Lead.id).label("count"),
         )
-        .filter(Lead.client_id == client_id, Lead.created_at >= cutoff)
+        .filter(
+            Lead.client_id == client_id,
+            Lead.created_at >= cutoff,
+            Lead.partner_handoff_id.is_(None),
+        )
         .group_by(func.date(Lead.created_at))
         .order_by(func.date(Lead.created_at))
         .all()
@@ -173,6 +200,7 @@ def dashboard_summary(
                 Lead.client_id == client_id,
                 Lead.created_at >= cutoff,
                 Lead.status == status,
+                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
             or 0
@@ -190,6 +218,7 @@ def dashboard_summary(
             Lead.client_id == client_id,
             Lead.created_at >= cutoff,
             Lead.assigned_to.isnot(None),
+            Lead.partner_handoff_id.is_(None),
         )
         .group_by(Lead.assigned_to)
         .all()
@@ -218,6 +247,7 @@ def dashboard_summary(
             .filter(
                 Lead.client_id == client_id,
                 Lead.assigned_to == rep_email,
+                Lead.partner_handoff_id.is_(None),
                 LeadHistory.field_changed == "follow_up",
                 LeadHistory.changed_at >= cutoff,
             )
@@ -231,6 +261,7 @@ def dashboard_summary(
                 Lead.assigned_to == rep_email,
                 Lead.created_at >= cutoff,
                 Lead.status == LeadStatus.CONTACTED,
+                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
             or 0
@@ -242,6 +273,7 @@ def dashboard_summary(
                 Lead.assigned_to == rep_email,
                 Lead.created_at >= cutoff,
                 Lead.conversion_status == "CONVERTED",
+                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
             or 0
@@ -253,6 +285,7 @@ def dashboard_summary(
                 Lead.assigned_to == rep_email,
                 Lead.created_at >= cutoff,
                 Lead.conversion_status == "LOST",
+                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
             or 0
@@ -263,6 +296,7 @@ def dashboard_summary(
             .filter(
                 Lead.client_id == client_id,
                 Lead.assigned_to == rep_email,
+                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
         )

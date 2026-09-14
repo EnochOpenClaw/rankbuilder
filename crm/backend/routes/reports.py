@@ -15,11 +15,37 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db, Lead, LeadActivity, Campaign, CampaignDailyLog, LeadSource, CampaignStatus, User, UserRole
 from backend.routes.auth import get_current_user, enforce_client_scope
+from sqlalchemy import and_, not_
 
 router = APIRouter()
 
 # Conversion probability for predicted sales (quotes sent = high intent, they've met the client)
 CONVERSION_PROBABILITY = 0.5  # 50% — quoted leads are more likely to close
+
+
+def _exclude_handed_off_sources(q):
+    """Exclude handed-off SOURCE leads from report aggregation.
+
+    Handing a lead off to a partner creates a COPY under the partner's client. The
+    ORIGINAL source lead is tagged with partner_handoff_id AND archived (it is a
+    trail marker, not a live lead) and must never count toward the source rep's
+    stats. The partner COPY is the live lead and stays in stats — it also carries
+    partner_handoff_id, so we must filter on archived=1 (source) not on
+    partner_handoff_id.is_(None) (which would wrongly drop the live copy too).
+    """
+    return q.filter(
+        not_(
+            and_(
+                Lead.partner_handoff_id.isnot(None),
+                Lead.archived == 1,
+            )
+        )
+    )
+
+
+def _lead_query(db):
+    """Base lead query for reports with handed-off sources excluded."""
+    return _exclude_handed_off_sources(db.query(Lead))
 
 
 def _apply_date_range(q, date_from: Optional[str], date_to: Optional[str]):
@@ -50,7 +76,7 @@ def agent_sales_report(
 ):
     """Per-agent sales report — leads, quoted, won, lost, quoted value, predicted value."""
     effective_client_id = enforce_client_scope(client_id, current_user)
-    q = db.query(Lead)
+    q = _lead_query(db)
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     q = _apply_date_range(q, date_from, date_to)
@@ -114,7 +140,7 @@ def pipeline_report(
 ):
     """Overall pipeline value: total quoted, predicted, won, plus funnel drop-off."""
     effective_client_id = enforce_client_scope(client_id, current_user)
-    q = db.query(Lead)
+    q = _lead_query(db)
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     q = _apply_date_range(q, date_from, date_to)
@@ -146,7 +172,7 @@ def funnel_report(
 ):
     """Funnel drop-off: counts per stage + % lost from previous stage."""
     effective_client_id = enforce_client_scope(client_id, current_user)
-    q = db.query(Lead)
+    q = _lead_query(db)
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     q = _apply_date_range(q, date_from, date_to)
@@ -182,7 +208,7 @@ def source_roi_report(
 ):
     """Source ROI — per source: leads, quoted, converted, conv rate, quoted value, won value."""
     effective_client_id = enforce_client_scope(client_id, current_user)
-    q = db.query(Lead)
+    q = _lead_query(db)
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     q = _apply_date_range(q, date_from, date_to)
@@ -239,7 +265,7 @@ def response_time_report(
     Leads with no activity are counted as 'no response yet'.
     """
     effective_client_id = enforce_client_scope(client_id, current_user)
-    q = db.query(Lead)
+    q = _lead_query(db)
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     q = _apply_date_range(q, date_from, date_to)
@@ -336,7 +362,7 @@ def activity_report(
     leads worked. Shows effort, not just results.
     """
     effective_client_id = enforce_client_scope(client_id, current_user)
-    q = db.query(Lead)
+    q = _lead_query(db)
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     q = _apply_date_range(q, date_from, date_to)
@@ -420,7 +446,7 @@ def funnel_trend_report(
     conversion rate — so you can see whether conversion is improving or slipping.
     """
     effective_client_id = enforce_client_scope(client_id, current_user)
-    q = db.query(Lead)
+    q = _lead_query(db)
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     q = _apply_date_range(q, date_from, date_to)
@@ -490,7 +516,7 @@ def overdue_leads_report(
     SD = int(os.environ.get("SLA_STALE_DAYS", "3"))
 
     effective_client_id = enforce_client_scope(client_id, current_user)
-    q = db.query(Lead).filter(Lead.conversion_status.is_(None))
+    q = _lead_query(db).filter(Lead.conversion_status.is_(None))
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     leads = q.all()
@@ -569,7 +595,7 @@ def campaign_performance_report(
 
     result = []
     for camp in campaigns:
-        cq = db.query(Lead).filter(Lead.campaign_id == camp.id)
+        cq = _lead_query(db).filter(Lead.campaign_id == camp.id)
         if date_from:
             cq = cq.filter(Lead.created_at >= date_from)
         if date_to:
@@ -620,7 +646,7 @@ def win_loss_report(
     with win rate. (Loss reasons come from lead notes where provided.)
     """
     effective_client_id = enforce_client_scope(client_id, current_user)
-    q = db.query(Lead)
+    q = _lead_query(db)
     if effective_client_id:
         q = q.filter(Lead.client_id == effective_client_id)
     q = _apply_date_range(q, date_from, date_to)
