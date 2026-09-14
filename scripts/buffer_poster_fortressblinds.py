@@ -135,6 +135,31 @@ def next_weekday_post(weekday_target, hour=9):
     target = (now + timedelta(days=days_ahead)).replace(hour=hour, minute=0, second=0, microsecond=0)
     return target
 
+def get_existing_scheduled(channel_id, org_id):
+    """All scheduled posts on this channel, parsing Buffer's edges/node shape.
+    Returns [] if the list call fails (caller proceeds without dedupe rather than dying)."""
+    r = call_mcp("list_posts", {"organizationId": org_id, "channelId": channel_id, "status": ["scheduled"]})
+    ok, err = is_error(r)
+    if ok:
+        print(f"⚠️ list_posts failed: {err} — proceeding without dedupe")
+        return []
+    text = r.get("result", {}).get("content", [{}])[0].get("text", "{}")
+    try:
+        data = json.loads(text)
+        if isinstance(data, list):
+            return data
+        return [e.get("node", {}) for e in data.get("edges", [])]
+    except Exception:
+        return []
+
+
+def text_in_scheduled(post_text, scheduled_posts):
+    """True if post_text is already scheduled (whitespace-normalized compare)."""
+    norm = lambda s: " ".join((s or "").split()).lower()
+    needle = norm(post_text)
+    return any(norm(p.get("text", "")) == needle for p in scheduled_posts)
+
+
 def load_posts():
     """Load FortressBlinds posts from the draft file."""
     draft_file = os.path.join(SCRIPT_DIR, "..", "social-posts", "draft_fortressblinds_week1.md")
@@ -174,12 +199,24 @@ if __name__ == "__main__":
     posts = load_posts()
     print(f"Loaded {len(posts)} posts")
 
-    # Schedule Mon(0) Wed(2) Fri(4) Sat(5) — weekday numbers
-    weekdays = [0, 2, 4, 5]
+    # Existing scheduled posts (Buffer returns edges[].node — parsed correctly).
+    scheduled = get_existing_scheduled(ch_id, org_id)
+    print(f"Already scheduled on this channel: {len(scheduled)} posts")
+
+    # Schedule Mon(0) Wed(2) Fri(4) — weekday numbers
+    weekdays = [0, 2, 4]
+    scheduled_any = False
     for i, post in enumerate(posts):
         due = next_weekday_post(weekdays[i])
+        if text_in_scheduled(post["text"], scheduled):
+            print(f"⏭  Post {i+1} already scheduled elsewhere — skipping")
+            continue
         ok, result = create_post(ch_id, post["text"], due_at=due)
         if ok:
             print(f"✅ Post {i+1} scheduled for {due.strftime('%a %Y-%m-%d %H:%M %Z')}")
+            scheduled_any = True
         else:
             print(f"❌ Post {i+1} failed: {result}")
+
+    if not scheduled_any:
+        print("No new posts scheduled (all deduped or failed).")
