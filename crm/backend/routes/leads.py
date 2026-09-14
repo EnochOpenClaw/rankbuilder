@@ -54,6 +54,7 @@ from backend.routes.auth import (
     require_admin_or_owner,
     enforce_client_scope,
     enforce_agent_assignment,
+    _visible_client_ids,
 )
 from backend.database import UserRole
 from backend.database import User
@@ -320,11 +321,12 @@ def list_leads(
     current_user: User = Depends(get_current_user),
 ):
     """List leads with optional filters. Scoped to the authenticated user's client."""
-    effective_client_id = enforce_client_scope(client_id, current_user)
+    from sqlalchemy import or_
+    visible_ids = _visible_client_ids(client_id, current_user)
     q = db.query(Lead)
 
-    if effective_client_id:
-        q = q.filter(Lead.client_id == effective_client_id)
+    if visible_ids:
+        q = q.filter(Lead.client_id.in_(visible_ids))
     if current_user.role == UserRole.AGENT:
         # Sales agents see leads assigned to them OR leads they created
         from sqlalchemy import or_
@@ -407,11 +409,12 @@ def export_leads(
     Export leads as CSV (scoped to the authenticated user's client).
     Returns a downloadable CSV file with all matching leads.
     """
-    effective_client_id = enforce_client_scope(client_id, current_user)
+    from sqlalchemy import or_
+    visible_ids = _visible_client_ids(client_id, current_user)
     q = db.query(Lead)
 
-    if effective_client_id:
-        q = q.filter(Lead.client_id == effective_client_id)
+    if visible_ids:
+        q = q.filter(Lead.client_id.in_(visible_ids))
     if current_user.role == UserRole.AGENT:
         # Sales agents see leads assigned to them OR leads they created
         from sqlalchemy import or_
@@ -979,10 +982,13 @@ def handoff_lead(
     db.add(copy)
     db.flush()
 
-    # Tag the original lead with the hand-off reference
+    # Tag the original lead with the hand-off reference, then archive it
+    # so it drops off all rep queues (the source stays in records for the trail).
     lead.partner_handoff_id = copy.id
     lead.partner_handoff_at = datetime.utcnow()
     lead.partner_handoff_by = current_user.email
+    lead.archived = 1
+    lead.archived_at = datetime.utcnow()
 
     # Record history on both
     db.add(LeadHistory(lead_id=lead.id, field_changed="partner_handoff",

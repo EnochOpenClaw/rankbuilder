@@ -421,6 +421,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=False)
     client_id = Column(String(36), ForeignKey("clients.id"), nullable=True)  # NULL for SYSTEM_ADMIN
+    viewable_client_ids = Column(JSON, nullable=True)
     role = Column(SAEnum(UserRole), nullable=False, default=UserRole.VIEWER)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

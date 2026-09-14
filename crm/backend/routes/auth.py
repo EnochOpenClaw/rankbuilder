@@ -147,12 +147,41 @@ def enforce_client_scope(requested_client_id, current_user: User):
     if not current_user.client_id:
         raise HTTPException(status_code=403, detail="Your account is not linked to a client.")
 
+    # Grant cross-client access for clients explicitly listed on the user.
+    viewable = current_user.viewable_client_ids or []
+    if requested_client_id is not None and requested_client_id in viewable:
+        return requested_client_id
     if requested_client_id and requested_client_id != current_user.client_id:
         raise HTTPException(
             status_code=403,
             detail="You can only access data for your own client.",
         )
     return current_user.client_id
+
+
+def _visible_client_ids(requested_client_id, current_user: User):
+    """
+    Return the set of client ids the current user may READ when listing leads.
+    - SYSTEM_ADMIN: requested_client_id if given, else None (all clients).
+    - Other users: requested_client_id (must be home or a viewable grant), else
+      home client + any cross-client grants (viewable_client_ids).
+    """
+    if current_user.role == UserRole.SYSTEM_ADMIN:
+        return [requested_client_id] if requested_client_id else None
+
+    if not current_user.client_id:
+        raise HTTPException(status_code=403, detail="Your account is not linked to a client.")
+
+    viewable = list(current_user.viewable_client_ids or [])
+    if requested_client_id:
+        if requested_client_id == current_user.client_id or requested_client_id in viewable:
+            return [requested_client_id]
+        raise HTTPException(status_code=403, detail="You can only access data for your own client.")
+
+    # No filter -> home client + cross-client grants
+    ids = {current_user.client_id}
+    ids.update(viewable)
+    return list(ids)
 
 
 def enforce_agent_assignment(lead, current_user: User):
