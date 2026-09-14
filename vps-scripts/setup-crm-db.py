@@ -65,13 +65,13 @@ for table, col, dtype in [
 cur.execute("""INSERT OR IGNORE INTO clients
     (id, api_key, company_name, contact_email, notification_channel, notification_target, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-    [hos_id, api_key, 'House of Supreme', 'craig@houseofsupreme.co.za', 'EMAIL', 'craigp@ct-designs.co.za', now, now])
+    [hos_id, api_key, 'House of Supreme', 'craig@houseofsupreme.co.za', 'EMAIL', 'craig@houseofsupreme.co.za', now, now])
 
 # Notification recipients
 for email, name in [
     ('tiaan@houseofsupreme.co.za', 'Tiaan'),
     ('robin@houseofsupreme.co.za', 'Robin'),
-    ('craigp@ct-designs.co.za', 'Craig'),
+    ('craig@houseofsupreme.co.za', 'Craig'),
 ]:
     nid = str(uuid.uuid4())
     cur.execute("""INSERT OR IGNORE INTO notification_settings

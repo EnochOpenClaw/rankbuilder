@@ -584,7 +584,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
   // user. Drives the new-lead highlight (row tint + bold + NEW badge) so agents
   // and managers can instantly spot leads that still need attention.
   const isUnread = (r) =>
-    !!r && !!r.assigned_to && !r.archived &&
+    !!r && !!r.assigned_to && !r.archived && !r.partner_handoff_id &&
     !r.read_by_me
 
   // Open a lead in the drawer AND mark it read for the current user, then
@@ -1052,7 +1052,7 @@ const KANBAN_COLUMNS = ['NEW', 'REVIEWED', 'QUALIFIED', 'SENT', 'CONTACTED', 'CO
 function KanbanBoard({ clientId, canWrite = true, onUpdate, onOpenLead, currentUserEmail = '' }) {
   // Unread = assigned but not yet opened by the current user (same rule as the table)
   const isUnread = (lead) =>
-    !!lead.assigned_to && !lead.archived && !lead.read_by_me
+    !!lead.assigned_to && !lead.archived && !lead.partner_handoff_id && !lead.read_by_me
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
 

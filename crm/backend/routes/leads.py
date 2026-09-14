@@ -119,9 +119,14 @@ def _lead_to_response(lead: Lead, viewer_email: str = None) -> LeadResponse:
     # A lead is "unread for the viewer" when it is assigned, not archived, and has
     # not yet been opened by the current user. read_at/read_by track the FIRST
     # opener; read_by_me is per-viewer so each rep gets their own highlight.
+    # Handed-off source leads (partner_handoff_id set, i.e. the original that was
+    # copied to a partner e.g. Cape Town) are NO LONGER the originator's to action —
+    # they never highlight and never show as NEW/follow-up-pending on the source.
+    handed_off = bool(lead.partner_handoff_id)
     read_by_me = bool(
         lead.assigned_to
         and not lead.archived
+        and not handed_off
         and viewer_email
         and (lead.read_by == viewer_email)
     )
@@ -364,10 +369,14 @@ def list_leads(
     # Default sort: unread (assigned-but-not-opened-by-viewer) leads first,
     # then newest-first. "Unread" is viewer-relative — a lead is unread for the
     # current user when it's assigned, not archived, and not yet opened by them.
+    # Handed-off source leads (partner_handoff_id set) are excluded from the
+    # unread bucket — they're no longer the originator's to action, so they don't
+    # bubble to the top as requiring attention on the source side.
     unread_first = case(
         (
             (Lead.assigned_to.isnot(None))
             & (Lead.archived == 0)
+            & (Lead.partner_handoff_id.is_(None))
             & ((Lead.read_by.is_(None)) | (Lead.read_by != current_user.email)),
             0,
         ),

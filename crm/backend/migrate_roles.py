@@ -17,15 +17,19 @@ What this script does (idempotent, safe):
   1. Widen users.role from VARCHAR(12) -> VARCHAR(20) (advisory in SQLite, but keeps
      DDL accurate and future-proof). SQLite already stores SALES_MANAGER fine, so
      this is belt-and-braces, not strictly required.
-  2. Optionally reassign existing users to sensible least-privilege roles per the
-     documented defaults (dry-run with --dry-run; apply with --apply).
+  2. Reassign existing users to the FINAL least-privilege roles (Craig confirmed
+     2026-09-14): tiaan -> SALES_MANAGER; craig stays SYSTEM_ADMIN; lee-ann/robin/
+     vanessa -> VIEWER; agent -> AGENT. richard is DELIBERATELY left untouched.
+  3. Replace the stale Craig notification email `craigp@ct-designs.co.za` with
+     `craig@houseofsupreme.co.za` everywhere it appears (notification_settings).
+     Dry-run by default; apply with --apply.
 
 Run on VPS:  python3 /root/rankbuilder/crm/backend/migrate_roles.py --apply
              (local: python3 backend/migrate_roles.py --apply)
              (CRM_DB env var overrides the DB path if needed)
 
-The default role reassignment below is the RECOMMENDED least-privilege layout and
-is NOT applied unless you pass --apply. Review the table first with --dry-run.
+The role + email changes below are NOT applied unless you pass --apply.
+Review the table first with --dry-run (the default).
 """
 
 import os
@@ -35,25 +39,27 @@ import sqlite3
 
 DB_PATH = os.environ.get("CRM_DB", "/root/rankbuilder/crm/data/rankbuilder_crm.db")
 
-# ── Recommended least-privilege role layout (Craig 2026-09-14) ──────────────────
+# ── Recommended least-privilege role layout (Craig 2026-09-14 FINAL) ────────────
 # email -> role. Only roles in the UserRole enum are valid:
 #   SYSTEM_ADMIN, CLIENT_ADMIN, SALES_MANAGER, AGENT, VIEWER
 # - craig:  SYSTEM_ADMIN  (full, cross-client admin — unchanged)
-# - richard: SALES_MANAGER (Cape Town regional lead — can hand off / manage region)
-# - tiaan:  SALES_MANAGER  (Johannesburg regional lead — can hand off / manage region)
+# - tiaan:  SALES_MANAGER  (JHB rep — given hand-off capability so HE can use the
+#                           "Hand to partner" section and assign Cape Town jobs himself)
+# - richard: DO NOT TOUCH — Craig confirmed Richard's current setup is perfect
+#            (Cape Town rep, sees only CPT-assigned jobs, manages them). He is NOT
+#            in this map and is never reassigned or re-scoped by this migration.
 # - lee-ann, robin, vanessa: VIEWER (management read-only; notified via group)
 # - agent@rankbuilder.local: AGENT (only their own assigned leads)
-# NOTE: This is a proposal. Confirm with Craig before --apply if any of these
-#       assignments would lock someone out or change their current workflow.
 DEFAULT_ROLE_MAP = {
     "craig@houseofsupreme.co.za": "SYSTEM_ADMIN",
-    "richard@houseofsupreme.co.za": "SALES_MANAGER",
     "tiaan@houseofsupreme.co.za": "SALES_MANAGER",
     "lee-ann@houseofsupreme.co.za": "VIEWER",
     "robin@houseofsupreme.co.za": "VIEWER",
     "vanessa@houseofsupreme.co.za": "VIEWER",
     "agent@rankbuilder.local": "AGENT",
 }
+# Users deliberately EXCLUDED from reassignment (never touched):
+#   richard@houseofsupreme.co.za — Craig's final call: leave exactly as he is now.
 
 
 def _column_count(c, table):
@@ -107,6 +113,29 @@ def migrate(db_path, apply: bool):
     else:
         print("\n(dry-run) Role reassignment NOT applied. Pass --apply to change roles.")
         print("Confirm the layout with Craig first — reassignment can affect access.")
+
+    # ── 3. Swap stale Craig recipient email (Craig confirmed 2026-09-14) ──────
+    # notification_settings row ns-hos-craig (and any other row) used the old/wrong
+    # farcaster email craigp@ct-designs.co.za. Replace with the correct one so
+    # Craig still gets new-lead / SLA / follow-up alerts.
+    STALE_EMAIL = "craigp@ct-designs.co.za"
+    GOOD_EMAIL = "craig@houseofsupreme.co.za"
+    stale_rows = c.execute(
+        "SELECT id, target FROM notification_settings WHERE target=?", (STALE_EMAIL,)
+    ).fetchall()
+    if stale_rows:
+        print("\n── Stale Craig recipient email ──")
+        for rid, target in stale_rows:
+            print(f"  {rid} : {target}  ->  {GOOD_EMAIL}")
+        if apply:
+            c.execute("UPDATE notification_settings SET target=? WHERE target=?",
+                      (GOOD_EMAIL, STALE_EMAIL))
+            conn.commit()
+            print("✅ Stale Craig email swapped to " + GOOD_EMAIL)
+        else:
+            print("   (dry-run) Run with --apply to swap.")
+    else:
+        print("ℹ️  No notification_settings rows use the stale Craig email.")
 
     conn.close()
 

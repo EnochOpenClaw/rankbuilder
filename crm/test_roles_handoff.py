@@ -89,41 +89,57 @@ def test_sales_manager_role():
     print("=" * 60)
     print("TEST 2: SALES_MANAGER role accepted + can manage (hand off)")
     print("=" * 60)
-    # Richard is currently CLIENT_ADMIN in DB; promote to SALES_MANAGER to emulate
-    # the delegated role. Use direct DB update (test-only).
+    from backend.routes.auth import hash_password
+    from backend.database import SessionLocal, User
+    # Use a throwaway SALES_MANAGER account so the test never depends on a real
+    # user's password. Tiaan is SALES_MANAGER in the DB (Craig's final call
+    # 2026-09-14); Richard is deliberately untouched (CLIENT_ADMIN).
+    db = SessionLocal()
+    sm = User(email="sm@example.com", hashed_password=hash_password("TestPass123!"),
+              full_name="SM Test", client_id=HOS, role="SALES_MANAGER")
+    db.add(sm)
+    db.commit()
+    sm_id = sm.id
+    db.close()
+
+    try:
+        token = login("sm@example.com", "TestPass123!")
+        h = {"Authorization": f"Bearer {token}"}
+        # Ensure login still returns the new role
+        r = client.get("/api/auth/me", headers=h)
+        assert r.status_code == 200
+        assert r.json()["role"] == "SALES_MANAGER", f"expected SALES_MANAGER, got {r.json()['role']}"
+        print(f"✅ Login accepted; role={r.json()['role']}")
+
+        # SALES_MANAGER can read leads of own client
+        r = client.get(f"/api/leads?client_id={HOS}", headers=h)
+        assert r.status_code == 200
+        print("✅ SALES_MANAGER can list own client's leads")
+
+        # SALES_MANAGER CAN hand off (delegated capability)
+        r = client.post("/api/leads/some-id/handoff", headers=h, json={
+            "partner_client_id": "x", "target_user_email": "y@example.com"})
+        # Expect 404 (lead not found) NOT 403 — proving permission is granted.
+        assert r.status_code == 404, f"SALES_MANAGER handoff should pass auth (404), got {r.status_code}: {r.text}"
+        print("✅ SALES_MANAGER handoff permission granted (404 = auth passed, lead lookup fails as expected)")
+    finally:
+        db = SessionLocal()
+        db.query(User).filter(User.id == sm_id).delete()
+        db.commit()
+        db.close()
+    print()
+
+
+def test_richard_untouched():
+    print("=" * 60)
+    print("TEST 2b: richard stays CLIENT_ADMIN (not re-scoped)")
+    print("=" * 60)
     from backend.database import SessionLocal, User
     db = SessionLocal()
     u = db.query(User).filter(User.email == USERS["richard"][0]).first()
-    u.role = "SALES_MANAGER"
-    db.commit()
+    assert u.role == "CLIENT_ADMIN", f"richard should remain CLIENT_ADMIN, got {u.role}"
     db.close()
-
-    token = login(*USERS["richard"])
-    h = {"Authorization": f"Bearer {token}"}
-    # Ensure login still returns the new role
-    r = client.get("/api/auth/me", headers=h)
-    assert r.status_code == 200
-    print(f"✅ Login accepted; role={r.json()['role']}")
-
-    # SALES_MANAGER can read leads of own client
-    r = client.get(f"/api/leads?client_id={HOS}", headers=h)
-    assert r.status_code == 200
-    print("✅ SALES_MANAGER can list own client's leads")
-
-    # SALES_MANAGER CAN hand off (delegated capability)
-    r = client.post("/api/leads/some-id/handoff", headers=h, json={
-        "partner_client_id": "x", "target_user_email": "y@example.com"})
-    # Expect 404 (lead not found) NOT 403 — proving permission is granted.
-    assert r.status_code == 404, f"SALES_MANAGER handoff should pass auth (404), got {r.status_code}: {r.text}"
-    print("✅ SALES_MANAGER handoff permission granted (404 = auth passed, lead lookup fails as expected)")
-
-    # Restore role
-    db = SessionLocal()
-    u = db.query(User).filter(User.email == USERS["richard"][0]).first()
-    u.role = "CLIENT_ADMIN"
-    db.commit()
-    db.close()
-    print("✅ Restored Richard to CLIENT_ADMIN")
+    print("✅ richard = CLIENT_ADMIN (untouched, sees only Cape Town jobs as before)")
     print()
 
 
@@ -207,6 +223,7 @@ def test_viewer_cannot_handoff():
 if __name__ == "__main__":
     test_highlight_read_by_me()
     test_sales_manager_role()
+    test_richard_untouched()
     test_handoff_delegated_to_client_admin()
     test_viewer_cannot_handoff()
     print("=" * 60)
