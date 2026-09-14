@@ -50,3 +50,6 @@ crm/data/
 _vps_custom_backup/
 # Virtualenv
 venv/
+# YouTube OAuth — never commit credentials or tokens
+scripts/client_secret.json
+scripts/youtube_token.json
