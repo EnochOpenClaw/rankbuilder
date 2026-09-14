@@ -1,0 +1,71 @@
+name: Deploy RankBuilder Container
+
+# Rebuilds + redeploys the RankBuilder container on the VPS when code changes
+# are pushed to main. Runs the Coolify redeploy trigger ON the VPS via SSH:
+#
+#   ssh root@VPS → bash /root/scripts/rankbuilder-redeploy.sh
+#
+# The script calls the local Coolify API (localhost:8000) with the token from
+# /root/.coolify-agent-token — the token never leaves the VPS and is never a
+# repo secret.
+#
+# Note: GitHub requires HTTPS webhooks, and Coolify here is HTTP-only on the
+# public IP (161.97.142.87:8000), so a direct GitHub→Coolify webhook is not
+# possible. This Actions relay is the supported path — same pattern as
+# deploy.yml (CRM frontend).
+#
+# Required repo secrets (Settings > Secrets and variables > Actions):
+#   VPS_HOST    = 161.97.142.87
+#   VPS_SSH_KEY = private key for fortressblinds_vps_key (PEM, key-only auth)
+
+"on":
+  push:
+    branches: [main]
+    # Exclude docs/chore-only paths that don't affect the container image.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.github/workflows/*'
+  workflow_dispatch: # allow manual trigger
+
+jobs:
+  redeploy:
+    name: Redeploy RankBuilder container
+    runs-on: ubuntu-latest
+    if: github.repository == 'EnochOpenClaw/rankbuilder'
+    concurrency:
+      group: deploy-rankbuilder-container
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          if [ -z "$VPS_SSH_KEY" ] || [ -z "$VPS_HOST" ]; then
+            echo "::error::Missing required secrets VPS_SSH_KEY / VPS_HOST. Configure them in repo Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "VPS_HOST=$VPS_HOST" >> "$GITHUB_ENV"
+          echo "VPS_USER=${VPS_USER:-root}" >> "$GITHUB_ENV"
+
+      - name: Install redeploy script on VPS
+        run: |
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              scripts/rankbuilder-redeploy.sh "$VPS_USER@$VPS_HOST:/root/scripts/rankbuilder-redeploy.sh"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              "$VPS_USER@$VPS_HOST" \
+              "chmod +x /root/scripts/rankbuilder-redeploy.sh && echo 'redeploy script installed'"
+
+      - name: Trigger Coolify redeploy (local API) + verify health
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              "$VPS_USER@$VPS_HOST" \
+              "bash /root/scripts/rankbuilder-redeploy.sh"
