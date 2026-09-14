@@ -118,14 +118,16 @@ def require_client_access(
 
 
 def require_admin_or_owner():
-    """Dependency — write-capable roles: SYSTEM_ADMIN, CLIENT_ADMIN, or AGENT.
-    AGENT writes are additionally restricted to their OWN assigned leads
-    (checked per-endpoint via enforce_agent_assignment)."""
+    """Dependency — write-capable roles: SYSTEM_ADMIN, CLIENT_ADMIN, SALES_MANAGER,
+    or AGENT. AGENT writes are additionally restricted to their OWN assigned leads
+    (checked per-endpoint via enforce_agent_assignment). SALES_MANAGER inherits the
+    client-scoped write access of CLIENT_ADMIN (own client's leads)."""
     def checker(current_user: User = Depends(get_current_user)):
-        if current_user.role not in (UserRole.SYSTEM_ADMIN, UserRole.CLIENT_ADMIN, UserRole.AGENT):
+        if current_user.role not in (UserRole.SYSTEM_ADMIN, UserRole.CLIENT_ADMIN,
+                                     UserRole.SALES_MANAGER, UserRole.AGENT):
             raise HTTPException(
                 status_code=403,
-                detail="This action requires SYSTEM_ADMIN, CLIENT_ADMIN or AGENT.",
+                detail="This action requires SYSTEM_ADMIN, CLIENT_ADMIN, SALES_MANAGER or AGENT.",
             )
         return current_user
     return checker
@@ -139,7 +141,7 @@ def enforce_client_scope(requested_client_id, current_user: User):
     - CLIENT_ADMIN/VIEWER: forced to their own client_id
     Raises 403 if a non-admin tries to access another client's data.
     """
-    if current_user.role == UserRole.SYSTEM_ADMIN:
+    if current_user.role in (UserRole.SYSTEM_ADMIN, UserRole.CLIENT_ADMIN, UserRole.SALES_MANAGER):
         return requested_client_id  # may be None → all clients
 
     if not current_user.client_id:
@@ -334,17 +336,17 @@ def create_user(
 @router.get("/users", response_model=list[UserResponse])
 def list_users(
     db=Depends(get_db),
-    current_user: User = Depends(require_role("SYSTEM_ADMIN", "CLIENT_ADMIN")),
+    current_user: User = Depends(require_role("SYSTEM_ADMIN", "CLIENT_ADMIN", "SALES_MANAGER")),
     client_id: str | None = None,
 ):
     """
     List users.
     - SYSTEM_ADMIN: all active users, optionally filtered by client_id
-    - CLIENT_ADMIN: only users belonging to their own client
+    - CLIENT_ADMIN / SALES_MANAGER: only users belonging to their own client
     """
     q = db.query(User).filter(User.is_active == 1)
 
-    if current_user.role == UserRole.CLIENT_ADMIN:
+    if current_user.role in (UserRole.CLIENT_ADMIN, UserRole.SALES_MANAGER):
         q = q.filter(User.client_id == current_user.client_id)
     elif client_id:
         q = q.filter(User.client_id == client_id)

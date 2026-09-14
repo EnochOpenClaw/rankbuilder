@@ -43,10 +43,11 @@ class NotificationSettingResponse(BaseModel):
 
 
 def _require_client_admin(db: Session, user: User):
-    """Ensure user is SYSTEM_ADMIN or CLIENT_ADMIN. Returns client_id (or None for SYSTEM_ADMIN)."""
+    """Ensure user is SYSTEM_ADMIN, CLIENT_ADMIN, or SALES_MANAGER.
+    Returns client_id (or None for SYSTEM_ADMIN)."""
     if user.role.value == "SYSTEM_ADMIN":
         return None  # Caller must provide client_id in payload
-    if user.role.value == "CLIENT_ADMIN":
+    if user.role.value in ("CLIENT_ADMIN", "SALES_MANAGER"):
         return user.client_id
     raise HTTPException(status_code=403, detail="Admin access required")
 

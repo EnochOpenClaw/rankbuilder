@@ -185,7 +185,9 @@ def main():
             .filter(
                 Lead.assigned_to.isnot(None),
                 Lead.status.notin_([LeadStatus.CONVERTED, LeadStatus.LOST]),
-                Lead.archived == 0,  # archived deals stop pinging
+                # NOTE: no archived == 0 filter — archived deals still need
+                # follow-up nudges unless actively CLOSED (CONVERTED/LOST).
+                # Craig 2026-09-14: leads in archived folders must still ping.
                 Lead.partner_handoff_id.is_(None),  # skip leads handed off to a partner
             )
             .all()

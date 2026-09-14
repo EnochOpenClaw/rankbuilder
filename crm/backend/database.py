@@ -66,10 +66,11 @@ class CampaignStatus(str, enum.Enum):
 
 
 class UserRole(str, enum.Enum):
-    SYSTEM_ADMIN = "SYSTEM_ADMIN"
-    CLIENT_ADMIN = "CLIENT_ADMIN"
-    AGENT = "AGENT"
-    VIEWER = "VIEWER"
+    SYSTEM_ADMIN = "SYSTEM_ADMIN"     # full access across all clients (Craig)
+    CLIENT_ADMIN = "CLIENT_ADMIN"     # admin for a single client (own client scope)
+    SALES_MANAGER = "SALES_MANAGER"   # sales lead: own client/region view, hand-off, group mgmt
+    AGENT = "AGENT"                   # assigned leads only
+    VIEWER = "VIEWER"                 # read-only, own client
 
 
 class NotificationChannel(str, enum.Enum):

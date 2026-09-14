@@ -115,7 +115,16 @@ def _notify_async(trigger: str, lead_id: str, db: Session):
 router = APIRouter()
 
 
-def _lead_to_response(lead: Lead) -> LeadResponse:
+def _lead_to_response(lead: Lead, viewer_email: str = None) -> LeadResponse:
+    # A lead is "unread for the viewer" when it is assigned, not archived, and has
+    # not yet been opened by the current user. read_at/read_by track the FIRST
+    # opener; read_by_me is per-viewer so each rep gets their own highlight.
+    read_by_me = bool(
+        lead.assigned_to
+        and not lead.archived
+        and viewer_email
+        and (lead.read_by == viewer_email)
+    )
     return LeadResponse(
         id=lead.id,
         client_id=lead.client_id,
@@ -155,6 +164,7 @@ def _lead_to_response(lead: Lead) -> LeadResponse:
         assigned_at=lead.assigned_at,
         read_at=lead.read_at,
         read_by=lead.read_by,
+        read_by_me=read_by_me,
         last_follow_up_at=lead.last_follow_up_at,
         follow_up_count=lead.follow_up_count,
         created_at=lead.created_at,
@@ -220,7 +230,7 @@ def create_lead(
         )
         db.add(hist)
         db.commit()
-        return _lead_to_response(lead)
+        return _lead_to_response(lead, current_user.email if current_user else None)
 
     lead = Lead(
         client_id=effective_client_id,
@@ -284,7 +294,7 @@ def create_lead(
         # High-intent lead — fire urgent hot-lead alert
         _executor.submit(_notify_async, "hot_lead", lead.id, db)
 
-    return _lead_to_response(lead)
+    return _lead_to_response(lead, current_user.email if current_user else None)
 
 
 @router.get("", response_model=LeadListResponse)
@@ -370,7 +380,7 @@ def list_leads(
         .all()
     )
 
-    return LeadListResponse(total=total, leads=[_lead_to_response(l) for l in leads])
+    return LeadListResponse(total=total, leads=[_lead_to_response(l, current_user.email) for l in leads])
 
 
 @router.get("/export")
@@ -485,7 +495,7 @@ def get_lead(
         raise HTTPException(status_code=404, detail="Lead not found")
     enforce_client_scope(lead.client_id, current_user)
     enforce_agent_assignment(lead, current_user)
-    return _lead_to_response(lead)
+    return _lead_to_response(lead, current_user.email)
 
 
 @router.post("/{lead_id}/read", response_model=LeadResponse)
@@ -513,7 +523,7 @@ def mark_lead_read(
         lead.read_by = current_user.email
         db.commit()
         db.refresh(lead)
-    return _lead_to_response(lead)
+    return _lead_to_response(lead, current_user.email)
 
 
 @router.get("/{lead_id}/history", response_model=LeadHistoryResponse)
@@ -589,7 +599,7 @@ def assign_lead_manual(
         lead._allocated_by = current_user.email if current_user else "system"
         _executor.submit(_notify_async, "lead_allocated", lead.id, db)
 
-    return _lead_to_response(lead)
+    return _lead_to_response(lead, current_user.email if current_user else None)
 
 
 @router.post("/{lead_id}/follow-up", response_model=LeadFollowUpResponse)
@@ -816,7 +826,7 @@ def update_lead(
 
     db.commit()
     db.refresh(lead)
-    return _lead_to_response(lead)
+    return _lead_to_response(lead, current_user.email if current_user else None)
 
 
 @router.post("/{lead_id}/archive", response_model=LeadResponse)
@@ -836,7 +846,7 @@ def archive_lead(
                        new_value="1", changed_by=current_user.email))
     db.commit()
     db.refresh(lead)
-    return _lead_to_response(lead)
+    return _lead_to_response(lead, current_user.email if current_user else None)
 
 
 @router.post("/{lead_id}/restore", response_model=LeadResponse)
@@ -856,7 +866,7 @@ def restore_lead(
                        old_value="1", new_value="0", changed_by=current_user.email))
     db.commit()
     db.refresh(lead)
-    return _lead_to_response(lead)
+    return _lead_to_response(lead, current_user.email if current_user else None)
 
 
 @router.delete("/{lead_id}", status_code=204)
@@ -881,16 +891,25 @@ def handoff_lead(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Hand a lead off to a partner client (e.g. Southern Shutters / Sian).
+    """Hand a lead off to a partner client (e.g. Southern Shutters / Sian / Cape Town).
 
     Creates a COPY of the lead under the partner client (assigned to the partner's
     target user), and tags the original HOS lead with the hand-off reference so the
-    trail is visible. SYSTEM_ADMIN only.
+    trail is visible.
+
+    Allowed roles: SYSTEM_ADMIN, CLIENT_ADMIN, SALES_MANAGER — so hand-off can be
+    delegated to regional sales leads (e.g. handing a lead to the Cape Town rep)
+    without requiring Craig. Scope is enforced: a manager may only hand off leads
+    from their own client.
 
     Body: {"partner_client_id": "<id>", "target_user_email": "<email>"}
     """
-    if current_user.role != UserRole.SYSTEM_ADMIN:
-        raise HTTPException(status_code=403, detail="Only a system admin can hand leads off")
+    if current_user.role not in (UserRole.SYSTEM_ADMIN, UserRole.CLIENT_ADMIN,
+                                 UserRole.SALES_MANAGER):
+        raise HTTPException(
+            status_code=403,
+            detail="Handing leads off requires SYSTEM_ADMIN, CLIENT_ADMIN or SALES_MANAGER.",
+        )
 
     partner_client_id = (payload or {}).get("partner_client_id")
     target_email = (payload or {}).get("target_user_email")
@@ -902,6 +921,8 @@ def handoff_lead(
         raise HTTPException(status_code=404, detail="Lead not found")
     if lead.partner_handoff_id:
         raise HTTPException(status_code=400, detail="Lead already handed off")
+    # Scope: non-SYSTEM_ADMIN may only hand off leads from their own client
+    enforce_client_scope(lead.client_id, current_user)
 
     partner = db.query(Client).filter(Client.id == partner_client_id).first()
     if not partner:
@@ -964,4 +985,4 @@ def handoff_lead(
 
     db.commit()
     db.refresh(copy)
-    return _lead_to_response(copy)
+    return _lead_to_response(copy, current_user.email if current_user else None)

@@ -543,7 +543,7 @@ function MobileLeadCard({ lead, isUnread, onOpen }) {
   )
 }
 
-export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign, canWrite = true, sources = [], onSourcesChange, currentUserEmail = '' }) {
+export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, onClearCampaign, canWrite = true, canHandoff = false, sources = [], onSourcesChange, currentUserEmail = '' }) {
   const [leads, setLeads] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -847,7 +847,7 @@ export function LeadsTab({ clientId, refreshKey, campaignFilter, campaignName, o
               Archive
             </Button>
           )}
-          {!r.archived && DELETE_ALLOWED_EMAILS.includes(currentUserEmail) && (
+          {!r.archived && canHandoff && (
             <Button size="small" icon={<SendOutlined />} onClick={() => openHandoff(r)}>
               Hand to Partner
             </Button>
@@ -2776,7 +2776,7 @@ function UsersTab({ user: currentUser, clients }) {
     {
       title: 'Role',
       dataIndex: 'role',
-      render: r => <Tag color={r === 'SYSTEM_ADMIN' ? 'red' : r === 'CLIENT_ADMIN' ? 'blue' : r === 'AGENT' ? 'purple' : 'default'}>{r}</Tag>,
+      render: r => <Tag color={r === 'SYSTEM_ADMIN' ? 'red' : r === 'CLIENT_ADMIN' ? 'blue' : r === 'SALES_MANAGER' ? 'geekblue' : r === 'AGENT' ? 'purple' : 'default'}>{r}</Tag>,
     },
     {
       title: 'Client',
@@ -2838,6 +2838,7 @@ function UsersTab({ user: currentUser, clients }) {
           <Form.Item name="role" label="Role" rules={[{ required: true }]} initialValue="VIEWER">
             <Select>
               <Select.Option value="CLIENT_ADMIN">CLIENT_ADMIN — Full access to their client</Select.Option>
+              <Select.Option value="SALES_MANAGER">SALES_MANAGER — Regional sales lead: manage region leads + hand off</Select.Option>
               <Select.Option value="AGENT">AGENT — Sales rep, sees only their assigned leads</Select.Option>
               <Select.Option value="VIEWER">VIEWER — Read-only access</Select.Option>
             </Select>
@@ -3758,11 +3759,14 @@ export default function App() {
   }
 
   const role = user.role
-  const isAdmin = role === 'SYSTEM_ADMIN' || role === 'CLIENT_ADMIN'
+  const isAdmin = role === 'SYSTEM_ADMIN' || role === 'CLIENT_ADMIN' || role === 'SALES_MANAGER'
   const isViewer = role === 'VIEWER'
   const isAgent = role === 'AGENT'
-  const canWrite = isAdmin || isAgent  // VIEWER is read-only
+  const canWrite = isAdmin || isAgent  // VIEWER is read-only; SALES_MANAGER inherits client-scoped write
   const isMultiClientAdmin = role === 'SYSTEM_ADMIN'
+  // Hand-off (e.g. to Cape Town) is delegated: system admin, client admin, and
+  // regional sales managers may all hand leads off. Backend enforces this too.
+  const canHandoff = role === 'SYSTEM_ADMIN' || role === 'CLIENT_ADMIN' || role === 'SALES_MANAGER'
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
@@ -3892,6 +3896,7 @@ export default function App() {
                   campaignFilter={campaignFilter}
                   campaignName={campaignName}
                   canWrite={canWrite}
+                  canHandoff={canHandoff}
                   currentUserEmail={user.email}
                   sources={sources}
                   onSourcesChange={setSources}

@@ -163,6 +163,12 @@ def startup():
             if "must_change_password" not in ucols:
                 conn6.execute(text("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 1"))
         print("[migrate] users.must_change_password ensured")
+        # users.role — widen from VARCHAR(12) to VARCHAR(20) so new roles like
+        # SALES_MANAGER (13 chars) and future regional-lead roles fit comfortably.
+        # SQLite ignores the declared width (SALES_MANAGER stores fine already),
+        # but run migrate_roles.py to widen the DDL for accuracy and safety on
+        # strict-mode tables or future backends.
+        print("[migrate] users.role width is advisory in SQLite; SALES_MANAGER stores fine. See migrate_roles.py to widen to VARCHAR(20).")
         # leads.payment_received_at — timestamp when payment_status became RECEIVED
         # (starts the install/quiet window before the post-install follow-up)
         pcols = {c["name"] for c in insp.get_columns("leads")}

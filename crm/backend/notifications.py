@@ -218,6 +218,25 @@ def _lead_detail_html(lead: dict) -> str:
 
 # ── Notification triggers ──────────────────────────────────────────────────────
 
+def _is_hos_client(client_id: str, db=None) -> bool:
+    """Return True if the client is the House of Supreme anchor tenant.
+
+    Detected by company_name rather than a hardcoded uuid, so the special-cased
+    group routing keeps working even if the HOS client id changes or is re-seeded.
+    """
+    try:
+        from backend.database import Client, SessionLocal as _SL
+        session = db if db is not None else _SL()
+        try:
+            client = session.query(Client).filter(Client.id == client_id).first()
+            return bool(client and (client.company_name or "").strip().lower() == "house of supreme")
+        finally:
+            if db is None:
+                session.close()
+    except Exception:
+        return False
+
+
 def notify_new_lead(lead: dict, db=None) -> None:
     """
     Called when a new lead is created in the CRM.
@@ -236,8 +255,7 @@ def notify_new_lead(lead: dict, db=None) -> None:
 
     # For non-HOS clients (e.g. Southern Shutters), use that client's configured
     # notification recipients (from notification_settings) — not the HOS team.
-    HOS_CLIENT = "514a96af-4262-4cfe-b85e-37b6af223faa"
-    if client_id != HOS_CLIENT and db is not None:
+    if not _is_hos_client(client_id, db):
         recipients = _get_notification_recipients(client_id, db)
         if not recipients:
             recipients = _get_notification_recipients(client_id, None)

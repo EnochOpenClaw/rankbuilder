@@ -64,7 +64,9 @@ def check_sla(db):
         Lead.conversion_status.is_(None),
         Lead.partner_handoff_id.is_(None),
         Lead.status.notin_(["CONVERTED", "LOST"]),  # terminal deals stop pinging
-        Lead.archived == 0,  # archived deals stop pinging
+        # NOTE: no archived == 0 filter — archived deals still need SLA alerts
+        # unless actively CLOSED (CONVERTED/LOST). Craig 2026-09-14: leads in
+        # archived folders must still ping.
     ).all():
         if lead.id in paused_ids:
             continue  # reminder scheduled — don't nag until it fires

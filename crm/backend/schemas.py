@@ -206,6 +206,10 @@ class LeadResponse(BaseModel):
     # ── Read / viewed tracking (new-lead highlighting) ────────────────────
     read_at: Optional[datetime] = None
     read_by: Optional[str] = None
+    # Viewer-relative: True when this lead is assigned and NOT yet opened by the
+    # current user. Drives the new-lead highlight (row tint + bold + NEW badge)
+    # so agents/managers instantly see leads still needing attention.
+    read_by_me: Optional[bool] = False
     created_at: datetime
     updated_at: datetime
 

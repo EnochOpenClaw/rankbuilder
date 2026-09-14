@@ -29,7 +29,7 @@ USERS = {
     "viewer": {"email": "robin@houseofsupreme.co.za", "password": "Robin1234!"},
 }
 # New long-lived agent service token (CLIENT_ADMIN, HOS client)
-AGENT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMjI1YzlhNS05MjU0LTRhYWItYTIxOS1hNmZlM2E5NDAzZTUiLCJyb2xlIjoiQ0xJRU5UX0FETUlOIiwiY2xpZW50X2lkIjoiZTc0MTE5YjktMTdlMy00Zjc0LWIyMTgtNjdlZjBlNjZmMWNjIiwiZXhwIjoxOTQzNTEwMTYyfQ.2kmoSdeWT80eKKxc5o4Rf5XpM6-AN0roS509e9kmDD0"
+AGENT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMjI1YzlhNS05MjU0LTRhYWItYTIxOS1hNmZlM2E5NDAzZTUiLCJyb2xlIjoiQ0xJRU5UX0FETUlOIiwiY2xpZW50X2lkIjoiZTc0MTE5YjktMTdlMy00Zjc0LWIyMTgtNjdlZjBlNjZmMWNjIiwiZXhwIjoxNzg5NDU4OTMwfQ.NoPsvsI-b_J3Gl-B7sM25THv7_a-SeweDRE1ujjiVww"
 
 
 def login(email, password):
