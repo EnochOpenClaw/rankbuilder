@@ -13,6 +13,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, not_
 from sqlalchemy.orm import Session
 
 from backend.database import get_db, ScoringRule, User, Lead
@@ -152,8 +153,18 @@ def get_tiers(
     """Return tier thresholds + current lead distribution by tier."""
     from backend.scoring import compute_score
 
-    # Load all leads for the user's scope
-    q = db.query(Lead)
+    # Load all leads for the user's scope. Handed-off SOURCE leads (archived trail
+    # markers) are not live leads — exclude them from tier distribution. The partner
+    # copy (live, archived=0) also carries partner_handoff_id, so keep it by filtering
+    # on archived=1 (the source) rather than partner_handoff_id being NULL.
+    q = db.query(Lead).filter(
+        not_(
+            and_(
+                Lead.partner_handoff_id.isnot(None),
+                Lead.archived == 1,
+            )
+        )
+    )
     if current_user.role.value != "SYSTEM_ADMIN":
         if not current_user.client_id:
             raise HTTPException(status_code=403, detail="Account not linked to a client")

@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, not_
 from sqlalchemy.orm import Session
 
 from backend.database import get_db, Campaign, CampaignDailyLog, Lead, CampaignStatus, LeadSource, LeadStatus
@@ -32,12 +33,17 @@ router = APIRouter()
 
 def _campaign_to_response(campaign: Campaign, db: Session) -> CampaignResponse:
     """Build a CampaignResponse including live lead counts + roadside daily-log totals."""
-    # Handed-off source leads (partner_handoff_id set) are trail markers, not live
-    # leads — exclude them from campaign lead counts so the source campaign isn't
-    # inflated by leads that were copied to a partner client.
+    # Handed-off SOURCE leads (archived trail markers) are not live leads — exclude
+    # them from campaign lead counts. The partner copy (live, archived=0) carries
+    # partner_handoff_id too, so keep it by filtering on archived=1 (the source).
     q = db.query(Lead).filter(
         Lead.campaign_id == campaign.id,
-        Lead.partner_handoff_id.is_(None),
+        not_(
+            and_(
+                Lead.partner_handoff_id.isnot(None),
+                Lead.archived == 1,
+            )
+        ),
     )
     total = q.count()
     qualified = q.filter(Lead.status == LeadStatus.QUALIFIED).count()

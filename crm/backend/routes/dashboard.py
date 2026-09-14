@@ -113,11 +113,10 @@ def dashboard_summary(
 
     # Source breakdown
     source_rows = (
-        db.query(Lead.source, func.count(Lead.id).label("count"))
+        _exclude_handed_off_sources(db.query(Lead.source, func.count(Lead.id).label("count")))
         .filter(
             Lead.client_id == client_id,
             Lead.created_at >= cutoff,
-            Lead.partner_handoff_id.is_(None),
         )
         .group_by(Lead.source)
         .all()
@@ -126,23 +125,21 @@ def dashboard_summary(
     source_breakdown = []
     for row in source_rows:
         qualified_count = (
-            db.query(func.count(Lead.id))
+            _exclude_handed_off_sources(db.query(func.count(Lead.id)))
             .filter(
                 Lead.client_id == client_id,
                 Lead.source == row[0],
                 Lead.lead_type == LeadType.VALID,
                 Lead.created_at >= cutoff,
-                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
         )
         # Per-source response time
-        src_sent_leads = db.query(Lead).filter(
+        src_sent_leads = _exclude_handed_off_sources(db.query(Lead)).filter(
             Lead.client_id == client_id,
             Lead.source == row[0],
             Lead.sent_to_client_at.isnot(None),
             Lead.created_at >= cutoff,
-            Lead.partner_handoff_id.is_(None),
         ).all()
         if src_sent_leads:
             src_diffs = [(l.sent_to_client_at - l.created_at).total_seconds() / 3600 for l in src_sent_leads]
@@ -163,14 +160,15 @@ def dashboard_summary(
 
     # Leads over time (daily)
     date_rows = (
-        db.query(
-            func.date(Lead.created_at).label("date"),
-            func.count(Lead.id).label("count"),
+        _exclude_handed_off_sources(
+            db.query(
+                func.date(Lead.created_at).label("date"),
+                func.count(Lead.id).label("count"),
+            )
         )
         .filter(
             Lead.client_id == client_id,
             Lead.created_at >= cutoff,
-            Lead.partner_handoff_id.is_(None),
         )
         .group_by(func.date(Lead.created_at))
         .order_by(func.date(Lead.created_at))
@@ -195,12 +193,11 @@ def dashboard_summary(
     funnel = []
     for label, status in funnel_stages:
         count = (
-            db.query(func.count(Lead.id))
+            _exclude_handed_off_sources(db.query(func.count(Lead.id)))
             .filter(
                 Lead.client_id == client_id,
                 Lead.created_at >= cutoff,
                 Lead.status == status,
-                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
             or 0
@@ -213,12 +210,11 @@ def dashboard_summary(
     # lead.assigned_to_name (e.g. 'Tiaan' vs 'Tiaan Van Der Walt') don't
     # split one rep into multiple dashboard rows.
     rep_rows = (
-        db.query(Lead.assigned_to, func.count(Lead.id).label("count"))
+        _exclude_handed_off_sources(db.query(Lead.assigned_to, func.count(Lead.id).label("count")))
         .filter(
             Lead.client_id == client_id,
             Lead.created_at >= cutoff,
             Lead.assigned_to.isnot(None),
-            Lead.partner_handoff_id.is_(None),
         )
         .group_by(Lead.assigned_to)
         .all()
@@ -242,12 +238,11 @@ def dashboard_summary(
         rep_name = _rep_display_name(rep_email)
         # Follow-ups logged for this rep's leads (via LeadHistory follow_up entries)
         follow_ups = (
-            db.query(func.count(LeadHistory.id))
+            _exclude_handed_off_sources(db.query(func.count(LeadHistory.id)))
             .join(Lead, Lead.id == LeadHistory.lead_id)
             .filter(
                 Lead.client_id == client_id,
                 Lead.assigned_to == rep_email,
-                Lead.partner_handoff_id.is_(None),
                 LeadHistory.field_changed == "follow_up",
                 LeadHistory.changed_at >= cutoff,
             )
@@ -255,48 +250,44 @@ def dashboard_summary(
             or 0
         )
         contacted = (
-            db.query(func.count(Lead.id))
+            _exclude_handed_off_sources(db.query(func.count(Lead.id)))
             .filter(
                 Lead.client_id == client_id,
                 Lead.assigned_to == rep_email,
                 Lead.created_at >= cutoff,
                 Lead.status == LeadStatus.CONTACTED,
-                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
             or 0
         )
         converted = (
-            db.query(func.count(Lead.id))
+            _exclude_handed_off_sources(db.query(func.count(Lead.id)))
             .filter(
                 Lead.client_id == client_id,
                 Lead.assigned_to == rep_email,
                 Lead.created_at >= cutoff,
                 Lead.conversion_status == "CONVERTED",
-                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
             or 0
         )
         lost = (
-            db.query(func.count(Lead.id))
+            _exclude_handed_off_sources(db.query(func.count(Lead.id)))
             .filter(
                 Lead.client_id == client_id,
                 Lead.assigned_to == rep_email,
                 Lead.created_at >= cutoff,
                 Lead.conversion_status == "LOST",
-                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
             or 0
         )
         # Last follow-up time for this rep
         last_fu = (
-            db.query(func.max(Lead.last_follow_up_at))
+            _exclude_handed_off_sources(db.query(func.max(Lead.last_follow_up_at)))
             .filter(
                 Lead.client_id == client_id,
                 Lead.assigned_to == rep_email,
-                Lead.partner_handoff_id.is_(None),
             )
             .scalar()
         )
