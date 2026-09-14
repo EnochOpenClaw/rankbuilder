@@ -1,0 +1,118 @@
+diff --git a/crm/backend/database.py b/crm/backend/database.py
+index 2b0808f..cb95dd8 100644
+--- a/crm/backend/database.py
++++ b/crm/backend/database.py
+@@ -420,6 +420,7 @@ class User(Base):
+     hashed_password = Column(String(255), nullable=False)
+     full_name = Column(String(255), nullable=False)
+     client_id = Column(String(36), ForeignKey("clients.id"), nullable=True)  # NULL for SYSTEM_ADMIN
++    viewable_client_ids = Column(JSON, nullable=True)
+     role = Column(SAEnum(UserRole), nullable=False, default=UserRole.VIEWER)
+     created_at = Column(DateTime, default=datetime.utcnow)
+     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+diff --git a/crm/backend/routes/auth.py b/crm/backend/routes/auth.py
+index 56b7469..1e6c06e 100644
+--- a/crm/backend/routes/auth.py
++++ b/crm/backend/routes/auth.py
+@@ -145,6 +145,10 @@ def enforce_client_scope(requested_client_id, current_user: User):
+     if not current_user.client_id:
+         raise HTTPException(status_code=403, detail="Your account is not linked to a client.")
+ 
++    # Grant cross-client access for clients explicitly listed on the user.
++    viewable = current_user.viewable_client_ids or []
++    if requested_client_id is not None and requested_client_id in viewable:
++        return requested_client_id
+     if requested_client_id and requested_client_id != current_user.client_id:
+         raise HTTPException(
+             status_code=403,
+@@ -153,6 +157,31 @@ def enforce_client_scope(requested_client_id, current_user: User):
+     return current_user.client_id
+ 
+ 
++def _visible_client_ids(requested_client_id, current_user: User):
++    """
++    Return the set of client ids the current user may READ when listing leads.
++    - SYSTEM_ADMIN: requested_client_id if given, else None (all clients).
++    - Other users: requested_client_id (must be home or a viewable grant), else
++      home client + any cross-client grants (viewable_client_ids).
++    """
++    if current_user.role == UserRole.SYSTEM_ADMIN:
++        return [requested_client_id] if requested_client_id else None
++
++    if not current_user.client_id:
++        raise HTTPException(status_code=403, detail="Your account is not linked to a client.")
++
++    viewable = list(current_user.viewable_client_ids or [])
++    if requested_client_id:
++        if requested_client_id == current_user.client_id or requested_client_id in viewable:
++            return [requested_client_id]
++        raise HTTPException(status_code=403, detail="You can only access data for your own client.")
++
++    # No filter -> home client + cross-client grants
++    ids = {current_user.client_id}
++    ids.update(viewable)
++    return list(ids)
++
++
+ def enforce_agent_assignment(lead, current_user: User):
+     """AGENTs may only read/write leads assigned to them. No-op for admins."""
+     if current_user.role == UserRole.AGENT:
+diff --git a/crm/backend/routes/leads.py b/crm/backend/routes/leads.py
+index 1661cef..d66f80d 100644
+--- a/crm/backend/routes/leads.py
++++ b/crm/backend/routes/leads.py
+@@ -54,6 +54,7 @@ from backend.routes.auth import (
+     require_admin_or_owner,
+     enforce_client_scope,
+     enforce_agent_assignment,
++    _visible_client_ids,
+ )
+ from backend.database import UserRole
+ from backend.database import User
+@@ -305,11 +306,12 @@ def list_leads(
+     current_user: User = Depends(get_current_user),
+ ):
+     """List leads with optional filters. Scoped to the authenticated user's client."""
+-    effective_client_id = enforce_client_scope(client_id, current_user)
++    from sqlalchemy import or_
++    visible_ids = _visible_client_ids(client_id, current_user)
+     q = db.query(Lead)
+ 
+-    if effective_client_id:
+-        q = q.filter(Lead.client_id == effective_client_id)
++    if visible_ids:
++        q = q.filter(Lead.client_id.in_(visible_ids))
+     if current_user.role == UserRole.AGENT:
+         # Sales agents see leads assigned to them OR leads they created
+         from sqlalchemy import or_
+@@ -388,11 +390,12 @@ def export_leads(
+     Export leads as CSV (scoped to the authenticated user's client).
+     Returns a downloadable CSV file with all matching leads.
+     """
+-    effective_client_id = enforce_client_scope(client_id, current_user)
++    from sqlalchemy import or_
++    visible_ids = _visible_client_ids(client_id, current_user)
+     q = db.query(Lead)
+ 
+-    if effective_client_id:
+-        q = q.filter(Lead.client_id == effective_client_id)
++    if visible_ids:
++        q = q.filter(Lead.client_id.in_(visible_ids))
+     if current_user.role == UserRole.AGENT:
+         # Sales agents see leads assigned to them OR leads they created
+         from sqlalchemy import or_
+@@ -949,10 +952,13 @@ def handoff_lead(
+     db.add(copy)
+     db.flush()
+ 
+-    # Tag the original lead with the hand-off reference
++    # Tag the original lead with the hand-off reference, then archive it
++    # so it drops off all rep queues (the source stays in records for the trail).
+     lead.partner_handoff_id = copy.id
+     lead.partner_handoff_at = datetime.utcnow()
+     lead.partner_handoff_by = current_user.email
++    lead.archived = 1
++    lead.archived_at = datetime.utcnow()
+ 
+     # Record history on both
+     db.add(LeadHistory(lead_id=lead.id, field_changed="partner_handoff",
