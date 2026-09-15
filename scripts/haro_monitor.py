@@ -221,8 +221,9 @@ Write ONLY the email response. No preamble. No explanation."""
     from ollama_client import generate
 
     try:
+        # Full 150-250 word pitch on CPU takes ~110-120s; 300s covers cold loads.
         return generate(
-            prompt, options={"temperature": 0.7, "num_predict": 1024}, timeout=90
+            prompt, options={"temperature": 0.7, "num_predict": 1024}, timeout=300
         )
     except Exception as e:
         return f"Error: {str(e)}"

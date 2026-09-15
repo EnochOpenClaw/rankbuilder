@@ -66,7 +66,7 @@ def generate(
     models: list = None,
     system: str = None,
     options: dict = None,
-    timeout: int = 120,
+    timeout: int = 300,
 ) -> str:
     """
     Try each model in order; return first non-empty text.

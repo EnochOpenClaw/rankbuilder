@@ -175,7 +175,7 @@ Write only valid JSON. No markdown. No explanation. Start with {{ and end with }
             prompt,
             models=["kimi-k2.6:cloud", "llama3.2:latest"],
             options={"temperature": 0.8, "num_predict": 1024},
-            timeout=60,
+            timeout=300,
         )
 
         # Try to extract JSON from response

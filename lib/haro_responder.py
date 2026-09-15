@@ -45,7 +45,7 @@ def _ollama_humanize(text: str, style: str = "formal") -> str:
             models=["kimi-k2.6:cloud", "llama3.2:latest"],
             system=system,
             options={"temperature": 0.6, "num_predict": 1500},
-            timeout=60,
+            timeout=300,
         )
     except Exception:
         return text  # degrade gracefully

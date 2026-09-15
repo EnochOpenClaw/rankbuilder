@@ -1217,7 +1217,7 @@ def _call_ollama(model: str, system: str, prompt: str) -> Optional[str]:
             prompt,
             system=system,
             options={"temperature": 0.7, "num_predict": 1400},
-            timeout=120,
+            timeout=300,
         ) or None
     except Exception as e:
         log.warning("  Ollama model '%s' failed: %s", model, e)

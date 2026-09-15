@@ -117,7 +117,7 @@ MAX_DRAFT_PER_RUN    = 5
 MIN_SCORE_FOR_DRAFT  = 50
 COOLDOWN_DAYS        = 14
 OLLAMA_MODEL         = "kimi-k2.6:cloud"
-OLLAMA_TIMEOUT       = 90
+OLLAMA_TIMEOUT       = 300  # CPU-only VPS: ~110s per 1000-token draft, 300 covers cold loads
 
 PITCH_STATUS_DRAFT   = "draft"
 PITCH_STATUS_PENDING = "pending_approval"
