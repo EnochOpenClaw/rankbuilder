@@ -1,11 +1,17 @@
 """
 RankBuilder CRM — Post-Install Follow-Up
 ==========================================
-Runs via cron (daily) and fires the post-install follow-up for leads whose
-payment was received PAYMENT_FOLLOWUP_DAYS ago (default 7 days / 1 week).
+Runs via cron (daily) and fires the post-install follow-up for leads that were
+CONVERTED CONVERSION_FOLLOWUP_DAYS ago (default 7 days / 1 week).
 
-Lifecycle: lead → quote → payment RECEIVED → install/quiet window (7 days)
-→ post-install follow-up (customer + rep) → done.
+Lifecycle: lead → quote → payment RECEIVED → production/install quiet window
+→ deal CONVERTED → post-install follow-up (customer + rep) after 7 days.
+
+Craig 2026-09-15: the follow-up is now gated on CONVERSION (the job actually
+won/delivered), not on payment — previously a paid-but-not-yet-converted job
+(such as Gorr Glass, paid 02 Sep, converted 14 Sep) got the review-ask during
+production. Fire it from converted_at instead, so the client review-ask only
+goes out once the job is won and delivered.
 
 Two emails fire at the same time:
   1. CUSTOMER  — warm "how did the install go?" + review/testimonial ask,
@@ -14,8 +20,8 @@ Two emails fire at the same time:
   2. REP       — a check-in call task so the assigned rep follows up personally.
 
 A lead is "due" when:
-  - payment_status == RECEIVED
-  - payment_received_at is set and is >= PAYMENT_FOLLOWUP_DAYS ago
+  - conversion_status == CONVERTED
+  - converted_at is set and is <= CONVERSION_FOLLOWUP_DAYS ago
   - post_install_followup_sent_at is NULL (not yet sent)
   - not handed off to a partner
 
@@ -58,8 +64,13 @@ from backend.database import SessionLocal, Lead
 log = logging.getLogger("crm.postinstall")
 
 # ── Config ───────────────────────────────────────────────────────────────────
-# Days after payment received to send the post-install follow-up (default 7).
-PAYMENT_FOLLOWUP_DAYS = int(os.environ.get("PAYMENT_FOLLOWUP_DAYS", "7"))
+# Days after conversion to send the post-install follow-up (default 7).
+# CONVERSION_FOLLOWUP_DAYS wins; PAYMENT_FOLLOWUP_DAYS honoured as a legacy
+# fallback for environments that set it before the 2026-09-15 change.
+CONVERSION_FOLLOWUP_DAYS = int(os.environ.get(
+    "CONVERSION_FOLLOWUP_DAYS",
+    os.environ.get("PAYMENT_FOLLOWUP_DAYS", "7"),
+))
 
 # Sender: must be a VALIDATED Brevo sender. Only ai@fortressblinds.co.za is
 # validated (sales@/craig@ were rejected by Brevo on 2026-08-05). We brand the
@@ -118,7 +129,7 @@ def _rep_email(lead, days):
       <h1 style='margin:0;font-size:20px;color:#333;'>📞 Post-Install Check-In</h1>
       <p style='margin:8px 0 0;color:#888;font-size:13px;'>RankBuilder CRM · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
     </div>
-    <p style='color:#333;font-size:14px;'>It's been <strong>{days} days</strong> since payment was received for this job. Please do a quick post-install check-in call:</p>
+    <p style='color:#333;font-size:14px;'>It's been <strong>{days} days</strong> since this job was confirmed/won. Please do a quick post-install check-in call:</p>
     <div style='background:#f0f4ff;border:1px solid #dbe4ff;border-radius:8px;padding:16px;margin:16px 0;'>
       <h2 style='margin:0 0 12px;font-size:18px;color:#111;'>{company}</h2>
       <table style='width:100%;border-collapse:collapse;font-size:14px;color:#444;'>
@@ -144,14 +155,14 @@ def main():
     db = SessionLocal()
     try:
         now = datetime.now(timezone.utc)
-        cutoff = now - timedelta(days=PAYMENT_FOLLOWUP_DAYS)
+        cutoff = now - timedelta(days=CONVERSION_FOLLOWUP_DAYS)
 
         due = (
             db.query(Lead)
             .filter(
-                Lead.payment_status == "RECEIVED",
-                Lead.payment_received_at.isnot(None),
-                Lead.payment_received_at <= cutoff,
+                Lead.conversion_status == "CONVERTED",
+                Lead.converted_at.isnot(None),
+                Lead.converted_at <= cutoff,
                 Lead.post_install_followup_sent_at.is_(None),
                 Lead.partner_handoff_id.is_(None),
             )
@@ -164,8 +175,8 @@ def main():
 
         sent = 0
         for lead in due:
-            # Compute actual days since payment (for the email copy)
-            pr = lead.payment_received_at
+            # Compute actual days since conversion (for the email copy)
+            pr = lead.converted_at
             if pr.tzinfo is None:
                 pr = pr.replace(tzinfo=timezone.utc)
             days = max(1, int((now - pr).total_seconds() // 86400))
