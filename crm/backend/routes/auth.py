@@ -232,6 +232,7 @@ def register(payload: UserCreate, db=Depends(get_db)):
         client_id=user.client_id,
         role=user.role.value,
         created_at=user.created_at,
+        is_handoff_manager=is_handoff_manager(user),
     )
 
 
@@ -266,6 +267,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db=Depends(get_db)):
             role=user.role.value,
             created_at=user.created_at,
             must_change_password=user.must_change_password or 0,
+            is_handoff_manager=is_handoff_manager(user),
         ),
     )
 
@@ -319,6 +321,7 @@ def change_password(
         role=current_user.role.value,
         created_at=current_user.created_at,
         must_change_password=0,
+        is_handoff_manager=is_handoff_manager(current_user),
     )
 
 
