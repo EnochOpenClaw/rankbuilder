@@ -67,10 +67,11 @@ Payment status shows as **Paid ✓** once received. A converted lead with paymen
 feeds your commission record.
 
 ### Quiet window + post-install follow-up (changed 2026-09-15)
-Once Payment=Received, the job gets **7 quiet days** — no follow-up or SLA nudges while it's
-in production. **7 days after the lead is CONVERTED**, the post-install follow-up fires: a
-customer "how did the install go?" email plus a check-in task for the assigned rep. So the
-customer is asked for a review **only after the job is won and delivered**.
+Once Payment=Received, the job **stops getting follow-up and SLA nudges** — it's in
+production, and paid work is never nagged as stale (changed 2026-09-15). **7 days
+after the lead is CONVERTED**, the post-install follow-up fires: a customer "how did
+the install go?" email plus a check-in task for the assigned rep. So the customer is
+asked for a review **only after the job is won and delivered**.
 
 ## 7. Commissions
 

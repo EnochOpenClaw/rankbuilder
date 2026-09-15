@@ -58,7 +58,9 @@ Each lead also has a **Type** (VALID / INVALID / FOLLOW_UP) and a **payment_stat
    dragging also records the conversion outcome automatically).
 2. The **correct amount** (quote / deal value) is entered on the lead.
 3. **Managers then mark Payment = Received** to action the deal into production —
-   this starts the install quiet-window: **7 days** without follow-up or SLA nudges.
+   follow-up and SLA nudges go quiet until the lead is CONVERTED or LOST
+   (changed 2026-09-15: was a 7-day window; now indefinite — paid jobs are in
+   production, so they're never nagged as stale).
 
 Payment status shows as **Paid ✓** once received. A converted lead with payment received
 feeds the agent's commission record.

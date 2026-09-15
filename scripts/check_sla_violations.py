@@ -31,10 +31,11 @@ QH = int(os.environ.get("SLA_QUALIFIED_HOURS", "24"))
 SH = int(os.environ.get("SLA_SENT_HOURS", "48"))
 SD = int(os.environ.get("SLA_STALE_DAYS", "3"))
 COOLDOWN_H = int(os.environ.get("SLA_ALERT_COOLDOWN_HOURS", "12"))  # min hours between alerts per lead
-# ── Payment-received quiet window ────────────────────────────────────────────
-# Once a lead's payment is RECEIVED (job won, install in progress), suppress SLA
-# breach alerts for this many days. Default 7 days (1 week).
-PAYMENT_QUIET_DAYS = int(os.environ.get("PAYMENT_QUIET_DAYS", "7"))
+# ── Payment-received suppression (Craig 2026-09-15) ─────────────────────
+# A paid job is in production — suppress SLA breach alerts INDEFINITELY while
+# payment_status == RECEIVED (previously a 7-day PAYMENT_QUIET_DAYS window).
+# Paid-but-not-yet-converted jobs never show as stale; CONVERTED/LOST closes
+# them. (Change #1 — agreed with Craig + staff; Gorr Glass case.)
 SENDER = os.environ.get("SENDER_EMAIL", "ai@fortressblinds.co.za")
 
 def _h(dt):
@@ -71,15 +72,11 @@ def check_sla(db):
         if lead.id in paused_ids:
             continue  # reminder scheduled — don't nag until it fires
         # (skip leads handed off to a partner — they're no longer this rep's to action)
-        # ── Payment-received quiet window ──────────────────────────────────
-        # If payment was received within the last PAYMENT_QUIET_DAYS, the job is
-        # in install/production — don't fire SLA breach alerts during that window.
-        if lead.payment_status == "RECEIVED" and lead.payment_received_at:
-            pr = lead.payment_received_at
-            if pr.tzinfo is None:
-                pr = pr.replace(tzinfo=timezone.utc)
-            if (datetime.now(timezone.utc) - pr).total_seconds() < PAYMENT_QUIET_DAYS * 86400:
-                continue  # in quiet window — skip SLA alerts
+        # ── Payment-received suppression (Craig 2026-09-15) ────────────────
+        # Paid job = in production — skip SLA breach alerts entirely until the
+        # lead is CONVERTED or LOST. No stale/not-sent nagging for paid work.
+        if lead.payment_status == "RECEIVED":
+            continue
         st = lead.status.value if hasattr(lead.status, "value") else str(lead.status)
         if st == "NEW":
             if lead.created_at and lead.created_at < cnew and not lead.follow_up_count:
