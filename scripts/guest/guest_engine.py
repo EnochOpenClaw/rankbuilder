@@ -407,24 +407,14 @@ Return JSON with these exact fields:
 
 Write only valid JSON. No markdown. No explanation. Start with {{ and end with }}."""
 
-    payload = json.dumps({
-        "model": OLLAMA_MODEL,
-        "prompt": prompt,
-        "stream": False,
-        "think": False,
-        "options": {"temperature": 0.8, "num_predict": 1024}
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        "http://localhost:11434/api/generate",
-        data=payload,
-        headers={"Content-Type": "application/json"}
-    )
-
+    from ollama_client import generate as _ollama_generate
     try:
-        with urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT) as resp:
-            result = json.loads(resp.read().decode())
-        text = result.get("response", "").strip()
+        text = _ollama_generate(
+            prompt,
+            models=[OLLAMA_MODEL, "llama3.2:latest"],
+            options={"temperature": 0.8, "num_predict": 1024},
+            timeout=OLLAMA_TIMEOUT,
+        )
         text = re.sub(r"^```json\s*", "", text, flags=re.IGNORECASE)
         text = re.sub(r"^```\s*", "", text).strip().rstrip("```").rstrip()
         return json.loads(text)
@@ -647,21 +637,15 @@ def run_report():
 
 def test_ollama():
     print(f"Testing Ollama ({OLLAMA_MODEL})...", end=" ", flush=True)
-    payload = json.dumps({
-        "model": OLLAMA_MODEL,
-        "prompt": "Say 'OK' in one word.",
-        "stream": False,
-        "options": {"num_predict": 5}
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        "http://localhost:11434/api/generate",
-        data=payload,
-        headers={"Content-Type": "application/json"}
-    )
+    from ollama_client import generate as _ollama_generate
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            result = json.loads(resp.read().decode())
-        print(f"✅ Response: {result.get('response','').strip()}")
+        text = _ollama_generate(
+            "Say 'OK' in one word.",
+            models=[OLLAMA_MODEL, "llama3.2:latest"],
+            options={"num_predict": 5},
+            timeout=15,
+        )
+        print(f"✅ Response: {text.strip()}")
         return True
     except Exception as e:
         print(f"❌ Error: {e}")

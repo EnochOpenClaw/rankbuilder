@@ -1201,27 +1201,24 @@ def write_guest_article(domain: str) -> Optional[Path]:
 
 
 def _call_ollama(model: str, system: str, prompt: str) -> Optional[str]:
-    """Call local Ollama API. Returns text content or None."""
-    import urllib.request, urllib.error
+    """Call local Ollama API. Returns text content or None.
 
-    payload = {
-        "model": model,
-        "system": system,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0.7, "num_predict": 1400},
-    }
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        "http://localhost:11434/api/generate",
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    Endpoint comes from OLLAMA_HOST env (docker bridge on the VPS). Callers who
+    want a fallback chain iterate models and treat None as "try next".
+    """
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+    from ollama_client import call_model as _ollama_call
+
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            result = json.loads(resp.read().decode())
-            return result.get("response", "").strip()
+        return _ollama_call(
+            model,
+            prompt,
+            system=system,
+            options={"temperature": 0.7, "num_predict": 1400},
+            timeout=120,
+        ) or None
     except Exception as e:
         log.warning("  Ollama model '%s' failed: %s", model, e)
         return None

@@ -169,24 +169,14 @@ Return JSON with these exact fields:
 Write only valid JSON. No markdown. No explanation. Start with {{ and end with }}."""
 
     # Call Ollama
-    import urllib.request
-    import urllib.error
+    from ollama_client import generate as _ollama_generate
     try:
-        payload = json.dumps({
-            "model": "kimi-k2.6:cloud",
-            "prompt": prompt,
-            "stream": False,
-            "think": False,
-            "options": {"temperature": 0.8, "num_predict": 1024}
-        }).encode('utf-8')
-        req = urllib.request.Request(
-            "http://localhost:11434/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json"}
+        text = _ollama_generate(
+            prompt,
+            models=["kimi-k2.6:cloud", "llama3.2:latest"],
+            options={"temperature": 0.8, "num_predict": 1024},
+            timeout=60,
         )
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            result = json.loads(resp.read().decode())
-        text = result.get("response", "").strip()
 
         # Try to extract JSON from response
         # Some models wrap in markdown code blocks

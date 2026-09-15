@@ -218,25 +218,12 @@ Contact: craig@fortressblinds.co.za
 
 Write ONLY the email response. No preamble. No explanation."""
 
-    payload = {
-        "model": "kimi-k2.6:cloud",
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0.7, "num_predict": 1024}
-    }
-
-    data = json.dumps(payload).encode('utf-8')
-    req = urllib.request.Request(
-        "http://localhost:11434/api/generate",
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
+    from ollama_client import generate
 
     try:
-        with urllib.request.urlopen(req, timeout=90) as resp:
-            response = json.loads(resp.read().decode('utf-8'))
-            return response.get('response', '').strip()
+        return generate(
+            prompt, options={"temperature": 0.7, "num_predict": 1024}, timeout=90
+        )
     except Exception as e:
         return f"Error: {str(e)}"
 

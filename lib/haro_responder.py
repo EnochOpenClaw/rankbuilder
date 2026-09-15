@@ -28,7 +28,7 @@ import humanize_cli as _hc
 
 def _ollama_humanize(text: str, style: str = "formal") -> str:
     """Call local Ollama with the humanize-text skill system prompt."""
-    import urllib.request, urllib.error, json as _json
+    from ollama_client import generate as _ollama_generate
 
     system = (
         "You are a text humanization editor. Rewrite the following text so it sounds "
@@ -38,29 +38,15 @@ def _ollama_humanize(text: str, style: str = "formal") -> str:
         "Match this tone: " + style + ". Preserve all facts and core message. "
         "Output only the humanized text, no preamble or notes."
     )
-    payload = {
-        "model": "kimi-k2.6:cloud",
-        "system": system,
-        "prompt": text,
-        "stream": False,
-        "think": False,
-        "options": {"temperature": 0.6, "num_predict": 1500},
-    }
-    data = _json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        "http://localhost:11434/api/generate",
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            result = _json.loads(resp.read().decode())
-            # kimi-k2.6:cloud uses thinking mode — actual response may be in 'thinking' field
-            response = result.get("response", "").strip()
-            if not response and result.get("thinking"):
-                response = result["thinking"].strip()
-            return response or text
+        # Cloud model needs a logged-in Ollama account — fall back to llama3.2 locally.
+        return _ollama_generate(
+            text,
+            models=["kimi-k2.6:cloud", "llama3.2:latest"],
+            system=system,
+            options={"temperature": 0.6, "num_predict": 1500},
+            timeout=60,
+        )
     except Exception:
         return text  # degrade gracefully
 
