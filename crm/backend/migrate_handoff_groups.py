@@ -42,8 +42,14 @@ GROUP_NAME = "Partner Handoff Managers"
 GROUP_DESC = ("Cross-client READ visibility of partner clients + their contacts "
               "for handoff targeting (additive; does not change role semantics).")
 
-# Members to enrol into the group. Only Tiaan per Craig 2026-09-14.
-ENROLL = ["tiaan@houseofsupreme.co.za"]
+# Members to enrol into the group. Tiaan was the original member; Craig added
+# robin + vanessa (2026-09-15) so they can also switch clients in the top bar.
+# Roles are untouched — membership is purely additive.
+ENROLL = [
+    "tiaan@houseofsupreme.co.za",
+    "robin@houseofsupreme.co.za",
+    "vanessa@houseofsupreme.co.za",
+]
 
 
 def _ensure_tables(c):

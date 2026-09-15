@@ -3806,7 +3806,7 @@ export default function App() {
           RankBuilder CRM
         </Title>
 
-        {!isMobile && clients.length > 0 && isMultiClientAdmin && (
+        {!isMobile && clients.length > 0 && isHandoffManager && (
           <Select
             value={selectedClientId}
             onChange={id => { setSelectedClientId(id); setRefreshKey(k => k + 1) }}
@@ -3860,7 +3860,7 @@ export default function App() {
             <div style={{ color: '#888', fontSize: 13 }}>{user.role}</div>
           </div>
 
-          {clients.length > 0 && isMultiClientAdmin && (
+          {clients.length > 0 && isHandoffManager && (
             <div style={{ marginBottom: 16 }}>
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>CLIENT</Text>
               <Select

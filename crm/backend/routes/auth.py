@@ -163,11 +163,14 @@ def enforce_client_scope(requested_client_id, current_user: User):
 def _visible_client_ids(requested_client_id, current_user: User):
     """
     Return the set of client ids the current user may READ when listing leads.
-    - SYSTEM_ADMIN: requested_client_id if given, else None (all clients).
+    - SYSTEM_ADMIN / handoff-group members: requested_client_id if given, else
+      None (all clients). Handoff membership is additive read visibility of
+      partner clients for handoff targeting (Craig 2026-09-14) and NEVER widens
+      write scope.
     - Other users: requested_client_id (must be home or a viewable grant), else
       home client + any cross-client grants (viewable_client_ids).
     """
-    if current_user.role == UserRole.SYSTEM_ADMIN:
+    if current_user.role == UserRole.SYSTEM_ADMIN or is_handoff_manager(current_user):
         return [requested_client_id] if requested_client_id else None
 
     if not current_user.client_id:
