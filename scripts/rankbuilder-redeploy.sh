@@ -23,8 +23,12 @@ HEALTH_URL="https://rankbuilder.fortressblinds.co.za/health"
 TOKEN=$(cat "$TOKEN_FILE")
 
 echo "=== Triggering deploy for $UUID ==="
-RESP=$(curl -s --max-time 30 -X GET -H "Authorization: Bearer $TOKEN" \
-    "$API/deploy?uuid=$UUID&force=false")
+# Coolify v4.3.19+: /deploy is a POST endpoint (GET returns
+# "This endpoint has changed to a POST request").
+RESP=$(curl -s --max-time 30 -X POST -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"uuid\":\"$UUID\"}" \
+    "$API/deploy")
 echo "$RESP"
 
 DEP_UUID=$(echo "$RESP" | python3 -c \
