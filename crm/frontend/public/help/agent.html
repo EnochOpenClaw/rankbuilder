@@ -22,7 +22,6 @@
     color: var(--text);
     line-height: 1.6;
   }
-  /* Header */
   header {
     background: var(--navy);
     color: #fff;
@@ -97,8 +96,8 @@
     <h2>2. Working a Lead</h2>
     <p>Open the <strong>Leads</strong> tab. Each lead shows its source, status, location and assigned rep. Click a lead to open the drawer with full details:</p>
     <ul>
-      <li><strong>Contact info</strong> — name, email, phone, suburb/location</li>
-      <li><strong>Source</strong> — how the lead came in (website, HARO, call, etc.)</li>
+      <li><strong>Contact info</strong> — name, email, phone, suburb/location (editable; add the confirmed street address when you have it)</li>
+      <li><strong>Source</strong> — how the lead came in (website, HARO, call, WhatsApp, etc.)</li>
       <li><strong>Status</strong> — moves through the pipeline below</li>
       <li><strong>Type</strong> — VALID / INVALID / FOLLOW_UP</li>
     </ul>
@@ -110,13 +109,27 @@
       <span>CONTACTED</span><span class="arrow">→</span><span>CONVERTED / LOST</span>
     </div>
 
+    <h3>Kanban board</h3>
+    <p>The <strong>Kanban</strong> view shows your leads as cards you can <strong>drag between status columns</strong>. Dragging a card to CONVERTED or LOST also records the conversion outcome automatically — no extra step needed.</p>
+
     <h3>Follow-up logging</h3>
-    <p>Every call or email you make should be logged. Open the lead and add a <strong>follow-up note</strong> (e.g. "Called 08:00, no answer"). Each attempt is stored as its own row so the full timeline is preserved — <strong>keep adding, never overwrite</strong>.</p>
+    <p>Every call or email you make should be logged. Open the lead, add a <strong>follow-up</strong> with:</p>
+    <ul>
+      <li><strong>Type</strong> — Call / Email / WhatsApp / SMS / Note / Other</li>
+      <li><strong>Outcome</strong> — No answer / Left voicemail / Spoke to client / Sent (quote/docs) / Received reply / Other</li>
+    </ul>
+    <p>Each attempt is stored as its own row so the full timeline is preserved — <strong>keep adding, never overwrite</strong>.</p>
+
+    <h3>Scheduled reminders</h3>
+    <p>Use <strong>Schedule Reminder</strong> on a lead to get an email notification at a chosen date/time (e.g. "call back Tuesday 09:00"). Pending reminders show on the lead; they're dismissed automatically once the lead is converted, lost or archived.</p>
+
+    <h3>Documents</h3>
+    <p>Attach files to a lead (quotes sent, client responses, signed docs) under the <strong>Documents</strong> tab — pick a category (Email / Quote / Response / Other) so the trail stays organised.</p>
   </div>
 
   <div class="card">
     <h2>3. Quotes</h2>
-    <p>When a lead is ready, generate a quote from the lead record. The quote captures the products, sizes and pricing agreed with the customer.</p>
+    <p>When a lead is ready, generate a quote from the lead record. The quote captures the products, sizes and pricing agreed with the customer. Attach the sent quote to the lead under Documents so there's a record.</p>
   </div>
 
   <div class="card">
@@ -131,8 +144,32 @@
   </div>
 
   <div class="card">
-    <h2>6. Commissions</h2>
+    <h2>6. Converting &amp; Payment</h2>
+    <p>When a deal is won:</p>
+    <ol>
+      <li><strong>Move the lead to CONVERTED</strong> (edit drawer or Kanban drag) — this records the conversion.</li>
+      <li><strong>Enter the correct amount</strong> (quote / deal value) on the lead.</li>
+      <li><strong>Managers then mark Payment = Received</strong> to action the deal into production.</li>
+    </ol>
+    <p>Payment status shows as <strong>Paid ✓</strong> once received. A converted lead with payment received feeds your commission record.</p>
+
+    <h3>Quiet window + post-install follow-up (changed 2026-09-15)</h3>
+    <p>Once Payment=Received, the job gets <strong>7 quiet days</strong> — no follow-up or SLA nudges while it's in production. <strong>7 days after the lead is CONVERTED</strong>, the post-install follow-up fires: a customer "how did the install go?" email plus a check-in task for the assigned rep. So the customer is asked for a review <em>only after the job is won and delivered</em>.</p>
+  </div>
+
+  <div class="card">
+    <h2>7. Commissions</h2>
     <p>Completed (CONVERTED) leads feed into your commission record. The pipeline and rep-productivity views on the dashboard track your performance over time.</p>
+  </div>
+
+  <div class="card">
+    <h2>8. Hand-off to partner clients (managers only)</h2>
+    <p>SYSTEM_ADMIN, CLIENT_ADMIN and SALES_MANAGER can <strong>hand a lead off</strong> to a partner client (e.g. Cape Town, Southern Shutters). What happens:</p>
+    <ul>
+      <li>A <strong>copy</strong> of the lead is created under the partner client and becomes the live, tracked job.</li>
+      <li>The <strong>original is archived</strong> — it drops off the source rep's queue and stops all follow-ups.</li>
+      <li>The partner rep picks it up from their own queue. The handoff keeps the full audit trail.</li>
+    </ul>
   </div>
 
   <div class="card">
@@ -140,6 +177,7 @@
     <div class="tip"><strong>Log EVERY contact attempt</strong> — it builds the audit trail.</div>
     <div class="tip"><strong>Update status</strong> as the lead moves so the pipeline stays accurate.</div>
     <div class="tip"><strong>Tag source honestly</strong> (website, WhatsApp, call, etc.) — it drives reporting.</div>
+    <div class="tip"><strong>Mark deals CONVERTED as soon as they're won</strong> — the post-install follow-up and commissions depend on it.</div>
   </div>
 
   <div class="card">

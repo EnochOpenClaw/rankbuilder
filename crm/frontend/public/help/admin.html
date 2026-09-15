@@ -84,24 +84,27 @@
 
 <main>
   <div class="card">
-    <p>For managers: <strong>roles</strong>, <strong>users</strong>, <strong>lead sources</strong>, <strong>scoring rules</strong>, <strong>SLA</strong>, <strong>reports</strong>.</p>
+    <p>For managers: <strong>roles</strong>, <strong>users</strong>, <strong>lead sources</strong>, <strong>SLA</strong>, <strong>reports</strong>, <strong>hand-off</strong>, <strong>client switcher</strong>.</p>
   </div>
 
   <div class="card">
     <h2>1. Roles</h2>
-    <p>Four roles control what each person can see and do:</p>
+    <p>Five roles control what each person can see and do:</p>
     <table>
       <tr><th>Role</th><th>What they can do</th></tr>
       <tr><td><strong>SYSTEM_ADMIN</strong></td><td>Everything — manage clients, users, all leads, all reports</td></tr>
       <tr><td><strong>CLIENT_ADMIN</strong></td><td>Manage one client: users, sources, scoring, reports, campaigns</td></tr>
+      <tr><td><strong>SALES_MANAGER</strong></td><td>Regional sales lead — manage their client's leads, log follow-ups, reassign reps, hand leads off to partner clients</td></tr>
       <tr><td><strong>AGENT</strong></td><td>Work leads (view/edit assigned or created leads, log follow-ups, quotes, AI drafts)</td></tr>
       <tr><td><strong>VIEWER</strong></td><td>Read-only — see dashboards and leads, no edits</td></tr>
     </table>
+    <p><strong>User groups (additive):</strong> a user can also belong to a group such as <strong>Partner Handoff Managers</strong> without any role change. Group membership only widens <em>read</em> access (all clients + the client switcher) — it never changes the user's role (e.g. robin &amp; vanessa remain CLIENT_ADMIN; tiaan remains SALES_MANAGER).</p>
   </div>
 
   <div class="card">
     <h2>2. Users</h2>
-    <p>Add users under the <strong>Users</strong> tab (admin only). Assign a role and link them to the correct client. Agents should be linked to their client so they see the right leads.</p>
+    <p>Add users under the <strong>Users</strong> tab (admin only). Assign a role and link them to the correct client. Agents should be linked to their client so they see the right leads. New users can be emailed their login details and forced to change their password on first login.</p>
+    <p>The System Admin manages the <strong>Partner Handoff Managers</strong> group (currently tiaan, robin, vanessa) — members get cross-client read access and the client switcher, without being promoted to SYSTEM_ADMIN.</p>
   </div>
 
   <div class="card">
@@ -115,6 +118,10 @@
       <li><strong>DIRECT_MAIL</strong> — physical mail / flyer drop</li>
       <li><strong>CALL_IN</strong> — inbound phone call</li>
       <li><strong>WEB_SEARCH</strong> — prospecting research</li>
+      <li><strong>WHATSAPP</strong> — WhatsApp / Meta message (auto-tagged by the webhook)</li>
+      <li><strong>PPC</strong> — paid search / ads</li>
+      <li><strong>WORD_OF_MOUTH</strong> — referral / word of mouth</li>
+      <li><strong>ROADSIDE</strong> — roadside campaign (site, cards, people stopped)</li>
       <li><strong>MANUAL</strong> — anything entered by hand (use the source_detail field to say where)</li>
     </ul>
     <div class="tip"><strong>Tip for agents:</strong> if a lead comes from the HOS website, pick <strong>WEBSITE</strong> directly — don't use MANUAL. Reserve MANUAL for genuinely manual entries (paper, referrals, etc.) and note the origin in source_detail.</div>
@@ -128,6 +135,14 @@
       <span>CONTACTED</span><span class="arrow">→</span><span>CONVERTED / LOST</span>
     </div>
     <p>Each lead also has a <strong>Type</strong> (VALID / INVALID / FOLLOW_UP) and a <strong>payment_status</strong> (PENDING / RECEIVED) once it moves to production.</p>
+    <h3>Converting &amp; payment (the agreed sequence)</h3>
+    <ol>
+      <li>The deal is <strong>won</strong> when the lead is moved to <strong>CONVERTED</strong> (edit drawer or Kanban drag).</li>
+      <li>The <strong>correct amount</strong> (quote / deal value) is entered on the lead.</li>
+      <li><strong>Managers then mark Payment = Received</strong> to action the deal into production — this starts the install quiet-window: <strong>7 days</strong> without follow-up or SLA nudges.</li>
+    </ol>
+    <h3>Post-install follow-up (changed 2026-09-15)</h3>
+    <p>The customer review-ask + rep check-in email fires <strong>7 days after the lead is marked CONVERTED</strong> — not after payment — so it only goes out once the job is actually won and delivered.</p>
   </div>
 
   <div class="card">
@@ -139,12 +154,12 @@
       <tr><td>Cape Town / Western Cape</td><td>Richard</td></tr>
       <tr><td>All other regions</td><td>Craig (default)</td></tr>
     </table>
-    <p>Unrecognised regions fall back to the default rep.</p>
+    <p>Unrecognised regions fall back to the default rep. Managers can also reassign leads manually.</p>
   </div>
 
   <div class="card">
     <h2>6. Follow-Up SLA &amp; Escalation</h2>
-    <p>Agents should log every contact attempt as a follow-up row. The system tracks follow-up count and timestamps so you can see which leads are being neglected. A fresh follow-up resets the escalation ladder.</p>
+    <p>Agents should log every contact attempt as a follow-up row with a <strong>type</strong> (Call/Email/WhatsApp/SMS/Note/Other) and <strong>outcome</strong> (No answer / Left voicemail / Spoke / Sent / Received / Other). The system tracks follow-up count and timestamps so you can see which leads are being neglected. A fresh follow-up resets the escalation ladder.</p>
     <p>Default SLA thresholds:</p>
     <ul>
       <li><strong>NEW</strong> not reviewed within <code>4h</code> — SLA breach</li>
@@ -152,16 +167,36 @@
       <li><strong>SENT</strong> not followed within <code>48h</code> — SLA breach</li>
       <li><strong>Stale</strong> — no activity in <code>3 days</code></li>
     </ul>
+    <p><strong>Scheduled reminders</strong> (set by agents on a lead) email the rep at the chosen time and are auto-dismissed once the lead is converted, lost or archived.</p>
+    <p><strong>Handed-off source leads are never SLA-flagged</strong> — they're trail markers; the partner copy is the live lead that carries any SLA responsibility.</p>
   </div>
 
   <div class="card">
     <h2>7. Reports</h2>
-    <p>The <strong>Dashboard</strong> tab gives you the pipeline funnel, rep productivity and lead flow. Use the source breakdown to see which channels generate the best leads.</p>
+    <p>The <strong>Dashboard</strong> tab gives you the pipeline funnel, rep productivity and lead flow. Use the source breakdown to see which channels generate the best leads. The weekly digest emails key metrics to management automatically.</p>
+    <p><strong>Handed-off source leads are excluded from all reports and dashboard stats</strong> — a handed-off job shows once, under the partner's client. Stats always reflect live jobs only.</p>
   </div>
 
   <div class="card">
     <h2>8. Clients (multi-tenant)</h2>
-    <p>Under <strong>Clients</strong> (SYSTEM_ADMIN only) you can provision a new client with its own admin login, API key and campaign. Each client's data is isolated.</p>
+    <p>Under <strong>Clients</strong> (SYSTEM_ADMIN; read-only for hand-off group members) you can provision a new client with its own admin login, API key and campaign. Each client's data is isolated.</p>
+  </div>
+
+  <div class="card">
+    <h2>9. Hand-off to partner clients</h2>
+    <p><strong>Who:</strong> SYSTEM_ADMIN, CLIENT_ADMIN and SALES_MANAGER can hand a lead off (e.g. to Cape Town, Southern Shutters).</p>
+    <p><strong>What happens:</strong> a <strong>copy</strong> of the lead is created under the partner client and becomes the live, tracked job. The <strong>original is archived</strong> — it drops off the rep's queue, stops follow-up/SLA nudges, and is excluded from stats.</p>
+    <p><strong>Picking a target:</strong> hand-off managers open the <strong>Clients</strong> tab, select the partner client, and see its <strong>contacts</strong> (e.g. sian@southernshutters.co.za) to choose who receives the job.</p>
+  </div>
+
+  <div class="card">
+    <h2>10. Switching clients (top bar)</h2>
+    <p>The <strong>client dropdown</strong> in the top bar (and the mobile menu) appears for <strong>SYSTEM_ADMIN</strong> and members of the <strong>Partner Handoff Managers</strong> group (tiaan, robin, vanessa).</p>
+    <ul>
+      <li><strong>Directors (robin, vanessa)</strong> use it for branch-wide oversight — what's done vs not followed up.</li>
+      <li><strong>Regional leads (tiaan)</strong> use it to view and work leads across clients.</li>
+      <li><strong>Everyone else</strong> (e.g. branch reps such as richard) stays locked to their own client — they never see other branches' leads or the switcher.</li>
+    </ul>
   </div>
 
   <div class="card">
@@ -169,6 +204,7 @@
     <div class="tip"><strong>Keep sources accurate</strong> — they drive all channel reporting.</div>
     <div class="tip"><strong>Monitor follow-up counts:</strong> many leads go cold because nobody logged a second call.</div>
     <div class="tip"><strong>Mark leads LOST early</strong> if they're invalid — don't leave them hanging in the funnel.</div>
+    <div class="tip"><strong>Keep CONVERTED + Payment=Received current</strong> — the post-install follow-up and stats depend on it.</div>
   </div>
 
   <div class="card">

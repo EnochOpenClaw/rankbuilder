@@ -66,15 +66,31 @@ When a deal is won:
 Payment status shows as **Paid ✓** once received. A converted lead with payment received
 feeds your commission record.
 
+### Quiet window + post-install follow-up (changed 2026-09-15)
+Once Payment=Received, the job gets **7 quiet days** — no follow-up or SLA nudges while it's
+in production. **7 days after the lead is CONVERTED**, the post-install follow-up fires: a
+customer "how did the install go?" email plus a check-in task for the assigned rep. So the
+customer is asked for a review **only after the job is won and delivered**.
+
 ## 7. Commissions
 
 Completed (CONVERTED) leads feed into your commission record. The pipeline and
 rep-productivity views on the dashboard track your performance over time.
 
+## 8. Hand-off to partner clients (managers only)
+
+SYSTEM_ADMIN, CLIENT_ADMIN and SALES_MANAGER can **hand a lead off** to a partner client
+(e.g. Cape Town, Southern Shutters). What happens:
+
+- A **copy** of the lead is created under the partner client and becomes the live, tracked job.
+- The **original is archived** — it drops off the source rep's queue and stops all follow-ups.
+- The partner rep picks it up from their own queue. The handoff keeps the full audit trail.
+
 ## Quick tips
 - Log EVERY contact attempt — it builds the audit trail.
 - Update status as the lead moves so the pipeline stays accurate.
 - Tag source honestly (website, WhatsApp, call, etc.) — it drives reporting.
+- Mark deals CONVERTED as soon as they're won — the post-install follow-up and commissions depend on it.
 - Use the Export button to download your filtered lead list as CSV when needed.
 
 Need help? Ask your client admin.
