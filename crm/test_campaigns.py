@@ -15,7 +15,7 @@ from backend.app import app
 
 client = TestClient(app)
 
-HOS_CLIENT_ID = "e74119b9-17e3-4f74-b218-67ef0e66f1cc"
+HOS_CLIENT_ID = "514a96af-4262-4cfe-b85e-37b6af223faa"
 
 
 def login():

@@ -26,7 +26,7 @@ from backend.database import SessionLocal, User, Client
 client = TestClient(app)
 
 # Local mirror HOS client id (matches test_roles_handoff.py)
-HOS = "e74119b9-17e3-4f74-b218-67ef0e66f1cc"
+HOS = "514a96af-4262-4cfe-b85e-37b6af223faa"
 
 USERS = {
     "craig": ("craig@houseofsupreme.co.za", "RankBuilder!23"),

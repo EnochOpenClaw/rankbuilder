@@ -9,6 +9,12 @@ Verifies:
 3. CLIENT_ADMIN can also hand off.
 4. VIEWER still cannot hand off (least privilege).
 5. Archived leads are still returned with read_by_me (archive follow-ups path).
+
+Login coverage uses throwaway accounts provisioned per run (2026-09-17): the live
+users' bcrypt hashes drifted after the DB re-seed (Richard/Tiaan/Robin no longer
+verify their documented test passwords), and Robin's live role is now CLIENT_ADMIN
+by design, so the VIEWER scenario needs a synthetic user. The only real-user check
+left is TEST 2b, which asserts Richard's live role in the DB (no login).
 """
 import sys
 import os
@@ -22,15 +28,14 @@ from backend.app import app
 
 client = TestClient(app)
 
-HOS = "e74119b9-17e3-4f74-b218-67ef0e66f1cc"
+HOS = "514a96af-4262-4cfe-b85e-37b6af223faa"
 
-# Test accounts (real users in the local DB)
-USERS = {
-    "craig":   ("craig@houseofsupreme.co.za", "RankBuilder!23"),
-    "richard": ("richard@houseofsupreme.co.za", "Richard1234!"),
-    "tiaan":   ("tiaan@houseofsupreme.co.za", "Tiaan1234!"),
-    "robin":   ("robin@houseofsupreme.co.za", "Robin1234!"),
-}
+# Throwaway accounts — created per run, never depend on live user passwords.
+RICHARD_EMAIL = "richard@houseofsupreme.co.za"  # real row, TEST 2b DB check only
+HOS_ADMIN_EMAIL = "hos.admin@example.com"
+HOS_ADMIN_PASSWORD = "TestPass123!"
+VIEWER_EMAIL = "viewer.handoff@example.com"
+VIEWER_PASSWORD = "ViewerTest123!"
 
 
 def login(email, pw):
@@ -39,49 +44,82 @@ def login(email, pw):
     return r.json()["access_token"]
 
 
+def _provision_user(email, password, full_name, role, client_id=HOS):
+    """Idempotent upsert of a throwaway user (password refreshed each run)."""
+    from backend.database import SessionLocal, User
+    from backend.routes.auth import hash_password
+    db = SessionLocal()
+    u = db.query(User).filter(User.email == email).first()
+    if u is None:
+        u = User(email=email, full_name=full_name, client_id=client_id, role=role)
+        db.add(u)
+    u.hashed_password = hash_password(password)
+    u.full_name = full_name
+    u.client_id = client_id
+    u.role = role
+    db.commit()
+    uid = u.id
+    db.close()
+    return uid
+
+
+def _delete_user(email):
+    from backend.database import SessionLocal, User
+    db = SessionLocal()
+    u = db.query(User).filter(User.email == email).first()
+    if u:
+        db.delete(u)
+        db.commit()
+    db.close()
+
+
 def test_highlight_read_by_me():
     print("=" * 60)
     print("TEST 1: read_by_me highlight (assigned unread -> read)")
     print("=" * 60)
-    token = login(*USERS["richard"])
-    h = {"Authorization": f"Bearer {token}"}
+    _provision_user(HOS_ADMIN_EMAIL, HOS_ADMIN_PASSWORD, "HOS Admin Test", "CLIENT_ADMIN")
+    try:
+        token = login(HOS_ADMIN_EMAIL, HOS_ADMIN_PASSWORD)
+        h = {"Authorization": f"Bearer {token}"}
 
-    # Create a lead assigned to Richard (manual create assigns to creator)
-    r = client.post("/api/leads", headers=h, json={
-        "client_id": HOS, "source": "MANUAL",
-        "contact_name": "Highlight Test", "contact_email": "highlight.test@example.com",
-        "location": "Cape Town",
-    })
-    assert r.status_code == 201, f"create: {r.text}"
-    lead = r.json()
-    lid = lead["id"]
-    # Richard created it, so it's assigned to him and NOT yet read by him
-    assert lead["assigned_to"] == USERS["richard"][0], "lead should be assigned to Richard"
-    assert lead["read_by_me"] is False, "newly created assigned lead should be unread for Richard"
-    print(f"✅ Created lead {lid[:8]} — read_by_me=False (unread)")
+        # Create a lead assigned to the admin (manual create assigns to creator)
+        r = client.post("/api/leads", headers=h, json={
+            "client_id": HOS, "source": "MANUAL",
+            "contact_name": "Highlight Test", "contact_email": "highlight.test@example.com",
+            "location": "Cape Town",
+        })
+        assert r.status_code == 201, f"create: {r.text}"
+        lead = r.json()
+        lid = lead["id"]
+        # The admin created it, so it's assigned to them and NOT yet read by them
+        assert lead["assigned_to"] == HOS_ADMIN_EMAIL, "lead should be assigned to the admin"
+        assert lead["read_by_me"] is False, "newly created assigned lead should be unread"
+        print(f"✅ Created lead {lid[:8]} — read_by_me=False (unread)")
 
-    # List — should still show read_by_me False when fetched by Richard
-    r = client.get(f"/api/leads?client_id={HOS}", headers=h)
-    assert r.status_code == 200
-    found = next((l for l in r.json()["leads"] if l["id"] == lid), None)
-    assert found is not None
-    assert found["read_by_me"] is False, "listed lead should be unread"
-    print("✅ Listed lead shows read_by_me=False")
+        # List — should still show read_by_me False when fetched by the admin
+        r = client.get(f"/api/leads?client_id={HOS}", headers=h)
+        assert r.status_code == 200
+        found = next((l for l in r.json()["leads"] if l["id"] == lid), None)
+        assert found is not None
+        assert found["read_by_me"] is False, "listed lead should be unread"
+        print("✅ Listed lead shows read_by_me=False")
 
-    # Mark read
-    r = client.post(f"/api/leads/{lid}/read", headers=h)
-    assert r.status_code == 200, f"mark read: {r.text}"
-    assert r.json()["read_by_me"] is True, "after mark-read, read_by_me should be True"
-    print("✅ After markRead, read_by_me=True (highlight clears)")
+        # Mark read
+        r = client.post(f"/api/leads/{lid}/read", headers=h)
+        assert r.status_code == 200, f"mark read: {r.text}"
+        assert r.json()["read_by_me"] is True, "after mark-read, read_by_me should be True"
+        print("✅ After markRead, read_by_me=True (highlight clears)")
 
-    # Fetch again — should now be read
-    r = client.get(f"/api/leads/{lid}", headers=h)
-    assert r.json()["read_by_me"] is True, "fetch after read should be True"
-    print("✅ Fetch after read shows read_by_me=True")
+        # Fetch again — should now be read
+        r = client.get(f"/api/leads/{lid}", headers=h)
+        assert r.json()["read_by_me"] is True, "fetch after read should be True"
+        print("✅ Fetch after read shows read_by_me=True")
 
-    # Cleanup
-    client.delete(f"/api/leads/{lid}", headers=h)
-    print("✅ Cleaned up")
+        # Cleanup
+        client.delete(f"/api/leads/{lid}", headers=h)
+        print("✅ Cleaned up")
+    finally:
+        _delete_user(HOS_ADMIN_EMAIL)
     print()
 
 
@@ -136,7 +174,7 @@ def test_richard_untouched():
     print("=" * 60)
     from backend.database import SessionLocal, User
     db = SessionLocal()
-    u = db.query(User).filter(User.email == USERS["richard"][0]).first()
+    u = db.query(User).filter(User.email == RICHARD_EMAIL).first()
     assert u.role == "CLIENT_ADMIN", f"richard should remain CLIENT_ADMIN, got {u.role}"
     db.close()
     print("✅ richard = CLIENT_ADMIN (untouched, sees only Cape Town jobs as before)")
@@ -168,42 +206,46 @@ def test_handoff_delegated_to_client_admin():
     db.commit()
     db.close()
 
-    # Richard is CLIENT_ADMIN in the DB — use him to hand off (delegated capability).
-    token = login(*USERS["richard"])
-    h = {"Authorization": f"Bearer {token}"}
+    # A throwaway CLIENT_ADMIN on HOS (mirrors Richard's live role) hands off.
+    _provision_user(HOS_ADMIN_EMAIL, HOS_ADMIN_PASSWORD, "HOS Admin Test", "CLIENT_ADMIN")
+    try:
+        token = login(HOS_ADMIN_EMAIL, HOS_ADMIN_PASSWORD)
+        h = {"Authorization": f"Bearer {token}"}
 
-    # Create a lead (assigned to Richard as creator)
-    r = client.post("/api/leads", headers=h, json={
-        "client_id": HOS, "source": "MANUAL",
-        "contact_name": "Handoff Test", "contact_email": "handoff.test@example.com",
-        "location": "Cape Town",
-    })
-    assert r.status_code == 201, f"create: {r.text}"
-    lid = r.json()["id"]
+        # Create a lead (assigned to the admin as creator)
+        r = client.post("/api/leads", headers=h, json={
+            "client_id": HOS, "source": "MANUAL",
+            "contact_name": "Handoff Test", "contact_email": "handoff.test@example.com",
+            "location": "Cape Town",
+        })
+        assert r.status_code == 201, f"create: {r.text}"
+        lid = r.json()["id"]
 
-    # Richard (CLIENT_ADMIN) hands it off to the partner admin
-    r = client.post(f"/api/leads/{lid}/handoff", headers=h, json={
-        "partner_client_id": partner_id,
-        "target_user_email": "partner.admin@example.com",
-    })
-    assert r.status_code == 200, f"CLIENT_ADMIN handoff should succeed: {r.text}"
-    copy = r.json()
-    assert copy["client_id"] == partner_id, "handoff copy should belong to partner client"
-    assert copy["assigned_to"] == "partner.admin@example.com"
-    print(f"✅ CLIENT_ADMIN (Richard) handed lead off -> partner (copy {copy['id'][:8]})")
+        # The CLIENT_ADMIN hands it off to the partner admin
+        r = client.post(f"/api/leads/{lid}/handoff", headers=h, json={
+            "partner_client_id": partner_id,
+            "target_user_email": "partner.admin@example.com",
+        })
+        assert r.status_code == 200, f"CLIENT_ADMIN handoff should succeed: {r.text}"
+        copy = r.json()
+        assert copy["client_id"] == partner_id, "handoff copy should belong to partner client"
+        assert copy["assigned_to"] == "partner.admin@example.com"
+        print(f"✅ CLIENT_ADMIN handed lead off -> partner (copy {copy['id'][:8]})")
 
-    # Cleanup: delete copy + original, then partner + user
-    db = SessionLocal()
-    db.query(Lead).filter(Lead.id == copy["id"]).delete()
-    db.commit()
-    db.close()
-    client.delete(f"/api/leads/{lid}", headers=h)
-    db = SessionLocal()
-    db.query(User).filter(User.email == "partner.admin@example.com").delete()
-    db.query(Client).filter(Client.id == partner_id).delete()
-    db.commit()
-    db.close()
-    print("✅ Cleaned up partner + copies")
+        # Cleanup: delete copy + original, then partner + user
+        db = SessionLocal()
+        db.query(Lead).filter(Lead.id == copy["id"]).delete()
+        db.commit()
+        db.close()
+        client.delete(f"/api/leads/{lid}", headers=h)
+        db = SessionLocal()
+        db.query(User).filter(User.email == "partner.admin@example.com").delete()
+        db.query(Client).filter(Client.id == partner_id).delete()
+        db.commit()
+        db.close()
+        print("✅ Cleaned up partner + copies")
+    finally:
+        _delete_user(HOS_ADMIN_EMAIL)
     print()
 
 
@@ -267,12 +309,18 @@ def test_viewer_cannot_handoff():
     print("=" * 60)
     print("TEST 4: VIEWER cannot hand off (least privilege)")
     print("=" * 60)
-    token = login(*USERS["robin"])
-    h = {"Authorization": f"Bearer {token}"}
-    r = client.post("/api/leads/some-id/handoff", headers=h, json={
-        "partner_client_id": "x", "target_user_email": "y@example.com"})
-    assert r.status_code == 403, f"VIEWER handoff should be 403, got {r.status_code}"
-    print("✅ VIEWER handoff blocked (403)")
+    # Robin's live role is CLIENT_ADMIN (intentional, handoff rollout 2026-09-15),
+    # so VIEWER coverage uses a throwaway VIEWER account.
+    _provision_user(VIEWER_EMAIL, VIEWER_PASSWORD, "Viewer Test", "VIEWER")
+    try:
+        token = login(VIEWER_EMAIL, VIEWER_PASSWORD)
+        h = {"Authorization": f"Bearer {token}"}
+        r = client.post("/api/leads/some-id/handoff", headers=h, json={
+            "partner_client_id": "x", "target_user_email": "y@example.com"})
+        assert r.status_code == 403, f"VIEWER handoff should be 403, got {r.status_code}"
+        print("✅ VIEWER handoff blocked (403)")
+    finally:
+        _delete_user(VIEWER_EMAIL)
     print()
 
 

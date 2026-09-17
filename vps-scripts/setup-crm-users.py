@@ -8,7 +8,7 @@ conn = sqlite3.connect(DB_PATH)
 cur = conn.cursor()
 
 now = datetime.utcnow().isoformat()
-hos_id = 'e74119b9-17e3-4f74-b218-67ef0e66f1cc'
+hos_id = '514a96af-4262-4cfe-b85e-37b6af223faa'
 
 # Set API key
 cur.execute('UPDATE clients SET api_key = ? WHERE id = ?',

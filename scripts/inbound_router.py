@@ -465,7 +465,7 @@ def create_crm_lead(source: str, route: str, lead_data: dict, assigned_user: str
         return None
     try:
         lead = get_or_create_lead(
-            client_id="e74119b9-17e3-4f74-b218-67ef0e66f1cc",  # HOS
+            client_id="514a96af-4262-4cfe-b85e-37b6af223faa",  # HOS
             source=source,
             contact_email=lead_data.get("contact_email"),
             company_name=lead_data.get("company_name"),

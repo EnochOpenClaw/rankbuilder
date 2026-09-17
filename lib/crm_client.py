@@ -10,7 +10,7 @@ Environment variables (set in credentials.json or OS env):
     CRM_API_URL  — e.g. "http://localhost:8001"
     CRM_API_TOKEN — Bearer token for the service account
     CRM_CLIENT_ID — Default client ID for this installation
-                     (House of Supreme = e74119b9-17e3-4f74-b218-67ef0e66f1cc)
+                     (House of Supreme = 514a96af-4262-4cfe-b85e-37b6af223faa)
 """
 
 import json

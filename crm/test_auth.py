@@ -21,15 +21,36 @@ from backend.app import app
 
 client = TestClient(app)
 
-HOS_CLIENT_ID = "e74119b9-17e3-4f74-b218-67ef0e66f1cc"
+HOS_CLIENT_ID = "514a96af-4262-4cfe-b85e-37b6af223faa"
 
 # Test accounts
 USERS = {
     "admin": {"email": "craig@houseofsupreme.co.za", "password": "RankBuilder!23"},
-    "viewer": {"email": "robin@houseofsupreme.co.za", "password": "Robin1234!"},
+    "viewer": {"email": "viewer.test@houseofsupreme.co.za", "password": "ViewerTest123!"},
 }
-# Long-lived agent service token (CLIENT_ADMIN, HOS client) — refreshed 2026-09-15.
-AGENT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMjI1YzlhNS05MjU0LTRhYWItYTIxOS1hNmZlM2E5NDAzZTUiLCJyb2xlIjoiQ0xJRU5UX0FETUlOIiwiY2xpZW50X2lkIjoiZTc0MTE5YjktMTdlMy00Zjc0LWIyMTgtNjdlZjBlNjZmMWNjIiwiZXhwIjoxODIxMDE0MjIwfQ.L7xXx8qBKjUfaTWXjPg5NOUs218_0qVtqsLI9agtkqE"
+# Long-lived agent service token (CLIENT_ADMIN, HOS client) — minted 2026-09-17 for service.router@houseofsupreme.co.za with the live CRM_JWT_SECRET.
+AGENT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2OGRkZTg3Ni1jMDdhLTQxMzEtODgwNS1lZWQ3YmUxMmMzOTYiLCJyb2xlIjoiQ0xJRU5UX0FETUlOIiwiY2xpZW50X2lkIjoiNTE0YTk2YWYtNDI2Mi00Y2ZlLWI4NWUtMzdiNmFmMjIzZmFhIiwiZXhwIjoxODIxMTUwMTQ4fQ.I8K4ZKfJnE3Ns5vnxh1x2-Pki1xlYVKRKlY4cwc3nZE"
+
+
+VIEWER_EMAIL = "viewer.test@houseofsupreme.co.za"
+VIEWER_PASSWORD = "ViewerTest123!"
+
+
+def _ensure_viewer():
+    """Throwaway VIEWER test account, provisioned fresh against the live DB so
+    the suite never depends on real-user passwords (the re-seed drifted them).
+    Mirrors the throwaway-account pattern in test_roles_handoff.py."""
+    from backend.database import SessionLocal, User
+    from backend.routes.auth import hash_password
+    db = SessionLocal()
+    db.query(User).filter(User.email == VIEWER_EMAIL).delete()
+    db.add(User(email=VIEWER_EMAIL, hashed_password=hash_password(VIEWER_PASSWORD),
+                full_name="Viewer Test", client_id=HOS_CLIENT_ID, role="VIEWER"))
+    db.commit()
+    db.close()
+
+
+_ensure_viewer()
 
 
 def login(email, password):
@@ -57,7 +78,7 @@ def test_unauth_rejected():
 
 def test_viewer_read_only():
     print("=" * 60)
-    print("TEST 2: VIEWER (Robin) — read-only + client scope")
+    print("TEST 2: VIEWER (viewer.test) — read-only + client scope")
     print("=" * 60)
     token = login(USERS["viewer"]["email"], USERS["viewer"]["password"])
     h = {"Authorization": f"Bearer {token}"}

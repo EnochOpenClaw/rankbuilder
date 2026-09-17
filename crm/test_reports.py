@@ -11,6 +11,13 @@ with no follow-up.
 This test verifies the fix: after a lead is handed off, the source lead is excluded
 from /api/reports/agent (and related aggregation queries) for the source client/rep,
 while the partner copy appears for the partner client.
+
+Source-rep login uses a throwaway SALES_MANAGER account (2026-09-17): Tiaan's live
+bcrypt hash no longer verifies "Tiaan1234!" after the DB re-seed, and the test only
+needs a SALES_MANAGER on HOS enrolled in the handoff group — the assertions below
+reference Tiaan's email only because he is that account in the old seed. The
+throwaway keeps the test runnable against any future re-seed without touching live
+user passwords.
 """
 import sys
 import os
@@ -24,11 +31,14 @@ from backend.app import app
 
 client = TestClient(app)
 
-HOS = "e74119b9-17e3-4f74-b218-67ef0e66f1cc"
+HOS = "514a96af-4262-4cfe-b85e-37b6af223faa"
 
-# Source rep: Tiaan (SALES_MANAGER, enrolled in Partner Handoff Managers). We hand
-# off a lead from HOS to a partner client, targeting a partner user, then verify the
-# source no longer counts toward Tiaan's agent report while the partner copy does.
+# Source rep: throwaway SALES_MANAGER on HOS, enrolled in the Partner Handoff
+# Managers group (same shape as Tiaan's live setup). We hand off a lead from HOS
+# to a partner client, targeting a partner user, then verify the source no longer
+# counts toward the rep's agent report while the partner copy does.
+SOURCE_REP_EMAIL = "reports.sm@example.com"
+SOURCE_REP_PASSWORD = "TestPass123!"
 TEST_SOURCE = "handoff.excl.source@example.com"
 TEST_PARTNER = "handoff.excl.partner@example.com"
 PARTNER_CO = "Report Handoff Partner Co"
@@ -61,7 +71,7 @@ def test_reports_exclude_handed_off_source():
     print("=" * 60)
     print("TEST: handed-off source leads excluded from reports/dashboard")
     print("=" * 60)
-    from backend.database import SessionLocal, User, Client, Lead
+    from backend.database import SessionLocal, User, Client, Lead, HandoffGroup
     from backend.routes.auth import hash_password
 
     # ── Clean any leftover test data from a prior aborted run (idempotent) ──
@@ -87,9 +97,21 @@ def test_reports_exclude_handed_off_source():
     db.commit()
     db.close()
 
+    # ── Create the throwaway source SALES_MANAGER (handoff-group member) ────
+    db = SessionLocal()
+    src_rep = User(email=SOURCE_REP_EMAIL, hashed_password=hash_password(SOURCE_REP_PASSWORD),
+                   full_name="Reports SM Test", client_id=HOS, role="SALES_MANAGER")
+    db.add(src_rep)
+    db.commit()
+    g = db.query(HandoffGroup).filter(HandoffGroup.name == "Partner Handoff Managers").first()
+    assert g, "seed handoff group should exist in test DB"
+    src_rep.handoff_groups.append(g)
+    db.commit()
+    db.close()
+
     try:
-        # Tiaan (SALES_MANAGER) creates a lead on HOS, hands it off to the partner.
-        token = login("tiaan@houseofsupreme.co.za", "Tiaan1234!")
+        # The SALES_MANAGER creates a lead on HOS, hands it off to the partner.
+        token = login(SOURCE_REP_EMAIL, SOURCE_REP_PASSWORD)
         h = {"Authorization": f"Bearer {token}"}
 
         r = client.post("/api/leads", headers=h, json={
@@ -100,16 +122,16 @@ def test_reports_exclude_handed_off_source():
         assert r.status_code == 201, f"create: {r.text}"
         source_lead = r.json()
         source_lid = source_lead["id"]
-        assert source_lead["assigned_to"] == "tiaan@houseofsupreme.co.za", "source should be assigned to Tiaan"
-        print(f"✅ Created source lead {source_lid[:8]} assigned to Tiaan")
+        assert source_lead["assigned_to"] == SOURCE_REP_EMAIL, "source should be assigned to the SALES_MANAGER"
+        print(f"✅ Created source lead {source_lid[:8]} assigned to {SOURCE_REP_EMAIL}")
 
-        # Before handoff: source lead SHOULD appear in Tiaan's agent report.
+        # Before handoff: source lead SHOULD appear in the rep's agent report.
         r = client.get(f"/api/reports/agent?client_id={HOS}", headers=h)
         assert r.status_code == 200, f"agent report: {r.text}"
-        tiaan_row = next((a for a in r.json()["agents"] if a["email"] == "tiaan@houseofsupreme.co.za"), None)
-        print(f"✅ Pre-handoff agent report 200")
+        rep_row = next((a for a in r.json()["agents"] if a["email"] == SOURCE_REP_EMAIL), None)
+        print(f"✅ Pre-handoff agent report 200 (rep row present: {rep_row is not None})")
 
-        # Hand the lead off to the partner client (Tiaan is a handoff manager).
+        # Hand the lead off to the partner client (the rep is a handoff manager).
         r = client.post(f"/api/leads/{source_lid}/handoff", headers=h, json={
             "partner_client_id": partner_id,
             "target_user_email": "handoff.partner.admin@example.com",
@@ -124,9 +146,9 @@ def test_reports_exclude_handed_off_source():
         r = client.get(f"/api/reports/agent?client_id={HOS}", headers=h)
         assert r.status_code == 200, f"agent report: {r.text}"
         agents = r.json()["agents"]
-        tiaan_row = next((a for a in agents if a["email"] == "tiaan@houseofsupreme.co.za"), None)
-        if tiaan_row:
-            # Tiaan still has leads; but none of the counts may reflect the handed-off source.
+        rep_row = next((a for a in agents if a["email"] == SOURCE_REP_EMAIL), None)
+        if rep_row:
+            # The rep still has leads; but none of the counts may reflect the handed-off source.
             assert source_lid is not None  # keep reference
         # Direct check: the report's overall lead tallies must not include the handed-off source.
         # Find the lead by id in the pipeline report (counts leads) — handed-off source excluded.
@@ -156,12 +178,12 @@ def test_reports_exclude_handed_off_source():
         r5 = client.get(f"/api/dashboard/summary?client_id={HOS}&days=365", headers=h)
         assert r5.status_code == 200, f"dashboard: {r5.text}"
         reps = r5.json()["rep_breakdown"]
-        trow = next((r for r in reps if r["rep_email"] == "tiaan@houseofsupreme.co.za"), None)
-        # The handed-off source must NOT inflate Tiaan's assigned_leads. We create
-        # and hand off exactly one lead; if Tiaan had only that one, assigned_leads
+        trow = next((r for r in reps if r["rep_email"] == SOURCE_REP_EMAIL), None)
+        # The handed-off source must NOT inflate the rep's assigned_leads. We create
+        # and hand off exactly one lead; if the rep had only that one, assigned_leads
         # is 0 (or the pre-existing count minus none — we don't assert an exact
         # number since the mirror has real data, but the count must not include it).
-        print(f"✅ Dashboard rep_breakdown returned; Tiaan assigned_leads={trow['assigned_leads'] if trow else 'n/a'}")
+        print(f"✅ Dashboard rep_breakdown returned; {SOURCE_REP_EMAIL} assigned_leads={trow['assigned_leads'] if trow else 'n/a'}")
 
         # Direct DB assertion — verify the report predicates exclude the handed-off
         # source (archived trail marker) but keep the live partner copy.
@@ -197,15 +219,16 @@ def test_reports_exclude_handed_off_source():
         print()
 
     finally:
-        # Cleanup: delete copy + source, then partner + user
+        # Cleanup: delete copy + source, then source rep, partner + user
         db = SessionLocal()
         for l in db.query(Lead).filter(Lead.contact_email.in_([TEST_SOURCE, TEST_PARTNER])).all():
             db.delete(l)
+        db.query(User).filter(User.email == SOURCE_REP_EMAIL).delete()
         db.query(User).filter(User.email == "handoff.partner.admin@example.com").delete()
         db.query(Client).filter(Client.id == partner_id).delete()
         db.commit()
         db.close()
-        print("✅ Cleaned up partner + leads")
+        print("✅ Cleaned up partner + leads + source rep")
 
 
 if __name__ == "__main__":

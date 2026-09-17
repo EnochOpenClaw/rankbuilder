@@ -4,13 +4,13 @@ import sqlite3, uuid, os
 from datetime import datetime
 
 DB_PATH = '/root/rankbuilder/crm/data/rankbuilder_crm.db'
-os.makedirs("/root/rankbuilder/crm/data", exist_ok=True))
+os.makedirs("/root/rankbuilder/crm/data", exist_ok=True)
 
 conn = sqlite3.connect(DB_PATH)
 cur = conn.cursor()
 
 now = datetime.utcnow().isoformat()
-hos_id = 'e74119b9-17e3-4f74-b218-67ef0e66f1cc'
+hos_id = '514a96af-4262-4cfe-b85e-37b6af223faa'
 api_key = os.environ.get('HOS_CLIENT_API_KEY', '')
 
 # Tables
