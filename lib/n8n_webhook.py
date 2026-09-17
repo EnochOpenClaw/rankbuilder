@@ -48,7 +48,12 @@ def send_event(
         req = urllib.request.Request(
             N8N_WEBHOOK_URL,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                # Cloudflare in front of n8n 403s python-urllib's default UA;
+                # without this every event is silently dropped (0 webhook hits since Sep).
+                "User-Agent": "RankBuilder-CRM/1.0 (n8n event hub; python-urllib)",
+            },
             method="POST",
         )
         urllib.request.urlopen(req, timeout=10)
