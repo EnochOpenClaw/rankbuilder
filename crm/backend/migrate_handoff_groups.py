@@ -43,12 +43,14 @@ GROUP_DESC = ("Cross-client READ visibility of partner clients + their contacts 
               "for handoff targeting (additive; does not change role semantics).")
 
 # Members to enrol into the group. Tiaan was the original member; Craig added
-# robin + vanessa (2026-09-15) so they can also switch clients in the top bar.
+# robin + vanessa (2026-09-15) so they can also switch clients in the top bar,
+# and lee-ann (2026-09-18) so she can hand leads to partners.
 # Roles are untouched — membership is purely additive.
 ENROLL = [
     "tiaan@houseofsupreme.co.za",
     "robin@houseofsupreme.co.za",
     "vanessa@houseofsupreme.co.za",
+    "lee-ann@houseofsupreme.co.za",
 ]
 
 
