@@ -1,7 +1,8 @@
 """
 RankBuilder CRM — Scheduled Lead Reminders
 ==========================================
-Runs via cron (every few minutes) and fires user-scheduled reminders.
+Runs via cron (since 2026-09-22: every 3 hours; was every 5 minutes) and fires
+user-scheduled reminders.
 
 When a user schedules a reminder on a lead (via the lead drawer), this script
 checks for PENDING reminders whose remind_at time has arrived, sends an email

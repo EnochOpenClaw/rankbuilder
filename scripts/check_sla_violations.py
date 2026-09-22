@@ -1,7 +1,12 @@
 """
-RankBuilder CRM SLA Violation Monitor - cron every 30 min
-Flags leads breaching response-time SLAs, emails assigned agent.
+RankBuilder CRM SLA Violation Monitor - cron ONCE DAILY (07:00) since 2026-09-22
+Flags leads breaching response-time SLAs, emails the assigned rep + one manager.
 Rules: NEW reviewed in 4h, QUALIFIED sent in 24h, SENT contacted in 48h, stale after 3d.
+
+Volume control (Craig 2026-09-22): ran every 30 min (07:00-22:00) which produced
+~360 emails/day because each breach emailed the full client notification group
+(6-8 people) with a 12h cooldown (~8.9 emails per breaching lead per day). Now
+runs once daily and alerts only the assigned rep + SLA_EXTRA_RECIPIENTS.
 """
 import os, sys, logging
 from datetime import datetime, timedelta, timezone
@@ -22,7 +27,7 @@ def _load_env():
 _load_env()
 
 from backend.database import SessionLocal, Lead, LeadReminder
-from backend.notifications import _brevo_send, _get_notification_recipients
+from backend.notifications import _brevo_send
 log = logging.getLogger("sla_monitor")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -31,6 +36,16 @@ QH = int(os.environ.get("SLA_QUALIFIED_HOURS", "24"))
 SH = int(os.environ.get("SLA_SENT_HOURS", "48"))
 SD = int(os.environ.get("SLA_STALE_DAYS", "3"))
 COOLDOWN_H = int(os.environ.get("SLA_ALERT_COOLDOWN_HOURS", "12"))  # min hours between alerts per lead
+# ── SLA recipient trim (Craig 2026-09-22) ───────────────────────────────────
+# SLA alerts used to go to the whole client notification group (HOS = 6-8 people),
+# which flooded inboxes and burned the Brevo quota. Now only the assigned rep +
+# this list. Override with SLA_EXTRA_RECIPIENTS (comma-separated) if the
+# oversight contact changes.
+SLA_EXTRA_RECIPIENTS = [
+    e.strip() for e in os.environ.get(
+        "SLA_EXTRA_RECIPIENTS", "lee-ann@houseofsupreme.co.za"
+    ).split(",") if e.strip()
+]
 # ── Payment-received suppression (Craig 2026-09-15) ─────────────────────
 # A paid job is in production — suppress SLA breach alerts INDEFINITELY while
 # payment_status == RECEIVED (previously a 7-day PAYMENT_QUIET_DAYS window).
@@ -112,7 +127,8 @@ def notify(db, lead, rule, detail):
     body += "<tr><td>Score</td><td>%s %s</td></tr></table>" % (tier, sc)
     body += "<p>Action this lead promptly so it does not go cold.</p>"
 
-    # Build recipient set: assigned rep + notification group (+ default rep if unassigned)
+    # Build recipient set: assigned rep + SLA oversight contact(s) only
+    # (Craig 2026-09-22 — was assigned rep + the whole client notification group).
     recipients = set()
     if lead.assigned_to:
         recipients.add((lead.assigned_to, lead.assigned_to_name or "Rep"))
@@ -120,8 +136,8 @@ def notify(db, lead, rule, detail):
         from backend.assignment import resolve_rep_for_location
         drep, dname = resolve_rep_for_location(lead.location)
         recipients.add((drep, dname))
-    for email, name in _get_notification_recipients(lead.client_id, db) or []:
-        recipients.add((email, name))
+    for _email in SLA_EXTRA_RECIPIENTS:
+        recipients.add((_email, _email.split("@")[0]))
 
     sent = 0
     for email, name in recipients:

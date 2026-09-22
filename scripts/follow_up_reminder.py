@@ -1,7 +1,12 @@
 """
 RankBuilder CRM — Staged Follow-up Reminder / Escalation
 =========================================================
-Runs via cron (every 30-60 min) and escalates leads that are going cold.
+Runs via cron ONCE DAILY (since 2026-09-22; was every 30 min) and escalates
+leads that are going cold.
+
+Volume control (Craig 2026-09-22): the ladder is per-lead, so running it more
+often never sent more per lead — but the daily cadence keeps the morning batch
+predictable and avoids piling onto the SLA run.
 
 Escalation ladder (per lead, tracked via Lead.reminder_stage):
   - T+24h  (stage 1): reminder to the ASSIGNED REP (per-lead email)
