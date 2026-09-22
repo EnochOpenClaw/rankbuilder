@@ -52,6 +52,15 @@ BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "ai@fortressblinds.co.za")
 SENDER_NAME = "RankBuilder CRM"
+# Accounts that must never receive automated mail (Craig 2026-09-22): Craig is
+# SYSTEM_ADMIN with full CRM access and does not need reminders; service.router
+# is a system account that only creates leads.
+ALERT_EXCLUDE = {
+    e.strip().lower() for e in os.environ.get(
+        "CRM_ALERT_EXCLUDE",
+        "craig@houseofsupreme.co.za,service.router@houseofsupreme.co.za"
+    ).split(",") if e.strip()
+}
 
 # Use the shared Brevo sender from the CRM backend so every reminder send is also
 # logged per-lead in email_logs (audit trail, does not affect follow-up state).
@@ -123,6 +132,12 @@ def main():
             to_name = lead.assigned_to_name or to_email or ""
             if not to_email:
                 r.status = "DISMISSED"
+                continue
+            if to_email.strip().lower() in ALERT_EXCLUDE:
+                # Excluded system/admin account — do not mail; dismiss the
+                # reminder so it does not retry forever (Craig 2026-09-22).
+                r.status = "DISMISSED"
+                log.info("Reminder %s dismissed — recipient %s is excluded", r.id, to_email)
                 continue
 
             subject = f"⏰ [RankBuilder] Reminder: {lead.company_name or 'Lead'}"

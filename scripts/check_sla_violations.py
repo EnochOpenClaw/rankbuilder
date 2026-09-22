@@ -46,6 +46,16 @@ SLA_EXTRA_RECIPIENTS = [
         "SLA_EXTRA_RECIPIENTS", "lee-ann@houseofsupreme.co.za"
     ).split(",") if e.strip()
 ]
+# Accounts that must never receive automated alert mail (Craig 2026-09-22):
+# Craig is SYSTEM_ADMIN with full CRM access (no reminders needed);
+# service.router is a system account that only creates leads and must never be
+# treated as a rep. Override with CRM_ALERT_EXCLUDE (comma-separated).
+ALERT_EXCLUDE = {
+    e.strip().lower() for e in os.environ.get(
+        "CRM_ALERT_EXCLUDE",
+        "craig@houseofsupreme.co.za,service.router@houseofsupreme.co.za"
+    ).split(",") if e.strip()
+}
 # ── Payment-received suppression (Craig 2026-09-15) ─────────────────────
 # A paid job is in production — suppress SLA breach alerts INDEFINITELY while
 # payment_status == RECEIVED (previously a 7-day PAYMENT_QUIET_DAYS window).
@@ -129,18 +139,24 @@ def notify(db, lead, rule, detail):
 
     # Build recipient set: assigned rep + SLA oversight contact(s) only
     # (Craig 2026-09-22 — was assigned rep + the whole client notification group).
+    # If the assigned rep is an excluded system/admin account, alert the
+    # oversight contact(s) instead so the lead is still actioned.
     recipients = set()
-    if lead.assigned_to:
+    rep = (lead.assigned_to or "").strip()
+    if rep and rep.lower() not in ALERT_EXCLUDE:
         recipients.add((lead.assigned_to, lead.assigned_to_name or "Rep"))
-    else:
+    elif not rep:
         from backend.assignment import resolve_rep_for_location
         drep, dname = resolve_rep_for_location(lead.location)
-        recipients.add((drep, dname))
+        if drep and drep.strip().lower() not in ALERT_EXCLUDE:
+            recipients.add((drep, dname))
     for _email in SLA_EXTRA_RECIPIENTS:
         recipients.add((_email, _email.split("@")[0]))
 
     sent = 0
     for email, name in recipients:
+        if email.strip().lower() in ALERT_EXCLUDE:
+            continue  # never mail excluded system/admin accounts (Craig 2026-09-22)
         try:
             _brevo_send(email, subject, body, to_name=name,
                         sender_email=SENDER, sender_name="RankBuilder CRM",

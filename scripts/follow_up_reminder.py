@@ -71,6 +71,25 @@ MANAGER_EMAILS = [
     ("vanessa@houseofsupreme.co.za", "Vanessa Bras"),
     ("lee-ann@houseofsupreme.co.za", "Lee-Ann Van Zyl"),
 ]
+# Accounts that must never receive automated alert mail (Craig 2026-09-22):
+# Craig is SYSTEM_ADMIN with full CRM access (no reminders); service.router is a
+# system account that only creates leads — never treated as a rep.
+ALERT_EXCLUDE = {
+    e.strip().lower() for e in os.environ.get(
+        "CRM_ALERT_EXCLUDE",
+        "craig@houseofsupreme.co.za,service.router@houseofsupreme.co.za"
+    ).split(",") if e.strip()
+}
+
+
+def _rep_recipients(lead):
+    """Recipients for rep-level nudges (stage 1/2). If the assigned rep is an
+    excluded system/admin account, escalate to the managers instead so the lead
+    is still actioned rather than silently skipped."""
+    addr = (lead.assigned_to or "").strip().lower()
+    if addr and addr not in ALERT_EXCLUDE:
+        return [(lead.assigned_to, lead.assigned_to_name or "")]
+    return MANAGER_EMAILS
 
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
@@ -230,18 +249,20 @@ def main():
             # Stage 2: firmer reminder to rep
             elif stage < 2 and age_hours >= STAGE_2_HOURS:
                 html, subj = _stage2_email(lead)
-                _brevo_send(lead.assigned_to, subj, html, to_name=lead.assigned_to_name or "",
-                            sender_email=SENDER_EMAIL, sender_name=SENDER_NAME,
-                            lead_id=lead.id, notification_type="follow_up")
+                for _e, _n in _rep_recipients(lead):
+                    _brevo_send(_e, subj, html, to_name=_n,
+                                sender_email=SENDER_EMAIL, sender_name=SENDER_NAME,
+                                lead_id=lead.id, notification_type="follow_up")
                 lead.reminder_stage = 2
                 sent["stage2"] += 1
                 db.add(lead)
             # Stage 1: first reminder to rep
             elif stage < 1 and age_hours >= STAGE_1_HOURS:
                 html, subj = _stage1_email(lead)
-                _brevo_send(lead.assigned_to, subj, html, to_name=lead.assigned_to_name or "",
-                            sender_email=SENDER_EMAIL, sender_name=SENDER_NAME,
-                            lead_id=lead.id, notification_type="follow_up")
+                for _e, _n in _rep_recipients(lead):
+                    _brevo_send(_e, subj, html, to_name=_n,
+                                sender_email=SENDER_EMAIL, sender_name=SENDER_NAME,
+                                lead_id=lead.id, notification_type="follow_up")
                 lead.reminder_stage = 1
                 sent["stage1"] += 1
                 db.add(lead)

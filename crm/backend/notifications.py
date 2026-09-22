@@ -421,10 +421,17 @@ def _get_notification_recipients(client_id: str, db) -> list[tuple[str, str]]:
             return HOS_DEFAULT
 
         recipients = []
+        seen = set()
         for s in settings:
             if s.notification_type == "EMAIL" and s.target:
-                name = s.name or ""
-                recipients.append((s.target, name))
+                # Dedupe by email — duplicate notification_settings rows used to
+                # cause every alert to be sent TWICE to the same person
+                # (found 2026-09-22: lee-ann/robin/vanessa each had 2 rows).
+                key = s.target.strip().lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                recipients.append((s.target, s.name or ""))
         return recipients if recipients else HOS_DEFAULT
 
     except Exception as e:

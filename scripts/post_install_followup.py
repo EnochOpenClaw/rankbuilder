@@ -79,6 +79,13 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "ai@fortressblinds.co.za")
 SENDER_NAME = os.environ.get("POST_INSTALL_SENDER_NAME", "House of Supreme")
 
 # Review / testimonial ask — where customers leave reviews (Google/Facebook).
+# Accounts that must never receive automated staff mail (Craig 2026-09-22):
+ALERT_EXCLUDE = {
+    e.strip().lower() for e in os.environ.get(
+        "CRM_ALERT_EXCLUDE",
+        "craig@houseofsupreme.co.za,service.router@houseofsupreme.co.za"
+    ).split(",") if e.strip()
+}
 REVIEW_URL = os.environ.get("REVIEW_URL", "")
 
 from backend.notifications import _brevo_send
@@ -195,7 +202,7 @@ def main():
                 )
 
             # 2) Rep check-in email (if assigned)
-            if lead.assigned_to:
+            if lead.assigned_to and lead.assigned_to.strip().lower() not in ALERT_EXCLUDE:
                 _brevo_send(
                     lead.assigned_to,
                     f"📞 [RankBuilder] Post-Install Check-In: {lead.company_name or 'Lead'}",

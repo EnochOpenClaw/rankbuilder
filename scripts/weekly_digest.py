@@ -46,8 +46,9 @@ from backend.notifications import _brevo_send
 log = logging.getLogger("crm.digest")
 
 # HOS management recipients
+# NOTE: craig removed 2026-09-22 — SYSTEM_ADMIN has full CRM access and does not
+# need digest/reminder emails.
 RECIPIENTS = [
-    ("craig@houseofsupreme.co.za", "Craig Pauls"),
     ("robin@houseofsupreme.co.za", "Robin Bras"),
     ("vanessa@houseofsupreme.co.za", "Vanessa Bras"),
     ("lee-ann@houseofsupreme.co.za", "Lee-Ann Van Zyl"),
